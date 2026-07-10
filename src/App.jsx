@@ -733,20 +733,46 @@ export default function App() {
     if (!renameRoomInput.trim()) return;
 
     const nextName = renameRoomInput.trim();
+    const newSlug = nextName.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // remove accents
+      .replace(/[^a-z0-9\s-]/g, '') // remove special chars
+      .trim()
+      .replace(/\s+/g, '-');
+
+    if (!newSlug) {
+      showNotification('Nombre de sala inválido.');
+      return;
+    }
+
     setRoomName(nextName);
 
     if (!useMockDb) {
-      const { error } = await supabase
-        .from('rooms')
-        .update({ name: nextName })
-        .eq('id', currentRoomId);
-      if (error) {
-        showNotification('Error al renombrar sala: ' + error.message);
-        return;
+      if (newSlug !== currentRoomId) {
+        // 1. Crear o actualizar la nueva sala con el slug correcto
+        await supabase.from('rooms').upsert({ id: newSlug, name: nextName });
+        // 2. Migrar los registros vinculados a la nueva sala
+        await supabase.from('members').update({ room_id: newSlug }).eq('room_id', currentRoomId);
+        await supabase.from('availabilities').update({ room_id: newSlug }).eq('room_id', currentRoomId);
+        await supabase.from('templates').update({ room_id: newSlug }).eq('room_id', currentRoomId);
+        await supabase.from('meetings').update({ room_id: newSlug }).eq('room_id', currentRoomId);
+        // 3. Eliminar la sala antigua si no es la sala por defecto
+        if (currentRoomId !== 'grupo-a') {
+          await supabase.from('rooms').delete().eq('id', currentRoomId);
+        }
+      } else {
+        await supabase.from('rooms').update({ name: nextName }).eq('id', currentRoomId);
       }
     }
-    showNotification(`Sala renombrada con éxito a "${nextName}"`);
-    setIsRoomModalOpen(false);
+
+    if (newSlug !== currentRoomId) {
+      showNotification(`¡Sala renombrada a "${nextName}"! Actualizando enlace a /room/${newSlug}...`);
+      setIsRoomModalOpen(false);
+      window.location.href = `/room/${newSlug}`;
+    } else {
+      showNotification(`Sala renombrada con éxito a "${nextName}"`);
+      setIsRoomModalOpen(false);
+    }
   };
 
   const handleCreateRoom = async (e) => {
