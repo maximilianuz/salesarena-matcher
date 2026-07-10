@@ -1142,40 +1142,37 @@ export default function App() {
           boxSizing: 'border-box'
         }}>
           {/* Logo Brand Header */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
+          {/* Logo Brand Header */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <a 
               href="https://sales-arena.netlify.app/" 
               target="_blank" 
               rel="noopener noreferrer" 
-              title="Haz clic para visitar la web principal de Sales Arena"
-              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}
+              title="Haz clic en el caballo para visitar el portal oficial de Sales Arena"
+              className="brand-logo-interactive"
             >
               <div className="brand-logo-container horse-glow-pulse">
                 <ChessKnightIcon size={44} />
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span className="brand-title-sales" style={{ fontSize: '11px' }}>Sales-Arena</span>
+                  <span className="portal-badge-mini">PORTAL ↗</span>
+                </div>
                 <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
               </div>
             </a>
-            <a
-              href="https://sales-arena.netlify.app/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="horse-web-badge"
-            >
-              <Sparkles size={13} /> Visitar Web Oficial de Sales Arena ↗
-            </a>
-            <div className="room-invite-pill" style={{ marginTop: '14px' }}>
-              📍 Registro para la Sala: <strong>{roomName}</strong>
-            </div>
           </div>
 
           {/* STEP 1: GOOGLE EMAIL INPUT */}
           {loginStep === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
+              <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                <div className="room-indicator-badge">
+                  <span className="room-indicator-dot"></span>
+                  <span>Sala de coordinación: <strong>{roomName}</strong></span>
+                </div>
+                <h2 style={{ margin: '10px 0 6px 0', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta corporativa para ingresar al coordinador de roleplays.</p>
               </div>
 
@@ -1302,6 +1299,28 @@ export default function App() {
               </div>
             </form>
           )}
+
+          {/* Elegant Footer to official portal */}
+          <div style={{ marginTop: '28px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center' }}>
+            <a
+              href="https://sales-arena.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '12.5px',
+                color: 'var(--text-muted)',
+                textDecoration: 'none',
+                fontWeight: '500',
+                transition: 'color 0.2s'
+              }}
+            >
+              <span>¿Conoces Sales Arena?</span>
+              <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>Visitar Portal Oficial ↗</span>
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -1315,19 +1334,18 @@ export default function App() {
         <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
           {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-          <div className="brand-section" style={{ margin: 0, padding: 0 }}>
-            <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a la web principal de Sales Arena" className="brand-logo-link">
-              <div className="brand-logo-container horse-glow-pulse">
-                <ChessKnightIcon size={34} />
-              </div>
-            </a>
-            <div className="brand-title-stacked">
-              <span className="brand-title-sales">Sales-Arena</span>
-              <span className="brand-title-arena">Matcher</span>
-            </div>
+        <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a la web principal de Sales Arena" className="brand-logo-interactive" style={{ margin: 0 }}>
+          <div className="brand-logo-container horse-glow-pulse">
+            <ChessKnightIcon size={34} />
           </div>
-        </div>
+          <div className="brand-title-stacked">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span className="brand-title-sales">Sales-Arena</span>
+              <span className="portal-badge-mini">PORTAL ↗</span>
+            </div>
+            <span className="brand-title-arena">Matcher</span>
+          </div>
+        </a>
         <div style={{ width: '34px' }}></div> {/* Spacer to center the logo */}
       </div>
 
@@ -1336,33 +1354,24 @@ export default function App() {
 
       {/* 1. SIDEBAR NAVIGATION */}
       <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '28px' }}>
           <a 
             href="https://sales-arena.netlify.app/" 
             target="_blank" 
             rel="noopener noreferrer" 
-            title="Haz clic para visitar la Web Oficial de Sales Arena" 
-            className="brand-logo-link"
-            style={{ textDecoration: 'none' }}
+            title="Haz clic para visitar el Portal Oficial de Sales Arena" 
+            className="brand-logo-interactive"
           >
-            <div className="brand-section" style={{ marginBottom: '8px' }}>
-              <div className="brand-logo-container horse-glow-pulse">
-                <ChessKnightIcon size={34} />
-              </div>
-              <div className="brand-title-stacked">
-                <span className="brand-title-sales">Sales-Arena</span>
-                <span className="brand-title-arena">Matcher</span>
-              </div>
+            <div className="brand-logo-container horse-glow-pulse">
+              <ChessKnightIcon size={34} />
             </div>
-          </a>
-          <a
-            href="https://sales-arena.netlify.app/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="horse-web-badge"
-            title="Ir al portal principal de Sales Arena"
-          >
-            <Sparkles size={12} /> Visitar Web Sales Arena ↗
+            <div className="brand-title-stacked">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="brand-title-sales">Sales-Arena</span>
+                <span className="portal-badge-mini">PORTAL ↗</span>
+              </div>
+              <span className="brand-title-arena">Matcher</span>
+            </div>
           </a>
         </div>
 
