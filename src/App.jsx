@@ -142,51 +142,20 @@ export default function App() {
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('salesarena-user');
-    return saved ? JSON.parse(saved) : {
-      name: 'Tomás Rossi',
-      email: 'tomas@example.com',
-      country: 'Argentina',
-      tz: 'America/Argentina/Buenos_Aires',
-      active: true
-    };
+    return saved ? JSON.parse(saved) : null;
   });
 
-  // Base de Datos en Estado (Con usuarios de prueba)
-  const [members, setMembers] = useState([
-    { name: 'Tomás Rossi', email: 'tomas@example.com', country: 'Argentina', tz: 'America/Argentina/Buenos_Aires', active: true },
-    { name: 'Laura Gómez', email: 'laura@example.com', country: 'España', tz: 'Europe/Madrid', active: true },
-    { name: 'Sofía Díaz', email: 'sofia@example.com', country: 'México', tz: 'America/Mexico_City', active: true },
-    { name: 'Sam Miller', email: 'sam@example.com', country: 'Estados Unidos', tz: 'America/Los_Angeles', active: true },
-    { name: '[Test] Chile User', email: 'test.chile@example.com', country: 'Chile', tz: 'America/Santiago', active: true },
-    { name: '[Test] España User', email: 'test.espania@example.com', country: 'España', tz: 'Europe/Madrid', active: true }
-  ]);
+  // Base de Datos en Estado (Vacia para producción)
+  const [members, setMembers] = useState([]);
 
   // Disponibilidad: lista de { user, dayIdx, startHour, endHour }
-  const [availabilities, setAvailabilities] = useState([
-    { user: 'Tomás Rossi', dayIdx: 1, startHour: 10, endHour: 18 }, // Martes 10-18h local
-    { user: 'Laura Gómez', dayIdx: 1, startHour: 15, endHour: 20 },
-    { user: 'Laura Gómez', dayIdx: 1, startHour: 9, endHour: 13 },
-    { user: 'Sofía Díaz', dayIdx: 1, startHour: 8, endHour: 14 },
-    { user: 'Sam Miller', dayIdx: 1, startHour: 6, endHour: 11 },
-    { user: '[Test] Chile User', dayIdx: 1, startHour: 9, endHour: 15 },
-    { user: '[Test] España User', dayIdx: 1, startHour: 14, endHour: 19 }
-  ]);
+  const [availabilities, setAvailabilities] = useState([]);
 
   // Plantillas Fijas: copia inicial
-  const [templates, setTemplates] = useState([
-    { user: 'Tomás Rossi', dayIdx: 1, startHour: 10, endHour: 18 },
-    { user: 'Laura Gómez', dayIdx: 1, startHour: 15, endHour: 20 },
-    { user: 'Laura Gómez', dayIdx: 1, startHour: 9, endHour: 13 },
-    { user: 'Sofía Díaz', dayIdx: 1, startHour: 8, endHour: 14 },
-    { user: 'Sam Miller', dayIdx: 1, startHour: 6, endHour: 11 },
-    { user: '[Test] Chile User', dayIdx: 1, startHour: 9, endHour: 15 },
-    { user: '[Test] España User', dayIdx: 1, startHour: 14, endHour: 19 }
-  ]);
+  const [templates, setTemplates] = useState([]);
 
   // Reuniones agendadas
-  const [meetings, setMeetings] = useState([
-    { title: 'Roleplay Global — Tomás · Laura · Sofía', dateUtc: 'Próximo Martes 15:00 UTC', duration: 60, participants: 'Tomás Rossi, Laura Gómez, Sofía Díaz', meetLink: 'https://meet.google.com/abc-defg-hij', status: 'Creado (Meet)' }
-  ]);
+  const [meetings, setMeetings] = useState([]);
 
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
@@ -1622,7 +1591,7 @@ export default function App() {
               <div className="heatmap-container">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <h3 style={{ margin: 0, fontSize: '16px' }}>🔥 Mapa de Calor Colectivo</h3>
-                  <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Hora local de Tomás Rossi ({currentUser.tz.split('/').pop().replace(/_/g, ' ')})</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Hora local de {currentUser?.name || ''} ({currentUser?.tz?.split('/').pop().replace(/_/g, ' ')})</span>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
                   El color verde muestra cuántas personas están disponibles en cada bloque. Pasa el cursor para ver los nombres.
