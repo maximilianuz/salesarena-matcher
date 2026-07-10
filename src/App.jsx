@@ -139,6 +139,14 @@ export default function App() {
   const [customLoginCountry, setCustomLoginCountry] = useState('');
   const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
 
+  const [roomName, setRoomName] = useState(() => {
+    const roomId = getRoomIdFromUrl() || 'grupo-a';
+    return 'Sala ' + roomId.charAt(0).toUpperCase() + roomId.slice(1);
+  });
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [newRoomNameInput, setNewRoomNameInput] = useState('');
+  const [renameRoomInput, setRenameRoomInput] = useState('');
+
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('salesarena-user');
@@ -232,7 +240,13 @@ export default function App() {
         .maybeSingle();
 
       if (roomError || !roomData) {
-        await supabase.from('rooms').insert({ id: currentRoomId, name: `Sala ${currentRoomId}` });
+        const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
+        await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
+        setRoomName(defaultName);
+        setRenameRoomInput(defaultName);
+      } else {
+        setRoomName(roomData.name);
+        setRenameRoomInput(roomData.name);
       }
 
       // 2. Fetch Members
@@ -708,6 +722,86 @@ export default function App() {
     setLoginStep(1);
     localStorage.removeItem('salesarena-logged');
     localStorage.removeItem('salesarena-user');
+  };
+
+  // --- GESTIÓN DE SALAS (ROOMS) ---
+  const handleRenameRoom = async (e) => {
+    e.preventDefault();
+    if (!renameRoomInput.trim()) return;
+
+    const nextName = renameRoomInput.trim();
+    setRoomName(nextName);
+
+    if (!useMockDb) {
+      const { error } = await supabase
+        .from('rooms')
+        .update({ name: nextName })
+        .eq('id', currentRoomId);
+      if (error) {
+        showNotification('Error al renombrar sala: ' + error.message);
+        return;
+      }
+    }
+    showNotification(`Sala renombrada con éxito a "${nextName}"`);
+    setIsRoomModalOpen(false);
+  };
+
+  const handleCreateRoom = async (e) => {
+    e.preventDefault();
+    if (!newRoomNameInput.trim()) return;
+
+    const rawName = newRoomNameInput.trim();
+    const slug = rawName.toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // remove accents
+      .replace(/[^a-z0-9\s-]/g, '') // remove special chars
+      .trim()
+      .replace(/\s+/g, '-'); // replace spaces with hyphens
+
+    if (!slug) {
+      showNotification('Nombre de sala inválido.');
+      return;
+    }
+
+    if (!useMockDb) {
+      // 1. Create the room in Supabase
+      const { error } = await supabase.from('rooms').insert({ id: slug, name: rawName });
+      if (error && error.code !== '23505') { // 23505 is duplicate key error, which means room already exists
+        showNotification('Error al crear sala en base de datos: ' + error.message);
+        return;
+      }
+    }
+
+    showNotification(`¡Sala "${rawName}" creada con éxito! Redirigiendo...`);
+    setIsRoomModalOpen(false);
+    setNewRoomNameInput('');
+    
+    // Redirect browser to the new room URL
+    window.location.href = `/room/${slug}`;
+  };
+
+  const handleDeleteRoom = async () => {
+    if (currentRoomId === 'grupo-a') {
+      showNotification('La sala por defecto "grupo-a" no se puede eliminar.');
+      return;
+    }
+
+    if (!window.confirm(`¿Estás seguro de que deseas eliminar la sala "${roomName}"? Se borrarán todos los miembros, disponibilidades y reuniones guardadas en ella.`)) {
+      return;
+    }
+
+    if (!useMockDb) {
+      const { error } = await supabase.from('rooms').delete().eq('id', currentRoomId);
+      if (error) {
+        showNotification('Error al eliminar sala: ' + error.message);
+        return;
+      }
+    }
+
+    showNotification(`Sala "${roomName}" eliminada correctamente.`);
+    setIsRoomModalOpen(false);
+    // Redirect to default room
+    window.location.href = `/room/grupo-a`;
   };
 
   // --- ADMINISTRAR MIEMBROS ---
@@ -1290,9 +1384,27 @@ export default function App() {
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
             </p>
           </div>
-          <div className="glass" style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', borderColor: 'var(--border-color)' }}>
+          <div 
+            onClick={() => setIsRoomModalOpen(true)}
+            className="glass" 
+            style={{ 
+              padding: '8px 16px', 
+              fontSize: '12px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              color: 'var(--color-primary)', 
+              borderColor: 'var(--border-color)',
+              cursor: 'pointer',
+              userSelect: 'none',
+              transition: 'opacity 0.2s',
+              hover: { opacity: 0.9 }
+            }}
+            title="Gestionar salas"
+          >
             <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-primary)', borderRadius: '50%' }}></span>
-            Sala Activa: Grupo A
+            <span>Sala Activa: <strong>{roomName}</strong></span>
+            <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.8 }}>⚙️</span>
           </div>
         </header>
 
@@ -1881,6 +1993,123 @@ export default function App() {
               {schedulingStatus === 'creating' && `Creando el evento y agregando a los ${scheduledDetails?.attendeesCount} participantes correspondientes.`}
               {schedulingStatus === 'success' && '📧 Google Calendar ha enviado invitaciones de correo oficiales a todos los participantes con el enlace de Google Meet para unirse.'}
             </p>
+          </div>
+        </div>
+      )}
+      {/* MODAL DE GESTIÓN DE SALAS (ROOM MANAGER) */}
+      {isRoomModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass" style={{
+            width: '100%',
+            maxWidth: '480px',
+            backgroundColor: 'var(--color-bg-sidebar)',
+            borderRadius: '16px',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            border: '1px solid var(--border-color)',
+            boxSizing: 'border-box',
+            position: 'relative'
+          }}>
+            {/* Header del Modal */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)' }}>
+                ⚙️ Gestión de Salas
+              </h3>
+              <button 
+                onClick={() => setIsRoomModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  padding: '4px'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Formulario 1: Renombrar Sala */}
+            <form onSubmit={handleRenameRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Renombrar Sala Actual</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={renameRoomInput}
+                  onChange={(e) => setRenameRoomInput(e.target.value)}
+                  placeholder="Ej. Equipo Comercial"
+                  required
+                  style={{ flex: 1, padding: '8px 12px' }}
+                />
+                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                  Guardar
+                </button>
+              </div>
+            </form>
+
+            {/* Formulario 2: Crear Nueva Sala */}
+            <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
+              <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. Compartirás esa nueva URL para invitar a otras personas a participar de forma aislada.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newRoomNameInput}
+                  onChange={(e) => setNewRoomNameInput(e.target.value)}
+                  placeholder="Ej. Marketing 2026"
+                  required
+                  style={{ flex: 1, padding: '8px 12px' }}
+                />
+                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                  Crear
+                </button>
+              </div>
+            </form>
+
+            {/* Sección 3: Eliminar Sala */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-danger-hover, #ff453a)' }}>Zona de Peligro</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.4' }}>
+                  Eliminar permanentemente esta sala y todos sus miembros de la base de datos.
+                </span>
+                <button 
+                  onClick={handleDeleteRoom}
+                  disabled={currentRoomId === 'grupo-a'}
+                  className="btn"
+                  style={{ 
+                    backgroundColor: 'rgba(255, 69, 58, 0.15)', 
+                    color: '#ff453a', 
+                    padding: '8px 16px', 
+                    fontSize: '13px', 
+                    fontWeight: '600',
+                    border: '1px solid rgba(255, 69, 58, 0.3)',
+                    cursor: currentRoomId === 'grupo-a' ? 'not-allowed' : 'pointer',
+                    opacity: currentRoomId === 'grupo-a' ? 0.5 : 1
+                  }}
+                >
+                  Eliminar Sala
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
