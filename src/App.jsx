@@ -22,7 +22,10 @@ import {
   Moon,
   Monitor,
   Menu,
-  X
+  X,
+  Share2,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -804,6 +807,19 @@ export default function App() {
     window.location.href = `/room/grupo-a`;
   };
 
+  const handleCopyRoomInvite = () => {
+    const inviteUrl = `${window.location.origin}/room/${currentRoomId}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(inviteUrl).then(() => {
+        showNotification(`🔗 Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\n¡Cualquier persona que entre con este link irá directo al registro inicial de esta sala!`);
+      }).catch(() => {
+        prompt('Copia el enlace para compartir tu sala:', inviteUrl);
+      });
+    } else {
+      prompt('Copia el enlace para compartir tu sala:', inviteUrl);
+    }
+  };
+
   // --- ADMINISTRAR MIEMBROS ---
   const handleAddMember = async (e) => {
     e.preventDefault();
@@ -1126,11 +1142,32 @@ export default function App() {
           boxSizing: 'border-box'
         }}>
           {/* Logo Brand Header */}
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
-            <ChessKnightIcon size={44} />
-            <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-              <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
-              <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
+            <a 
+              href="https://sales-arena.netlify.app/" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              title="Haz clic para visitar la web principal de Sales Arena"
+              style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}
+            >
+              <div className="brand-logo-container horse-glow-pulse">
+                <ChessKnightIcon size={44} />
+              </div>
+              <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
+                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
+                <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
+              </div>
+            </a>
+            <a
+              href="https://sales-arena.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="horse-web-badge"
+            >
+              <Sparkles size={13} /> Visitar Web Oficial de Sales Arena ↗
+            </a>
+            <div className="room-invite-pill" style={{ marginTop: '14px' }}>
+              📍 Registro para la Sala: <strong>{roomName}</strong>
             </div>
           </div>
 
@@ -1278,15 +1315,17 @@ export default function App() {
         <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
           {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
-        <div className="brand-section" style={{ margin: 0, padding: 0 }}>
-          <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a Sales Arena" className="brand-logo-link">
-            <div className="brand-logo-container">
-              <ChessKnightIcon size={34} />
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+          <div className="brand-section" style={{ margin: 0, padding: 0 }}>
+            <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a la web principal de Sales Arena" className="brand-logo-link">
+              <div className="brand-logo-container horse-glow-pulse">
+                <ChessKnightIcon size={34} />
+              </div>
+            </a>
+            <div className="brand-title-stacked">
+              <span className="brand-title-sales">Sales-Arena</span>
+              <span className="brand-title-arena">Matcher</span>
             </div>
-          </a>
-          <div className="brand-title-stacked">
-            <span className="brand-title-sales">Sales-Arena</span>
-            <span className="brand-title-arena">Matcher</span>
           </div>
         </div>
         <div style={{ width: '34px' }}></div> {/* Spacer to center the logo */}
@@ -1297,16 +1336,34 @@ export default function App() {
 
       {/* 1. SIDEBAR NAVIGATION */}
       <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div className="brand-section">
-          <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a Sales Arena" className="brand-logo-link">
-            <div className="brand-logo-container">
-              <ChessKnightIcon size={34} />
+        <div style={{ marginBottom: '24px' }}>
+          <a 
+            href="https://sales-arena.netlify.app/" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            title="Haz clic para visitar la Web Oficial de Sales Arena" 
+            className="brand-logo-link"
+            style={{ textDecoration: 'none' }}
+          >
+            <div className="brand-section" style={{ marginBottom: '8px' }}>
+              <div className="brand-logo-container horse-glow-pulse">
+                <ChessKnightIcon size={34} />
+              </div>
+              <div className="brand-title-stacked">
+                <span className="brand-title-sales">Sales-Arena</span>
+                <span className="brand-title-arena">Matcher</span>
+              </div>
             </div>
           </a>
-          <div className="brand-title-stacked">
-            <span className="brand-title-sales">Sales-Arena</span>
-            <span className="brand-title-arena">Matcher</span>
-          </div>
+          <a
+            href="https://sales-arena.netlify.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="horse-web-badge"
+            title="Ir al portal principal de Sales Arena"
+          >
+            <Sparkles size={12} /> Visitar Web Sales Arena ↗
+          </a>
         </div>
 
         <div className="nav-links">
@@ -1384,27 +1441,39 @@ export default function App() {
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
             </p>
           </div>
-          <div 
-            onClick={() => setIsRoomModalOpen(true)}
-            className="glass" 
-            style={{ 
-              padding: '8px 16px', 
-              fontSize: '12px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              color: 'var(--color-primary)', 
-              borderColor: 'var(--border-color)',
-              cursor: 'pointer',
-              userSelect: 'none',
-              transition: 'opacity 0.2s',
-              hover: { opacity: 0.9 }
-            }}
-            title="Gestionar salas"
-          >
-            <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-primary)', borderRadius: '50%' }}></span>
-            <span>Sala Activa: <strong>{roomName}</strong></span>
-            <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.8 }}>⚙️</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              type="button"
+              onClick={handleCopyRoomInvite}
+              className="btn-share-header"
+              title="Copiar enlace de invitación a esta sala (al entrar los llevará al registro inicial)"
+            >
+              <Share2 size={14} />
+              <span>Compartir Sala</span>
+            </button>
+
+            <div 
+              onClick={() => setIsRoomModalOpen(true)}
+              className="glass" 
+              style={{ 
+                padding: '8px 16px', 
+                fontSize: '12px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px', 
+                color: 'var(--color-primary)', 
+                borderColor: 'var(--border-color)',
+                cursor: 'pointer',
+                userSelect: 'none',
+                transition: 'opacity 0.2s',
+                hover: { opacity: 0.9 }
+              }}
+              title="Gestionar salas"
+            >
+              <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-primary)', borderRadius: '50%' }}></span>
+              <span>Sala Activa: <strong>{roomName}</strong></span>
+              <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.8 }}>⚙️</span>
+            </div>
           </div>
         </header>
 
@@ -1414,6 +1483,42 @@ export default function App() {
           {/* VIEW: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div>
+              {/* Tarjeta para compartir sala rápidamente */}
+              <div className="glass share-room-banner" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, rgba(10,132,255,0.15), rgba(94,92,230,0.15))',
+                    border: '1px solid rgba(10,132,255,0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-primary)'
+                  }}>
+                    <Share2 size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      Invitar a la Sala: <span className="room-badge-pill">{roomName}</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
+                      Comparte este enlace con tu equipo. Al ingresar los llevará directamente al registro inicial de esta sala.
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-indigo"
+                  onClick={handleCopyRoomInvite}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontWeight: '600' }}
+                >
+                  <Share2 size={15} />
+                  Copiar Link de Invitación
+                </button>
+              </div>
+
               {/* Tarjeta de Estado Semanal de Tomás */}
               <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2041,6 +2146,34 @@ export default function App() {
               >
                 ✕
               </button>
+            </div>
+
+            {/* Sección de Compartir Enlace de Invitación */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '18px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Share2 size={14} /> Compartir Enlace de Invitación
+              </label>
+              <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Al enviar este enlace, cualquier nuevo integrante accederá al registro inicial específicamente vinculado a la sala <strong>{roomName}</strong>.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <input
+                  type="text"
+                  readOnly
+                  className="form-input"
+                  value={`${window.location.origin}/room/${currentRoomId}`}
+                  style={{ flex: 1, padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-card)' }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyRoomInvite}
+                  className="btn btn-indigo"
+                  style={{ padding: '8px 16px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Copy size={14} />
+                  Copiar
+                </button>
+              </div>
             </div>
 
             {/* Formulario 1: Renombrar Sala */}
