@@ -109,6 +109,17 @@ const getRoomIdFromUrl = () => {
   return match ? match[1] : null;
 };
 
+const slugifyRoomName = (name) => {
+  if (!name) return 'grupo-a';
+  const clean = name.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+  return clean || 'grupo-a';
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -229,6 +240,16 @@ export default function App() {
       return () => mediaQuery.removeEventListener('change', listener);
     }
   }, [theme]);
+
+  // Sincronizar automáticamente la URL del navegador con el nombre de la sala
+  useEffect(() => {
+    if (roomName) {
+      const targetSlug = slugifyRoomName(roomName);
+      if (targetSlug && window.location.pathname !== `/room/${targetSlug}`) {
+        window.history.replaceState(null, '', `/room/${targetSlug}`);
+      }
+    }
+  }, [roomName]);
 
   // --- REAL-TIME DATA SYNCHRONIZATION WITH SUPABASE ---
   useEffect(() => {
@@ -834,7 +855,8 @@ export default function App() {
   };
 
   const handleCopyRoomInvite = () => {
-    const inviteUrl = `${window.location.origin}/room/${currentRoomId}`;
+    const slug = slugifyRoomName(roomName);
+    const inviteUrl = `${window.location.origin}/room/${slug}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(inviteUrl).then(() => {
         showNotification(`🔗 Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\n¡Cualquier persona que entre con este link irá directo al registro inicial de esta sala!`);
@@ -2192,7 +2214,7 @@ export default function App() {
                   type="text"
                   readOnly
                   className="form-input"
-                  value={`${window.location.origin}/room/${currentRoomId}`}
+                  value={`${window.location.origin}/room/${slugifyRoomName(roomName)}`}
                   style={{ flex: 1, padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-card)' }}
                 />
                 <button
