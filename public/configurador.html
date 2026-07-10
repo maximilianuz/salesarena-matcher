@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asistente Visual — Configuración de Sales Arena Matcher</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 40px 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 28px;
+      color: #58a6ff;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    p.subtitle {
+      color: #8b949e;
+      margin-bottom: 30px;
+      font-size: 16px;
+    }
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .card h2 {
+      font-size: 20px;
+      color: #f0f6fc;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-num {
+      background: #238636;
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .copy-box {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 14px 0;
+      font-family: monospace;
+      font-size: 14px;
+      color: #79c0ff;
+    }
+    .btn {
+      background: #238636;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #2ea043; }
+    .btn-secondary {
+      background: #21262d;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+    }
+    .btn-secondary:hover { background: #30363d; }
+    .btn-blue {
+      background: #1f6feb;
+    }
+    .btn-blue:hover { background: #388bfd; }
+    .highlight {
+      color: #e3b341;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Asistente Rápido de Conexión Google + Supabase</h1>
+    <p class="subtitle">He preparado esta página interactiva para que tengas los enlaces directos y el botón de copiar exacto sin marearte entre pestañas.</p>
+
+    <div class="card">
+      <h2><span class="step-num">1</span> Abre la Pantalla de Credenciales en Google Cloud</h2>
+      <p>Haz clic en el siguiente botón para abrir directamente tu panel de credenciales de Google:</p>
+      <div style="margin-top: 14px;">
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="btn btn-blue">Abrir Google Cloud Credentials ↗</a>
+      </div>
+      <p style="margin-top: 14px; font-size: 14px; color: #8b949e;">
+        👉 Arriba haz clic en <b>+ CREAR CREDENCIALES</b> y selecciona <b>ID de cliente de OAuth</b> (Tipo: <i>Aplicación web</i>).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num">2</span> Pega esta URL exacta en Google Cloud</h2>
+      <p>En el campo que dice <span class="highlight">URIs de redireccionamiento autorizados</span>, presiona <b>+ AGREGAR URI</b> y pega esto:</p>
+      
+      <div class="copy-box">
+        <span id="urlText">https://gxqkfqxgmmnleqdmssva.supabase.co/auth/v1/callback</span>
+        <button class="btn btn-secondary" onclick="copyUrl()">Copiar URL</button>
+      </div>
+
+      <p style="font-size: 14px; color: #8b949e;">Al presionar <b>Crear</b> en Google, te dará un <b>ID de Cliente</b> y un <b>Secreto de Cliente</b>.</p>
+    </div>
+
+    <div class="card">
+      <h2><span class="step-num">3</span> Pégalas en Supabase y ¡Listo!</h2>
+      <p>Abre directamente tu proveedor de Google en Supabase con este botón:</p>
+      <div style="margin-top: 14px;">
+        <a href="https://supabase.com/dashboard/project/gxqkfqxgmmnleqdmssva/auth/providers" target="_blank" class="btn">Abrir Panel de Supabase (Google) ↗</a>
+      </div>
+      <p style="margin-top: 14px; font-size: 14px; color: #8b949e;">
+        👉 Activa <b>Enable Sign in with Google</b>, pega tu ID y Secreto, y presiona <b>Save</b>.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    function copyUrl() {
+      const text = document.getElementById('urlText').innerText;
+      navigator.clipboard.writeText(text);
+      const btn = event.target;
+      btn.innerText = '¡Copiado! ✓';
+      btn.style.background = '#238636';
+      setTimeout(() => {
+        btn.innerText = 'Copiar URL';
+        btn.style.background = '#21262d';
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
