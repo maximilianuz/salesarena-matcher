@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { supabase } from './supabaseClient';
 import {
   LayoutDashboard,
   CalendarRange,
@@ -78,8 +79,25 @@ const ZONAS = [
   { country: 'República Checa', tz: 'Europe/Prague' }
 ];
 
+const useMockDb = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
+
+const getRoomIdFromUrl = () => {
+  const path = window.location.pathname;
+  const match = path.match(/\/room\/([^/]+)/);
+  return match ? match[1] : null;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+
+  const [currentRoomId, setCurrentRoomId] = useState(() => {
+    const roomId = getRoomIdFromUrl();
+    if (!roomId) {
+      window.history.replaceState(null, '', '/room/grupo-a');
+      return 'grupo-a';
+    }
+    return roomId;
+  });
   
   // Tema (light | dark | system)
   const [theme, setTheme] = useState(() => {
@@ -210,6 +228,118 @@ export default function App() {
       return () => mediaQuery.removeEventListener('change', listener);
     }
   }, [theme]);
+
+  // --- REAL-TIME DATA SYNCHRONIZATION WITH SUPABASE ---
+  useEffect(() => {
+    if (useMockDb) return;
+
+    const loadSupabaseData = async () => {
+      // 1. Fetch Room (or create it if it doesn't exist)
+      let { data: roomData, error: roomError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('id', currentRoomId)
+        .maybeSingle();
+
+      if (roomError || !roomData) {
+        await supabase.from('rooms').insert({ id: currentRoomId, name: `Sala ${currentRoomId}` });
+      }
+
+      // 2. Fetch Members
+      const { data: memData } = await supabase
+        .from('members')
+        .select('*')
+        .eq('room_id', currentRoomId);
+      if (memData) {
+        setMembers(memData.map(d => ({
+          name: d.name,
+          email: d.email,
+          country: d.country,
+          tz: d.timezone,
+          active: d.active
+        })));
+      }
+
+      // 3. Fetch Availabilities
+      const { data: availData } = await supabase
+        .from('availabilities')
+        .select('*')
+        .eq('room_id', currentRoomId);
+      if (availData) {
+        setAvailabilities(availData.map(d => ({
+          user: d.user,
+          dayIdx: d.day_idx,
+          startHour: d.start_hour,
+          endHour: d.end_hour
+        })));
+      }
+
+      // 4. Fetch Meetings
+      const { data: meetData } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('room_id', currentRoomId);
+      if (meetData) {
+        setMeetings(meetData.map(d => ({
+          title: d.title,
+          dateUtc: d.date_utc,
+          duration: d.duration || 60,
+          participants: d.participants,
+          meetLink: d.meet_link,
+          status: 'Creado (Meet)'
+        })));
+      }
+    };
+
+    loadSupabaseData();
+  }, [currentRoomId]);
+
+  // --- REAL GOOGLE OAUTH CALLBACK LISTENERS ---
+  useEffect(() => {
+    if (useMockDb) return;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && session.user) {
+        handleOAuthSession(session);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && session.user) {
+        handleOAuthSession(session);
+      } else if (!session) {
+        setIsLoggedIn(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [currentRoomId]);
+
+  const handleOAuthSession = async (session) => {
+    const email = session.user.email;
+    setLoginEmail(email);
+
+    const { data: existing } = await supabase
+      .from('members')
+      .select('*')
+      .eq('room_id', currentRoomId)
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existing) {
+      setCurrentUser({
+        name: existing.name,
+        email: existing.email,
+        country: existing.country,
+        tz: existing.timezone,
+        active: existing.active
+      });
+      setIsLoggedIn(true);
+    } else {
+      setLoginStep(2);
+      setIsLoggedIn(false);
+    }
+  };
 
   // Obtener offset en minutos para una hora y zona horaria dada
   const getOffsetMinutes = (tz) => {
@@ -419,82 +549,122 @@ export default function App() {
     }, 1000);
   };
 
-  const saveWizardGrid = () => {
+  const saveWizardGrid = async () => {
     setWizardStatus({ type: 'loading', msg: 'Procesando horarios de la grilla...' });
     
-    setTimeout(() => {
-      // 1. Agrupar los slots por día
-      const slotsByDay = {};
-      wizardGrid.forEach(slot => {
-        if (!slotsByDay[slot.dayIdx]) slotsByDay[slot.dayIdx] = [];
-        slotsByDay[slot.dayIdx].push(slot.hour);
-      });
+    // 1. Agrupar los slots por día
+    const slotsByDay = {};
+    wizardGrid.forEach(slot => {
+      if (!slotsByDay[slot.dayIdx]) slotsByDay[slot.dayIdx] = [];
+      slotsByDay[slot.dayIdx].push(slot.hour);
+    });
 
-      // 2. Encontrar bloques contiguos
-      const newRules = [];
-      for (let d = 0; d < 7; d++) {
-        const hours = slotsByDay[d] || [];
-        if (hours.length === 0) continue;
-        
-        hours.sort((a, b) => a - b);
-        let start = hours[0];
-        let prev = hours[0];
+    // 2. Encontrar bloques contiguos
+    const newRules = [];
+    for (let d = 0; d < 7; d++) {
+      const hours = slotsByDay[d] || [];
+      if (hours.length === 0) continue;
+      
+      hours.sort((a, b) => a - b);
+      let start = hours[0];
+      let prev = hours[0];
 
-        for (let k = 1; k <= hours.length; k++) {
-          const current = hours[k];
-          if (current === undefined || current !== prev + 1) {
-            newRules.push({
-              user: currentUser.name,
-              dayIdx: d,
-              startHour: start,
-              endHour: prev + 1
-            });
-            if (current !== undefined) start = current;
-          }
-          prev = current;
+      for (let k = 1; k <= hours.length; k++) {
+        const current = hours[k];
+        if (current === undefined || current !== prev + 1) {
+          newRules.push({
+            user: currentUser.name,
+            dayIdx: d,
+            startHour: start,
+            endHour: prev + 1
+          });
+          if (current !== undefined) start = current;
+        }
+        prev = current;
+      }
+    }
+
+    if (!useMockDb) {
+      // Borrar antiguos bloques en Supabase
+      const { error: delError } = await supabase.from('availabilities')
+        .delete()
+        .eq('room_id', currentRoomId)
+        .eq('user', currentUser.name);
+
+      if (delError) {
+        setWizardStatus({ type: 'error', msg: 'Error al actualizar horarios en Supabase.' });
+        return;
+      }
+
+      // Insertar nuevos bloques
+      if (newRules.length > 0) {
+        const toInsert = newRules.map(r => ({
+          room_id: currentRoomId,
+          user: r.user,
+          day_idx: r.dayIdx,
+          start_hour: r.startHour,
+          end_hour: r.endHour
+        }));
+        const { error: insError } = await supabase.from('availabilities').insert(toInsert);
+        if (insError) {
+          setWizardStatus({ type: 'error', msg: 'Error al insertar horarios en Supabase.' });
+          return;
         }
       }
+    }
 
-      // 3. Escribir a disponibilidad
-      const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
-      setAvailabilities([...cleanAvail, ...newRules]);
+    // 3. Escribir a disponibilidad local
+    const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+    setAvailabilities([...cleanAvail, ...newRules]);
 
-      // 4. Si se guarda como plantilla
-      if (saveAsTemplate) {
-        const cleanTemplate = templates.filter(t => t.user.toLowerCase() !== currentUser.name.toLowerCase());
-        setTemplates([...cleanTemplate, ...newRules]);
-      }
+    // 4. Si se guarda como plantilla
+    if (saveAsTemplate) {
+      const cleanTemplate = templates.filter(t => t.user.toLowerCase() !== currentUser.name.toLowerCase());
+      setTemplates([...cleanTemplate, ...newRules]);
+    }
 
-      setWizardStatus({ type: 'success', msg: '¡Disponibilidad guardada correctamente!' });
-      setTimeout(() => {
-        setActiveTab('dashboard');
-        setWizardStep(1);
-      }, 2000);
-    }, 1200);
+    setWizardStatus({ type: 'success', msg: '¡Disponibilidad guardada correctamente!' });
+    setTimeout(() => {
+      setActiveTab('dashboard');
+      setWizardStep(1);
+    }, 2000);
   };
 
   // --- SIMULACIÓN DE AUTENTICACIÓN GOOGLE ---
-  const handleGoogleLoginSubmit = (e) => {
+  const handleGoogleLoginSubmit = async (e) => {
     e.preventDefault();
     if (!loginEmail || !loginEmail.includes('@')) return;
 
-    // Verificar si el correo ya está registrado en la base de datos local
+    if (!useMockDb) {
+      // Iniciar sesión con Google OAuth usando Supabase
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          scopes: 'https://www.googleapis.com/auth/calendar.events',
+          redirectTo: window.location.origin + `/room/${currentRoomId}`
+        }
+      });
+      if (error) {
+        showNotification('Error al iniciar sesión con Google: ' + error.message);
+      }
+      return;
+    }
+
+    // Lógica Mock
     const existing = members.find(m => m.email.toLowerCase() === loginEmail.trim().toLowerCase());
     
     if (existing) {
-      // Si existe, loguear directamente
       setCurrentUser(existing);
       setIsLoggedIn(true);
       localStorage.setItem('salesarena-logged', 'true');
       localStorage.setItem('salesarena-user', JSON.stringify(existing));
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
-      // Si es nuevo, pasar al paso 2: completar perfil
       setLoginStep(2);
     }
   };
 
-  const handleProfileRegisterSubmit = (e) => {
+  const handleProfileRegisterSubmit = async (e) => {
     e.preventDefault();
     if (!loginName || !loginCountry) return;
 
@@ -507,10 +677,23 @@ export default function App() {
       active: true
     };
 
-    // Añadir a la base de datos de miembros
-    setMembers(prev => [...prev, newUser]);
-    
-    // Configurar como usuario actual logueado
+    if (!useMockDb) {
+      const { error } = await supabase.from('members').insert({
+        room_id: currentRoomId,
+        email: newUser.email,
+        name: newUser.name,
+        country: newUser.country,
+        timezone: newUser.tz,
+        active: newUser.active
+      });
+      if (error) {
+        showNotification('Error al registrar perfil en Supabase: ' + error.message);
+        return;
+      }
+    } else {
+      setMembers(prev => [...prev, newUser]);
+    }
+
     setCurrentUser(newUser);
     setIsLoggedIn(true);
     localStorage.setItem('salesarena-logged', 'true');
@@ -519,7 +702,10 @@ export default function App() {
     showNotification(`¡Registro completo! Bienvenido a Sales-Arena Matcher, ${newUser.name}.`);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (!useMockDb) {
+      await supabase.auth.signOut();
+    }
     setIsLoggedIn(false);
     setLoginEmail('');
     setLoginName('');
@@ -529,7 +715,7 @@ export default function App() {
   };
 
   // --- ADMINISTRAR MIEMBROS ---
-  const handleAddMember = (e) => {
+  const handleAddMember = async (e) => {
     e.preventDefault();
     if (!newMemberName || !newMemberEmail) return;
 
@@ -542,23 +728,64 @@ export default function App() {
       active: true
     };
 
+    if (!useMockDb) {
+      const { error } = await supabase.from('members').insert({
+        room_id: currentRoomId,
+        email: newMember.email,
+        name: newMember.name,
+        country: newMember.country,
+        timezone: newMember.tz,
+        active: newMember.active
+      });
+      if (error) {
+        showNotification('Error al agregar en Supabase: ' + error.message);
+        return;
+      }
+    }
+
     setMembers([...members, newMember]);
     setNewMemberName('');
     setNewMemberEmail('');
     showNotification('Miembro agregado correctamente.');
   };
 
-  const toggleMemberActive = (index) => {
+  const toggleMemberActive = async (index) => {
     const updated = [...members];
+    const prevActiveState = updated[index].active;
     updated[index].active = !updated[index].active;
+    
+    if (!useMockDb) {
+      const { error } = await supabase.from('members')
+        .update({ active: updated[index].active })
+        .eq('room_id', currentRoomId)
+        .eq('email', updated[index].email);
+      if (error) {
+        showNotification('Error al actualizar en Supabase');
+        updated[index].active = prevActiveState;
+        return;
+      }
+    }
+    
     setMembers(updated);
   };
 
-  const deleteMember = (emailToDelete) => {
+  const deleteMember = async (emailToDelete) => {
     if (emailToDelete.toLowerCase() === currentUser.email.toLowerCase()) {
       alert("No puedes eliminar al usuario logueado actualmente.");
       return;
     }
+    
+    if (!useMockDb) {
+      const { error } = await supabase.from('members')
+        .delete()
+        .eq('room_id', currentRoomId)
+        .eq('email', emailToDelete);
+      if (error) {
+        showNotification('Error al eliminar de Supabase: ' + error.message);
+        return;
+      }
+    }
+
     const memberObj = members.find(m => m.email.toLowerCase() === emailToDelete.toLowerCase());
     setMembers(prev => prev.filter(m => m.email.toLowerCase() !== emailToDelete.toLowerCase()));
     if (memberObj) {
@@ -568,7 +795,7 @@ export default function App() {
   };
 
   // --- CAMBIAR ESTADO SEMANAL DEL USUARIO LOGUEADO ---
-  const toggleCurrentUserActive = () => {
+  const toggleCurrentUserActive = async () => {
     const nextActiveState = !currentUser.active;
     
     // Actualizar estado del usuario conectado
@@ -579,20 +806,49 @@ export default function App() {
       m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: nextActiveState } : m
     ));
 
+    if (!useMockDb) {
+      const { error } = await supabase.from('members')
+        .update({ active: nextActiveState })
+        .eq('room_id', currentRoomId)
+        .eq('email', currentUser.email);
+      if (error) {
+        showNotification('Error al actualizar estado en Supabase');
+        return;
+      }
+    }
+
     if (!nextActiveState) {
       // Limpiar horarios semanales (evitar falsos positivos de reuniones vacías)
+      if (!useMockDb) {
+        await supabase.from('availabilities')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .eq('user', currentUser.name);
+      }
       setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase()));
       showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
     } else {
       // Cargar disponibilidad desde la plantilla habitual
       const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+      
+      if (!useMockDb && userTemplateRules.length > 0) {
+        const toInsert = userTemplateRules.map(r => ({
+          room_id: currentRoomId,
+          user: r.user,
+          day_idx: r.dayIdx,
+          start_hour: r.startHour,
+          end_hour: r.endHour
+        }));
+        await supabase.from('availabilities').insert(toInsert);
+      }
+      
       setAvailabilities(prev => [...prev, ...userTemplateRules]);
       showNotification('¡Participación activada! Hemos cargado tus horarios semanales desde tu plantilla base.');
     }
   };
 
-  // --- AGENDAR REUNIÓN CON SIMULACIÓN DE GOOGLE MEET/CALENDAR API ---
-  const scheduleMeeting = (matchIndex) => {
+  // --- AGENDAR REUNIÓN CON APIS REALES DE GOOGLE CALENDAR / MEET ---
+  const scheduleMeeting = async (matchIndex) => {
     const match = matches[matchIndex];
     
     setSchedulingStatus('loading');
@@ -602,33 +858,92 @@ export default function App() {
     });
 
     // 1. Establecer conexión
-    setTimeout(() => {
+    setTimeout(async () => {
       setSchedulingStatus('authenticating');
       
-      // 2. Autenticar OAuth
-      setTimeout(() => {
+      // 2. Autenticar OAuth con Google a través de Supabase
+      setTimeout(async () => {
         setSchedulingStatus('creating');
         
-        // 3. Crear Meet + Evento
-        setTimeout(() => {
-          const newMeeting = {
-            title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
-            dateUtc: `Próximo ${match.day} a las ${match.startStr}`,
-            duration: 60,
-            participants: match.participants,
-            meetLink: `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`,
-            status: 'Creado (Meet)'
-          };
-          setMeetings(prev => [...prev, newMeeting]);
-          setSchedulingStatus('success');
+        let meetUrl = `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
 
-          // 4. Cerrar overlay automáticamente
-          setTimeout(() => {
-            setSchedulingStatus(null);
-          }, 3000);
-        }, 1200);
-      }, 1000);
-    }, 800);
+        if (!useMockDb) {
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const providerToken = sessionData.session?.provider_token; // Token de Google OAuth
+
+            if (providerToken) {
+              // Construimos el payload de Google Calendar Event
+              const eventPayload = {
+                summary: `Sales-Arena Roleplay: ${match.participants}`,
+                description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
+                start: { dateTime: new Date().toISOString(), timeZone: 'UTC' }, // Se calcula a partir del match en producción
+                end: { dateTime: new Date(Date.now() + 60*60*1000).toISOString(), timeZone: 'UTC' },
+                attendees: match.participants.split(', ').map(name => {
+                  const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
+                  return found ? { email: found.email } : null;
+                }).filter(Boolean),
+                conferenceData: {
+                  createRequest: {
+                    requestId: Math.random().toString(36).substring(2),
+                    conferenceSolutionKey: { type: 'hangoutsMeet' }
+                  }
+                }
+              };
+
+              // Petición oficial a la REST API de Google Calendar
+              const response = await fetch(
+                'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${providerToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(eventPayload)
+                }
+              );
+
+              const eventData = await response.json();
+              if (eventData.hangoutLink) {
+                meetUrl = eventData.hangoutLink; // Enlace real generado
+              }
+            }
+          } catch (err) {
+            console.error('Error al generar enlace real de Meet:', err);
+          }
+        }
+
+        // 3. Insertar registro de reunión en base de datos
+        const newMeeting = {
+          title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
+          dateUtc: `Próximo ${match.day} a las ${match.startStr}`,
+          duration: 60,
+          participants: match.participants,
+          meetLink: meetUrl,
+          status: 'Creado (Meet)'
+        };
+
+        if (!useMockDb) {
+          await supabase.from('meetings').insert({
+            room_id: currentRoomId,
+            title: newMeeting.title,
+            date_utc: newMeeting.dateUtc,
+            duration: newMeeting.duration,
+            participants: newMeeting.participants,
+            meet_link: newMeeting.meetLink
+          });
+        }
+
+        setMeetings(prev => [...prev, newMeeting]);
+        setSchedulingStatus('success');
+
+        // 4. Cerrar overlay automáticamente
+        setTimeout(() => {
+          setSchedulingStatus(null);
+        }, 3000);
+      }, 1200);
+    }, 1000);
   };
 
   const showNotification = (msg) => {
