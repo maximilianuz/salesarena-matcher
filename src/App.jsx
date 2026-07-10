@@ -1168,7 +1168,6 @@ export default function App() {
           boxSizing: 'border-box'
         }}>
           {/* Logo Brand Header */}
-          {/* Logo Brand Header */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <a 
               href="https://sales-arena.netlify.app/" 
@@ -1181,10 +1180,7 @@ export default function App() {
                 <ChessKnightIcon size={44} />
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span className="brand-title-sales" style={{ fontSize: '11px' }}>Sales-Arena</span>
-                  <span className="portal-badge-mini">PORTAL ↗</span>
-                </div>
+                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
                 <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
               </div>
             </a>
