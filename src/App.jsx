@@ -1199,7 +1199,7 @@ export default function App() {
                   <span>Sala de coordinación: <strong>{roomName}</strong></span>
                 </div>
                 <h2 style={{ margin: '10px 0 6px 0', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta corporativa para ingresar al coordinador de roleplays.</p>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta de Google para ingresar al coordinador de roleplays.</p>
               </div>
 
               {!useMockDb ? (
