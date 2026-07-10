@@ -133,6 +133,17 @@ html.dark .glass-hover:hover {
   padding-left: 8px;
 }
 
+.brand-logo-link {
+  display: flex;
+  text-decoration: none;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.brand-logo-link:hover {
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
 .brand-logo-container {
   display: flex;
   align-items: center;

@@ -842,9 +842,11 @@ export default function App() {
           {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
         <div className="brand-section" style={{ margin: 0, padding: 0 }}>
-          <div className="brand-logo-container">
-            <ChessKnightIcon size={34} />
-          </div>
+          <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a Sales Arena" className="brand-logo-link">
+            <div className="brand-logo-container">
+              <ChessKnightIcon size={34} />
+            </div>
+          </a>
           <div className="brand-title-stacked">
             <span className="brand-title-sales">Sales-Arena</span>
             <span className="brand-title-arena">Matcher</span>
@@ -859,9 +861,11 @@ export default function App() {
       {/* 1. SIDEBAR NAVIGATION */}
       <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="brand-section">
-          <div className="brand-logo-container">
-            <ChessKnightIcon size={34} />
-          </div>
+          <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a Sales Arena" className="brand-logo-link">
+            <div className="brand-logo-container">
+              <ChessKnightIcon size={34} />
+            </div>
+          </a>
           <div className="brand-title-stacked">
             <span className="brand-title-sales">Sales-Arena</span>
             <span className="brand-title-arena">Matcher</span>
