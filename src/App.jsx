@@ -1,0 +1,1529 @@
+import React, { useState, useEffect } from 'react';
+import './App.css';
+import {
+  LayoutDashboard,
+  CalendarRange,
+  Flame,
+  Users,
+  UserCheck,
+  CheckCircle,
+  Video,
+  Clock,
+  Sparkles,
+  MapPin,
+  Check,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Calendar,
+  AlertCircle,
+  Sun,
+  Moon,
+  Monitor,
+  Menu,
+  X
+} from 'lucide-react';
+
+const ChessKnightIcon = ({ size = 26 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }}>
+    <defs>
+      <linearGradient id="salesArenaKnightBg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#0a84ff"/>
+        <stop offset="55%" stopColor="#5e5ce6"/>
+        <stop offset="100%" stopColor="#4d4ad9"/>
+      </linearGradient>
+    </defs>
+    <rect width="512" height="512" rx="115" fill="url(#salesArenaKnightBg)"/>
+    <g transform="translate(112, 112) scale(12)" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>
+      <path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/>
+      <path d="m15 5 1.425-1.425"/>
+      <path d="m17 8 1.53-1.53"/>
+      <path d="M9.713 12.185 7 18"/>
+    </g>
+  </svg>
+);
+
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+// Paises y Zonas Horarias
+const ZONAS = [
+  // América
+  { country: 'Argentina', tz: 'America/Argentina/Buenos_Aires' },
+  { country: 'Chile', tz: 'America/Santiago' },
+  { country: 'Colombia', tz: 'America/Bogota' },
+  { country: 'México', tz: 'America/Mexico_City' },
+  { country: 'Estados Unidos (Este)', tz: 'America/New_York' },
+  { country: 'Estados Unidos (Pacífico)', tz: 'America/Los_Angeles' },
+  { country: 'Perú', tz: 'America/Lima' },
+  { country: 'Uruguay', tz: 'America/Montevideo' },
+  { country: 'Ecuador', tz: 'America/Guayaquil' },
+  { country: 'Paraguay', tz: 'America/Asuncion' },
+  { country: 'Bolivia', tz: 'America/La_Paz' },
+  { country: 'Costa Rica', tz: 'America/Costa_Rica' },
+  { country: 'Panamá', tz: 'America/Panama' },
+  { country: 'Venezuela', tz: 'America/Caracas' },
+  
+  // Europa Central / Occidental
+  { country: 'España', tz: 'Europe/Madrid' },
+  { country: 'Alemania', tz: 'Europe/Berlin' },
+  { country: 'Francia', tz: 'Europe/Paris' },
+  { country: 'Italia', tz: 'Europe/Rome' },
+  { country: 'Reino Unido', tz: 'Europe/London' },
+  { country: 'Suiza', tz: 'Europe/Zurich' },
+  { country: 'Austria', tz: 'Europe/Vienna' },
+  { country: 'Polonia', tz: 'Europe/Warsaw' },
+  { country: 'Países Bajos', tz: 'Europe/Amsterdam' },
+  { country: 'Bélgica', tz: 'Europe/Brussels' },
+  { country: 'República Checa', tz: 'Europe/Prague' }
+];
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  
+  // Tema (light | dark | system)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('salesarena-theme') || 'system';
+  });
+
+  // Estado del Sidebar móvil
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Autenticación de Google (Simulada)
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('salesarena-logged') === 'true';
+  });
+
+  // Estado del flujo de Login/Registro
+  const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginName, setLoginName] = useState('');
+  const [loginCountry, setLoginCountry] = useState('Argentina');
+
+  // Estado de Usuario Logueado (Simulado)
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('salesarena-user');
+    return saved ? JSON.parse(saved) : {
+      name: 'Tomás Rossi',
+      email: 'tomas@example.com',
+      country: 'Argentina',
+      tz: 'America/Argentina/Buenos_Aires',
+      active: true
+    };
+  });
+
+  // Base de Datos en Estado (Con usuarios de prueba)
+  const [members, setMembers] = useState([
+    { name: 'Tomás Rossi', email: 'tomas@example.com', country: 'Argentina', tz: 'America/Argentina/Buenos_Aires', active: true },
+    { name: 'Laura Gómez', email: 'laura@example.com', country: 'España', tz: 'Europe/Madrid', active: true },
+    { name: 'Sofía Díaz', email: 'sofia@example.com', country: 'México', tz: 'America/Mexico_City', active: true },
+    { name: 'Sam Miller', email: 'sam@example.com', country: 'Estados Unidos', tz: 'America/Los_Angeles', active: true },
+    { name: '[Test] Chile User', email: 'test.chile@example.com', country: 'Chile', tz: 'America/Santiago', active: true },
+    { name: '[Test] España User', email: 'test.espania@example.com', country: 'España', tz: 'Europe/Madrid', active: true }
+  ]);
+
+  // Disponibilidad: lista de { user, dayIdx, startHour, endHour }
+  const [availabilities, setAvailabilities] = useState([
+    { user: 'Tomás Rossi', dayIdx: 1, startHour: 10, endHour: 18 }, // Martes 10-18h local
+    { user: 'Laura Gómez', dayIdx: 1, startHour: 15, endHour: 20 },
+    { user: 'Laura Gómez', dayIdx: 1, startHour: 9, endHour: 13 },
+    { user: 'Sofía Díaz', dayIdx: 1, startHour: 8, endHour: 14 },
+    { user: 'Sam Miller', dayIdx: 1, startHour: 6, endHour: 11 },
+    { user: '[Test] Chile User', dayIdx: 1, startHour: 9, endHour: 15 },
+    { user: '[Test] España User', dayIdx: 1, startHour: 14, endHour: 19 }
+  ]);
+
+  // Plantillas Fijas: copia inicial
+  const [templates, setTemplates] = useState([
+    { user: 'Tomás Rossi', dayIdx: 1, startHour: 10, endHour: 18 },
+    { user: 'Laura Gómez', dayIdx: 1, startHour: 15, endHour: 20 },
+    { user: 'Laura Gómez', dayIdx: 1, startHour: 9, endHour: 13 },
+    { user: 'Sofía Díaz', dayIdx: 1, startHour: 8, endHour: 14 },
+    { user: 'Sam Miller', dayIdx: 1, startHour: 6, endHour: 11 },
+    { user: '[Test] Chile User', dayIdx: 1, startHour: 9, endHour: 15 },
+    { user: '[Test] España User', dayIdx: 1, startHour: 14, endHour: 19 }
+  ]);
+
+  // Reuniones agendadas
+  const [meetings, setMeetings] = useState([
+    { title: 'Roleplay Global — Tomás · Laura · Sofía', dateUtc: 'Próximo Martes 15:00 UTC', duration: 60, participants: 'Tomás Rossi, Laura Gómez, Sofía Díaz', meetLink: 'https://meet.google.com/abc-defg-hij', status: 'Creado (Meet)' }
+  ]);
+
+  // Estados de carga del Wizard
+  const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
+  const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  const [saveAsTemplate, setSaveAsTemplate] = useState(true);
+  const [wizardStatus, setWizardStatus] = useState(null); // {type, msg}
+
+  // Nuevos miembros
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberCountry, setNewMemberCountry] = useState('Argentina');
+
+  // Estados de simulación de Google Meet / Calendar API
+  const [schedulingStatus, setSchedulingStatus] = useState(null); // null | 'loading' | 'authenticating' | 'creating' | 'success'
+  const [scheduledDetails, setScheduledDetails] = useState(null); // { title, attendeesCount }
+
+  // Resultados del Motor calculados dinámicamente
+  const [matches, setMatches] = useState([]);
+  const [heatmap, setHeatmap] = useState([]); // 7x24 grid
+  const [affinity, setAffinity] = useState([]);
+
+  // Variables para arrastre en la grilla visual
+  const [isMouseDown, setIsMouseDown] = useState(false);
+  const [dragMode, setDragMode] = useState(true); // true = pintar, false = borrar
+
+  // --- MOTOR DE COINCIDENCIAS (REACT PORT) ---
+  useEffect(() => {
+    calculateEngine();
+  }, [members, availabilities]);
+
+  // --- MANEJO DE TEMAS (DARK/LIGHT/SYSTEM) ---
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = (t) => {
+      if (t === 'dark') {
+        root.classList.add('dark');
+      } else if (t === 'light') {
+        root.classList.remove('dark');
+      } else {
+        // System preference
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (systemPrefersDark) {
+          root.classList.add('dark');
+        } else {
+          root.classList.remove('dark');
+        }
+      }
+    };
+
+    applyTheme(theme);
+    localStorage.setItem('salesarena-theme', theme);
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const listener = (e) => {
+        if (e.matches) root.classList.add('dark');
+        else root.classList.remove('dark');
+      };
+      mediaQuery.addEventListener('change', listener);
+      return () => mediaQuery.removeEventListener('change', listener);
+    }
+  }, [theme]);
+
+  // Obtener offset en minutos para una hora y zona horaria dada
+  const getOffsetMinutes = (tz) => {
+    const offsets = {
+      'America/Argentina/Buenos_Aires': -180,
+      'Europe/Madrid': 120, // UTC+2
+      'America/Mexico_City': -360,
+      'America/Santiago': -240, // Chile
+      'America/Los_Angeles': -480
+    };
+    return offsets[tz] || 0;
+  };
+
+  const calculateEngine = () => {
+    const activeMembers = members.filter(m => m.active);
+    if (activeMembers.length < 2) {
+      setMatches([]);
+      return;
+    }
+
+    const nSlots = 7 * 24; // 168 slots de 1 hora
+    const presence = Array.from({ length: nSlots }, () => []);
+    const freeSlotsCount = activeMembers.map(() => 0);
+
+    // Mapear intervalos locales a UTC
+    activeMembers.forEach((member, memberIdx) => {
+      const offset = getOffsetMinutes(member.tz);
+      const userRules = availabilities.filter(a => a.user.toLowerCase() === member.name.toLowerCase());
+
+      userRules.forEach(rule => {
+        // Traducir inicio y fin local a minutos desde el lunes 00:00 local
+        const startLocalMin = rule.dayIdx * 24 * 60 + rule.startHour * 60;
+        const endLocalMin = rule.dayIdx * 24 * 60 + rule.endHour * 60;
+
+        // Traducir a UTC minutes
+        const startUtcMin = startLocalMin - offset;
+        const endUtcMin = endLocalMin - offset;
+
+        // Rellenar slots de 1 hora
+        for (let s = 0; s < nSlots; s++) {
+          const slotStartMin = s * 60;
+          const slotEndMin = (s + 1) * 60;
+
+          // Si el slot cae dentro del intervalo disponible
+          if (slotStartMin >= startUtcMin && slotEndMin <= endUtcMin) {
+            presence[s].push(memberIdx);
+            freeSlotsCount[memberIdx]++;
+          }
+        }
+      });
+    });
+
+    // 1. Calcular Matches (fusionando slots contiguos)
+    const minParticipants = 2;
+    const windows = [];
+    let currentWindow = null;
+
+    for (let s = 0; s < nSlots; s++) {
+      const idxs = presence[s];
+      const presentNames = idxs.map(i => activeMembers[i].name);
+      const sig = [...idxs].sort().join('|');
+
+      if (currentWindow && currentWindow.sig === sig && presentNames.length >= minParticipants) {
+        currentWindow.endSlot = s + 1;
+      } else {
+        if (currentWindow) windows.push(currentWindow);
+        currentWindow = (presentNames.length >= minParticipants)
+          ? { sig, startSlot: s, endSlot: s + 1, members: presentNames }
+          : null;
+      }
+    }
+    if (currentWindow) windows.push(currentWindow);
+
+    // Formatear y ordenar ventanas
+    const calculatedMatches = windows.map((w, index) => {
+      const startHourUtc = w.startSlot % 24;
+      const startDayIdx = Math.floor(w.startSlot / 24);
+      const endHourUtc = w.endSlot % 24;
+      const endDayIdx = Math.floor(w.endSlot / 24);
+
+      const localDetail = activeMembers.map(m => {
+        const offset = getOffsetMinutes(m.tz);
+        const localStartHour = (startHourUtc + (offset / 60) + 24) % 24;
+        const localEndHour = (endHourUtc + (offset / 60) + 24) % 24;
+        return `${m.name.split(' ')[0]}: ${String(Math.floor(localStartHour)).padStart(2, '0')}:00-${String(Math.floor(localEndHour)).padStart(2, '0')}:00`;
+      }).join(' | ');
+
+      const score = Math.round((w.members.length / activeMembers.length) * 100);
+
+      return {
+        rank: index + 1,
+        day: DIAS[startDayIdx],
+        startStr: `${String(startHourUtc).padStart(2, '0')}:00 UTC`,
+        endStr: `${String(endHourUtc).padStart(2, '0')}:00 UTC`,
+        participants: w.members.join(', '),
+        localDetail,
+        score,
+        startSlot: w.startSlot,
+        endSlot: w.endSlot
+      };
+    });
+
+    calculatedMatches.sort((a, b) => b.score - a.score || (b.endSlot - b.startSlot) - (a.endSlot - a.startSlot));
+    setMatches(calculatedMatches.slice(0, 5));
+
+    // 2. Calcular Heatmap (7 días x 24 horas)
+    const grid = [];
+    const viewOffset = getOffsetMinutes(currentUser.tz); // Ver en hora local del usuario activo
+
+    for (let d = 0; d < 7; d++) {
+      const hoursRow = [];
+      for (let h = 0; h < 24; h++) {
+        // Convertir día/hora local de Tomás a UTC
+        const localMin = d * 24 * 60 + h * 60;
+        const utcMin = localMin - viewOffset;
+        const slotIdx = Math.floor((utcMin / 60) + nSlots) % nSlots;
+
+        // Personas libres en este slot
+        const freeCount = presence[slotIdx] ? presence[slotIdx].length : 0;
+        const freeNames = presence[slotIdx] ? presence[slotIdx].map(idx => activeMembers[idx].name).join(', ') : '';
+
+        hoursRow.push({ count: freeCount, names: freeNames });
+      }
+      grid.push(hoursRow);
+    }
+    setHeatmap(grid);
+
+    // 3. Matriz de Afinidad (Solapamientos relativos)
+    const n = activeMembers.length;
+    const affinityMatrix = Array.from({ length: n }, () => Array(n).fill(0));
+
+    // Contar solapamientos
+    for (let s = 0; s < nSlots; s++) {
+      const here = presence[s];
+      for (let a = 0; a < here.length; a++) {
+        for (let b = a + 1; b < here.length; b++) {
+          affinityMatrix[here[a]][here[b]]++;
+          affinityMatrix[here[b]][here[a]]++;
+        }
+      }
+    }
+
+    // Convertir a porcentajes
+    const calculatedAffinity = activeMembers.map((member, i) => {
+      const partnerStats = activeMembers.map((partner, j) => {
+        if (i === j) return { name: partner.name, pct: null };
+        const denom = Math.min(freeSlotsCount[i], freeSlotsCount[j]);
+        const pct = denom ? Math.round((affinityMatrix[i][j] / denom) * 100) : 0;
+        return { name: partner.name, pct };
+      });
+
+      return {
+        name: member.name,
+        stats: partnerStats
+      };
+    });
+    setAffinity(calculatedAffinity);
+  };
+
+  // --- ACCIONES DEL WIZARD ---
+  const handleWizardParticipation = (participate) => {
+    setWizardStatus({ type: 'loading', msg: 'Guardando tu estado...' });
+    setTimeout(() => {
+      // Modificar en la lista de miembros
+      const updatedMembers = members.map(m =>
+        m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: participate } : m
+      );
+      setMembers(updatedMembers);
+
+      if (participate) {
+        // Cargar horarios del usuario activo en la grilla visual
+        const userRules = availabilities.filter(a => a.user.toLowerCase() === currentUser.name.toLowerCase());
+        const gridSlots = [];
+        userRules.forEach(rule => {
+          for (let h = rule.startHour; h < rule.endHour; h++) {
+            gridSlots.push({ dayIdx: rule.dayIdx, hour: h });
+          }
+        });
+        setWizardGrid(gridSlots);
+        setWizardStep(2);
+      } else {
+        // Borrar horarios semanales
+        const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+        setAvailabilities(cleanAvail);
+        setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
+        setTimeout(() => {
+          setActiveTab('dashboard');
+          setWizardStep(1);
+        }, 2000);
+      }
+    }, 1000);
+  };
+
+  const handleUseTemplate = () => {
+    setWizardStatus({ type: 'loading', msg: 'Aplicando horarios base de tu plantilla...' });
+    setTimeout(() => {
+      // Reemplazar horarios en la disponibilidad semanal
+      const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+      const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+      setAvailabilities([...cleanAvail, ...userTemplateRules]);
+
+      setWizardStatus({ type: 'success', msg: '¡Horario base cargado con éxito para esta semana!' });
+      setTimeout(() => {
+        setActiveTab('dashboard');
+        setWizardStep(1);
+      }, 2000);
+    }, 1000);
+  };
+
+  const saveWizardGrid = () => {
+    setWizardStatus({ type: 'loading', msg: 'Procesando horarios de la grilla...' });
+    
+    setTimeout(() => {
+      // 1. Agrupar los slots por día
+      const slotsByDay = {};
+      wizardGrid.forEach(slot => {
+        if (!slotsByDay[slot.dayIdx]) slotsByDay[slot.dayIdx] = [];
+        slotsByDay[slot.dayIdx].push(slot.hour);
+      });
+
+      // 2. Encontrar bloques contiguos
+      const newRules = [];
+      for (let d = 0; d < 7; d++) {
+        const hours = slotsByDay[d] || [];
+        if (hours.length === 0) continue;
+        
+        hours.sort((a, b) => a - b);
+        let start = hours[0];
+        let prev = hours[0];
+
+        for (let k = 1; k <= hours.length; k++) {
+          const current = hours[k];
+          if (current === undefined || current !== prev + 1) {
+            newRules.push({
+              user: currentUser.name,
+              dayIdx: d,
+              startHour: start,
+              endHour: prev + 1
+            });
+            if (current !== undefined) start = current;
+          }
+          prev = current;
+        }
+      }
+
+      // 3. Escribir a disponibilidad
+      const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+      setAvailabilities([...cleanAvail, ...newRules]);
+
+      // 4. Si se guarda como plantilla
+      if (saveAsTemplate) {
+        const cleanTemplate = templates.filter(t => t.user.toLowerCase() !== currentUser.name.toLowerCase());
+        setTemplates([...cleanTemplate, ...newRules]);
+      }
+
+      setWizardStatus({ type: 'success', msg: '¡Disponibilidad guardada correctamente!' });
+      setTimeout(() => {
+        setActiveTab('dashboard');
+        setWizardStep(1);
+      }, 2000);
+    }, 1200);
+  };
+
+  // --- SIMULACIÓN DE AUTENTICACIÓN GOOGLE ---
+  const handleGoogleLoginSubmit = (e) => {
+    e.preventDefault();
+    if (!loginEmail || !loginEmail.includes('@')) return;
+
+    // Verificar si el correo ya está registrado en la base de datos local
+    const existing = members.find(m => m.email.toLowerCase() === loginEmail.trim().toLowerCase());
+    
+    if (existing) {
+      // Si existe, loguear directamente
+      setCurrentUser(existing);
+      setIsLoggedIn(true);
+      localStorage.setItem('salesarena-logged', 'true');
+      localStorage.setItem('salesarena-user', JSON.stringify(existing));
+      showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
+    } else {
+      // Si es nuevo, pasar al paso 2: completar perfil
+      setLoginStep(2);
+    }
+  };
+
+  const handleProfileRegisterSubmit = (e) => {
+    e.preventDefault();
+    if (!loginName || !loginCountry) return;
+
+    const resolved = ZONAS.find(z => z.country === loginCountry);
+    const newUser = {
+      name: loginName.trim(),
+      email: loginEmail.trim().toLowerCase(),
+      country: loginCountry,
+      tz: resolved ? resolved.tz : 'UTC',
+      active: true
+    };
+
+    // Añadir a la base de datos de miembros
+    setMembers(prev => [...prev, newUser]);
+    
+    // Configurar como usuario actual logueado
+    setCurrentUser(newUser);
+    setIsLoggedIn(true);
+    localStorage.setItem('salesarena-logged', 'true');
+    localStorage.setItem('salesarena-user', JSON.stringify(newUser));
+
+    showNotification(`¡Registro completo! Bienvenido a Sales-Arena Matcher, ${newUser.name}.`);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setLoginEmail('');
+    setLoginName('');
+    setLoginStep(1);
+    localStorage.removeItem('salesarena-logged');
+    localStorage.removeItem('salesarena-user');
+  };
+
+  // --- ADMINISTRAR MIEMBROS ---
+  const handleAddMember = (e) => {
+    e.preventDefault();
+    if (!newMemberName || !newMemberEmail) return;
+
+    const resolved = ZONAS.find(z => z.country === newMemberCountry);
+    const newMember = {
+      name: newMemberName,
+      email: newMemberEmail,
+      country: newMemberCountry,
+      tz: resolved ? resolved.tz : 'UTC',
+      active: true
+    };
+
+    setMembers([...members, newMember]);
+    setNewMemberName('');
+    setNewMemberEmail('');
+    showNotification('Miembro agregado correctamente.');
+  };
+
+  const toggleMemberActive = (index) => {
+    const updated = [...members];
+    updated[index].active = !updated[index].active;
+    setMembers(updated);
+  };
+
+  const deleteMember = (emailToDelete) => {
+    if (emailToDelete.toLowerCase() === currentUser.email.toLowerCase()) {
+      alert("No puedes eliminar al usuario logueado actualmente.");
+      return;
+    }
+    const memberObj = members.find(m => m.email.toLowerCase() === emailToDelete.toLowerCase());
+    setMembers(prev => prev.filter(m => m.email.toLowerCase() !== emailToDelete.toLowerCase()));
+    if (memberObj) {
+      setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== memberObj.name.toLowerCase()));
+      setTemplates(prev => prev.filter(t => t.user.toLowerCase() !== memberObj.name.toLowerCase()));
+    }
+  };
+
+  // --- CAMBIAR ESTADO SEMANAL DEL USUARIO LOGUEADO ---
+  const toggleCurrentUserActive = () => {
+    const nextActiveState = !currentUser.active;
+    
+    // Actualizar estado del usuario conectado
+    setCurrentUser(prev => ({ ...prev, active: nextActiveState }));
+
+    // Actualizar estado en la base de datos de miembros
+    setMembers(prev => prev.map(m => 
+      m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: nextActiveState } : m
+    ));
+
+    if (!nextActiveState) {
+      // Limpiar horarios semanales (evitar falsos positivos de reuniones vacías)
+      setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase()));
+      showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
+    } else {
+      // Cargar disponibilidad desde la plantilla habitual
+      const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+      setAvailabilities(prev => [...prev, ...userTemplateRules]);
+      showNotification('¡Participación activada! Hemos cargado tus horarios semanales desde tu plantilla base.');
+    }
+  };
+
+  // --- AGENDAR REUNIÓN CON SIMULACIÓN DE GOOGLE MEET/CALENDAR API ---
+  const scheduleMeeting = (matchIndex) => {
+    const match = matches[matchIndex];
+    
+    setSchedulingStatus('loading');
+    setScheduledDetails({
+      title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
+      attendeesCount: match.participants.split(', ').length
+    });
+
+    // 1. Establecer conexión
+    setTimeout(() => {
+      setSchedulingStatus('authenticating');
+      
+      // 2. Autenticar OAuth
+      setTimeout(() => {
+        setSchedulingStatus('creating');
+        
+        // 3. Crear Meet + Evento
+        setTimeout(() => {
+          const newMeeting = {
+            title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
+            dateUtc: `Próximo ${match.day} a las ${match.startStr}`,
+            duration: 60,
+            participants: match.participants,
+            meetLink: `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`,
+            status: 'Creado (Meet)'
+          };
+          setMeetings(prev => [...prev, newMeeting]);
+          setSchedulingStatus('success');
+
+          // 4. Cerrar overlay automáticamente
+          setTimeout(() => {
+            setSchedulingStatus(null);
+          }, 3000);
+        }, 1200);
+      }, 1000);
+    }, 800);
+  };
+
+  const showNotification = (msg) => {
+    alert(msg);
+  };
+
+  // --- GESTIÓN DE CELDAS DEL CALENDARIO ---
+  const handleCellMouseDown = (dayIdx, hour) => {
+    setIsMouseDown(true);
+    const exists = wizardGrid.some(s => s.dayIdx === dayIdx && s.hour === hour);
+    const active = !exists;
+    setDragMode(active);
+    toggleCell(dayIdx, hour, active);
+  };
+
+  const handleCellMouseEnter = (dayIdx, hour) => {
+    if (isMouseDown) {
+      toggleCell(dayIdx, hour, dragMode);
+    }
+  };
+
+  const toggleCell = (dayIdx, hour, active) => {
+    if (active) {
+      setWizardGrid(prev => {
+        if (prev.some(s => s.dayIdx === dayIdx && s.hour === hour)) return prev;
+        return [...prev, { dayIdx, hour }];
+      });
+    } else {
+      setWizardGrid(prev => prev.filter(s => !(s.dayIdx === dayIdx && s.hour === hour)));
+    }
+  };
+
+  const clearAllCells = () => {
+    setWizardGrid([]);
+  };
+
+  const fillAllCells = () => {
+    const all = [];
+    for (let d = 0; d < 7; d++) {
+      for (let h = 0; h < 24; h++) {
+        all.push({ dayIdx: d, hour: h });
+      }
+    }
+    setWizardGrid(all);
+  };
+
+  const handleTabClick = (tab) => {
+    setActiveTab(tab);
+    setIsSidebarOpen(false); // Cierra el menú al cambiar de pestaña en móvil
+  };
+
+  if (!isLoggedIn) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: 'var(--bg-main)',
+        backgroundImage: 'var(--bg-glows)',
+        backgroundAttachment: 'fixed',
+        color: 'var(--text-main)',
+        fontFamily: 'var(--font-sans)',
+        padding: '20px',
+        boxSizing: 'border-box'
+      }}>
+        {/* Theme select widget float top-right */}
+        <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '8px', zIndex: 10 }}>
+          <div className="theme-selector" style={{ margin: 0 }}>
+            <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro">
+              <Sun size={12} />
+            </button>
+            <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro">
+              <Moon size={12} />
+            </button>
+            <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema">
+              <Monitor size={12} />
+            </button>
+          </div>
+        </div>
+
+        <div className="glass" style={{
+          width: '100%',
+          maxWidth: '440px',
+          padding: '40px 30px',
+          boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
+          border: '1px solid var(--border-color)',
+          textAlign: 'center',
+          boxSizing: 'border-box'
+        }}>
+          {/* Logo Brand Header */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+            <ChessKnightIcon size={44} />
+            <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
+              <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
+              <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
+            </div>
+          </div>
+
+          {/* STEP 1: GOOGLE EMAIL INPUT */}
+          {loginStep === 1 && (
+            <form onSubmit={handleGoogleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Iniciar Sesión</h2>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>Utiliza tu cuenta corporativa para ingresar al coordinador de roleplays.</p>
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label htmlFor="login-email" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Correo de Google (Gmail)</label>
+                <input
+                  type="email"
+                  id="login-email"
+                  className="form-input"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="Ej. tu.nombre@gmail.com o @example.com"
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                />
+              </div>
+
+              <button type="submit" className="btn btn-indigo" style={{ padding: '12px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: '600' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                Continuar con Google
+              </button>
+            </form>
+          )}
+
+          {/* STEP 2: PROFILE SETUP FORM */}
+          {loginStep === 2 && (
+            <form onSubmit={handleProfileRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+                <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Completar Perfil</h2>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>Es tu primera vez ingresando con esta cuenta. Completa tu información base.</p>
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Email de Registro (Gmail)</label>
+                <input
+                  type="email"
+                  className="form-input"
+                  value={loginEmail}
+                  readOnly
+                  disabled
+                  style={{
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    padding: '10px 14px',
+                    backgroundColor: 'rgba(120, 120, 120, 0.08)',
+                    cursor: 'not-allowed',
+                    color: 'var(--text-muted)'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label htmlFor="reg-name" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Nombre Completo</label>
+                <input
+                  type="text"
+                  id="reg-name"
+                  className="form-input"
+                  value={loginName}
+                  onChange={(e) => setLoginName(e.target.value)}
+                  placeholder="Ej. Carlos Mendoza"
+                  required
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label htmlFor="reg-country" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>País de Origen</label>
+                <select
+                  id="reg-country"
+                  className="form-select"
+                  value={loginCountry}
+                  onChange={(e) => setLoginCountry(e.target.value)}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                >
+                  {ZONAS.map(z => (
+                    <option key={z.country} value={z.country}>{z.country}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+                <button type="button" className="btn btn-outline" style={{ flex: 1, padding: '10px' }} onClick={() => setLoginStep(1)}>
+                  Atrás
+                </button>
+                <button type="submit" className="btn btn-indigo" style={{ flex: 2, padding: '10px', fontWeight: '600' }}>
+                  Finalizar Registro
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="layout-container">
+      
+      {/* MOBILE HEADER BAR */}
+      <div className="mobile-header-bar">
+        <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+          {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        <div className="brand-section" style={{ margin: 0, padding: 0 }}>
+          <div className="brand-logo-container">
+            <ChessKnightIcon size={34} />
+          </div>
+          <div className="brand-title-stacked">
+            <span className="brand-title-sales">Sales-Arena</span>
+            <span className="brand-title-arena">Matcher</span>
+          </div>
+        </div>
+        <div style={{ width: '34px' }}></div> {/* Spacer to center the logo */}
+      </div>
+
+      {/* MOBILE DRAWER OVERLAY */}
+      <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
+
+      {/* 1. SIDEBAR NAVIGATION */}
+      <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
+        <div className="brand-section">
+          <div className="brand-logo-container">
+            <ChessKnightIcon size={34} />
+          </div>
+          <div className="brand-title-stacked">
+            <span className="brand-title-sales">Sales-Arena</span>
+            <span className="brand-title-arena">Matcher</span>
+          </div>
+        </div>
+
+        <div className="nav-links">
+          <div className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleTabClick('dashboard')}>
+            <LayoutDashboard size={17} /> Panel de Control
+          </div>
+          <div className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
+            <CalendarRange size={17} /> Cargar Disponibilidad
+          </div>
+          <div className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} onClick={() => handleTabClick('heatmap')}>
+            <Flame size={17} /> Mapa de Calor
+          </div>
+          <div className={`nav-link ${activeTab === 'affinity' ? 'active' : ''}`} onClick={() => handleTabClick('affinity')}>
+            <Users size={17} /> Afinidad Horaria
+          </div>
+          <div className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} onClick={() => handleTabClick('members')}>
+            <UserCheck size={17} /> Gestionar Equipo
+          </div>
+        </div>
+
+        {/* THEME SELECTOR WIDGET */}
+        <div className="theme-selector">
+          <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro">
+            <Sun size={12} /> Claro
+          </button>
+          <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro">
+            <Moon size={12} /> Oscuro
+          </button>
+          <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema">
+            <Monitor size={12} /> Auto
+          </button>
+        </div>
+
+        <div className="profile-widget">
+          <div className="profile-name">👤 {currentUser.name}</div>
+          <div className="profile-email">{currentUser.email}</div>
+          <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>Zona: {currentUser.tz.split('/').pop().replace(/_/g, ' ')}</div>
+          <button 
+            type="button"
+            onClick={handleLogout} 
+            className="btn-small" 
+            style={{ 
+              marginTop: '10px', 
+              padding: '4px 8px', 
+              fontSize: '10px', 
+              width: '100%', 
+              backgroundColor: 'rgba(255, 69, 58, 0.12)', 
+              color: 'var(--color-danger)', 
+              border: '1px solid rgba(255, 69, 58, 0.2)' 
+            }}
+          >
+            Cerrar Sesión
+          </button>
+        </div>
+      </nav>
+
+      {/* 2. MAIN APP CONTENT */}
+      <main className="main-view">
+        
+        {/* HEADER BAR */}
+        <header className="view-header">
+          <div>
+            <h2 className="view-title">
+              {activeTab === 'dashboard' && 'Panel de Control Principal'}
+              {activeTab === 'wizard' && 'Asistente de Configuración'}
+              {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
+              {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
+              {activeTab === 'members' && 'Miembros y Roles de la Sala'}
+            </h2>
+            <p className="view-subtitle">
+              {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
+              {activeTab === 'wizard' && 'Configura tu participación en los role-plays de esta semana en pocos clics.'}
+              {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
+              {activeTab === 'affinity' && '% de coincidencia relativa entre parejas de role-players.'}
+              {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
+            </p>
+          </div>
+          <div className="glass" style={{ padding: '8px 16px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-primary)', borderColor: 'var(--border-color)' }}>
+            <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-primary)', borderRadius: '50%' }}></span>
+            Sala Activa: Grupo A
+          </div>
+        </header>
+
+        {/* CONTAINER CONTENT */}
+        <div className="view-content">
+          
+          {/* VIEW: DASHBOARD */}
+          {activeTab === 'dashboard' && (
+            <div>
+              {/* Tarjeta de Estado Semanal de Tomás */}
+              <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: currentUser.active ? 'var(--color-accent)' : 'var(--color-danger)',
+                    boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
+                  }}></div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)' }}>
+                      Mi Participación Semanal: {currentUser.active ? '🟢 ACTIVO' : '🔴 INACTIVO'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
+                      {currentUser.active
+                        ? 'Estás participando de los emparejamientos semanales. Tus compañeros pueden coincidir contigo.'
+                        : 'Estás excluido de esta semana. Tus horarios no serán cruzados con los del equipo.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                  onClick={toggleCurrentUserActive}
+                >
+                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
+                </button>
+              </div>
+
+              {/* KPIs */}
+              <div className="metrics-grid">
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                    <Users size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{members.filter(m => m.active).length}</span>
+                    <span className="kpi-label">Miembros Activos</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
+                    <Clock size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{availabilities.length}</span>
+                    <span className="kpi-label">Bloques Semanales</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{matches.length}</span>
+                    <span className="kpi-label">Coincidencias</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(255,149,0,0.12)', color: '#ff9500' }}>
+                    <Video size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{meetings.length}</span>
+                    <span className="kpi-label">Meets Creados</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2-Columns */}
+              <div className="dashboard-sections">
+                
+                {/* Left Col: Coincidencias */}
+                <div className="section-card glass">
+                  <h4 className="section-title">🔎 Mejores Horarios Coincidentes (Para esta semana)</h4>
+                  <div className="matches-list">
+                    {matches.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                        <AlertCircle size={32} style={{ margin: '0 auto 10px auto', display: 'block' }} />
+                        No hay suficientes miembros cargados o coincidencias encontradas.
+                      </div>
+                    ) : (
+                      matches.map((m, idx) => {
+                        const participantBadges = m.participants.split(', ').map(name => {
+                          const nameParts = name.split(' ');
+                          return nameParts[0] + (nameParts[1] ? ` ${nameParts[1][0]}.` : '');
+                        });
+                        
+                        const localTimes = m.localDetail.split(' | ').map(item => {
+                          const parts = item.split(': ');
+                          return { name: parts[0], range: parts[1] };
+                        });
+
+                        return (
+                          <div className="match-card glass glass-hover" key={idx}>
+                            <div className="match-card-header">
+                              <div className="match-card-time-group">
+                                <span className="match-card-day">{m.day}</span>
+                                <span className="match-card-time">{m.startStr.replace(' UTC', '')} - {m.endStr}</span>
+                              </div>
+                              <span className="match-card-score-pill">
+                                {m.score}% Match
+                              </span>
+                            </div>
+                            
+                            <div className="match-card-body">
+                              <div className="match-section-label">👥 Integrantes disponibles</div>
+                              <div className="match-participants-flex">
+                                {participantBadges.map((badge, bIdx) => (
+                                  <span key={bIdx} className="match-participant-tag">
+                                    {badge}
+                                  </span>
+                                ))}
+                              </div>
+                              
+                              <div className="match-section-label" style={{ marginTop: '10px' }}>🕒 Horarios locales</div>
+                              <div className="match-times-grid">
+                                {localTimes.map((lt, lIdx) => (
+                                  <div key={lIdx} className="match-time-pill">
+                                    <span className="match-time-name">{lt.name}</span>
+                                    <span className="match-time-range">{lt.range}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            <div className="match-card-footer">
+                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => scheduleMeeting(idx)}>
+                                <Video size={14} /> Agendar en Google Calendar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Col: Historial / Meets */}
+                <div className="section-card glass">
+                  <h4 className="section-title">📅 Próximos Role-Plays Agendados</h4>
+                  <div className="meetings-list">
+                    {meetings.length === 0 ? (
+                      <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No hay reuniones agendadas todavía.</p>
+                    ) : (
+                      meetings.map((meet, idx) => (
+                        <div className="meeting-item" key={idx}>
+                          <div className="meeting-info">
+                            <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
+                            <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
+                            <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>M: {meet.participants}</span>
+                          </div>
+                          <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
+                            <Video size={12} /> Meet
+                          </a>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: WIZARD */}
+          {activeTab === 'wizard' && (
+            <div className="wizard-card glass">
+              
+              {/* Wizard Status Alert */}
+              {wizardStatus && (
+                <div id="status" className={`status-${wizardStatus.type}`} style={{ display: 'block', marginBottom: '16px' }}>
+                  {wizardStatus.type === 'loading' && <span className="spinner"></span>} {wizardStatus.msg}
+                </div>
+              )}
+
+              {/* STEP 1: Bienvenida */}
+              {wizardStep === 1 && (
+                <div>
+                  <h3 className="wizard-title">¡Hola de nuevo, {currentUser.name}!</h3>
+                  <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
+                  
+                  <div className="wizard-options">
+                    <button className="wizard-btn wizard-btn-primary" onClick={() => handleWizardParticipation(true)}>
+                      🟢 Sí, participaré
+                    </button>
+                    <button className="wizard-btn wizard-btn-danger" onClick={() => handleWizardParticipation(false)}>
+                      🔴 No, no puedo esta semana
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Usar Plantilla vs Carga manual */}
+              {wizardStep === 2 && (
+                <div>
+                  <h3 className="wizard-title">Carga de Disponibilidad</h3>
+                  <p className="wizard-desc">Elige si deseas restablecer tu disponibilidad desde tu plantilla base cargada o configurarlo a mano:</p>
+                  
+                  <div className="wizard-options">
+                    <button className="wizard-btn wizard-btn-primary" onClick={handleUseTemplate}>
+                      📅 Usar mi horario base habitual (Plantilla)
+                    </button>
+                    <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(3)}>
+                      ✏️ Cargar/Editar horarios específicos para esta semana
+                    </button>
+                    <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(1)}>
+                      Atrás
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Grid Semanal */}
+              {wizardStep === 3 && (
+                <div className="editor-grid-container">
+                  <h3 className="wizard-title">Modificar mis Horarios</h3>
+                  <p className="wizard-desc" style={{ fontSize: '11px' }}>Arrastra o haz clic sobre el calendario para pintar las horas que tienes libres en tu hora local ({currentUser.tz.split('/').pop()}):</p>
+                  
+                  <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
+                    <table className="editor-table">
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--bg-sidebar)', fontSize: '9px' }}>
+                          <th style={{ padding: '6px', color: 'var(--text-main)' }}>Hora</th>
+                          <th style={{ color: 'var(--text-main)' }}>Lun</th>
+                          <th style={{ color: 'var(--text-main)' }}>Mar</th>
+                          <th style={{ color: 'var(--text-main)' }}>Mié</th>
+                          <th style={{ color: 'var(--text-main)' }}>Jue</th>
+                          <th style={{ color: 'var(--text-main)' }}>Vie</th>
+                          <th style={{ color: 'var(--text-main)' }}>Sáb</th>
+                          <th style={{ color: 'var(--text-main)' }}>Dom</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 24 }).map((_, h) => (
+                          <tr key={h}>
+                            <td className="hour-label" style={{ height: '24px', fontSize: '9px', textAlign: 'center', backgroundColor: 'var(--bg-sidebar)', color: 'var(--text-muted)', borderRight: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }}>{String(h).padStart(2, '0')}:00</td>
+                            {Array.from({ length: 7 }).map((_, d) => {
+                              const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
+                              return (
+                                <td
+                                  key={d}
+                                  className={`editor-cell ${isActive ? 'active' : ''}`}
+                                  onMouseDown={() => handleCellMouseDown(d, h)}
+                                  onMouseEnter={() => handleCellMouseEnter(d, h)}
+                                  onMouseUp={() => setIsMouseDown(false)}
+                                ></td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="actions-bar">
+                    <button className="btn-small" onClick={clearAllCells}>Limpiar Grilla</button>
+                    <button className="btn-small" onClick={fillAllCells}>Marcar Todo</button>
+                  </div>
+
+                  <div className="checkbox-container" style={{ margin: '4px 0' }}>
+                    <input
+                      type="checkbox"
+                      id="saveTemplate"
+                      checked={saveAsTemplate}
+                      onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                    />
+                    <label htmlFor="saveTemplate" style={{ margin: 0 }}>💾 Guardar como mi Plantilla Base habitual</label>
+                  </div>
+
+                  <button className="wizard-btn wizard-btn-primary" onClick={saveWizardGrid}>
+                    Guardar Horarios
+                  </button>
+                  <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(2)}>
+                    Atrás
+                  </button>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* VIEW: HEATMAP */}
+          {activeTab === 'heatmap' && (
+            <div className="section-card glass" style={{ maxWidth: '100%' }}>
+              <div className="heatmap-container">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px' }}>🔥 Mapa de Calor Colectivo</h3>
+                  <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Hora local de Tomás Rossi ({currentUser.tz.split('/').pop().replace(/_/g, ' ')})</span>
+                </div>
+                <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
+                  El color verde muestra cuántas personas están disponibles en cada bloque. Pasa el cursor para ver los nombres.
+                </p>
+
+                <div className="table-responsive-wrapper">
+                  <table className="heatmap-table">
+                    <thead>
+                      <tr>
+                        <th className="heatmap-th" style={{ width: '60px' }}>Hora</th>
+                        {DIAS.map(d => (
+                          <th className="heatmap-th" key={d}>{d.substring(0, 3)}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: 24 }).map((_, h) => (
+                        <tr key={h}>
+                          <td className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</td>
+                          {Array.from({ length: 7 }).map((_, d) => {
+                            const cellData = heatmap[d]?.[h] || { count: 0, names: '' };
+                            const totalActive = members.filter(m => m.active).length;
+                            const opacity = totalActive ? (cellData.count / totalActive) : 0;
+                            
+                            return (
+                              <td
+                                key={d}
+                                className="heatmap-cell"
+                                style={{
+                                  backgroundColor: cellData.count > 0 ? `rgba(52, 199, 89, ${0.1 + opacity * 0.9})` : 'transparent',
+                                  borderRight: '1px solid var(--border-color)'
+                                }}
+                                title={cellData.count > 0 ? `${cellData.count} libres: ${cellData.names}` : 'Nadie disponible'}
+                              ></td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: AFFINITY */}
+          {activeTab === 'affinity' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="section-card glass">
+                <h4 className="section-title">🤝 Solapamiento Horario por Parejas</h4>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
+                  El valor muestra el porcentaje de solapamiento relativo de horas disponibles en común. Verde = excelente afinidad horaria.
+                </p>
+                <div className="table-responsive-wrapper">
+                  <table className="affinity-table">
+                    <thead>
+                      <tr>
+                        <th className="affinity-th" style={{ backgroundColor: 'var(--bg-card-hover)' }}>Jugador</th>
+                        {members.filter(m => m.active).map(m => (
+                          <th className="affinity-th" key={m.name}>{m.name.split(' ')[0]}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {affinity.map((row, i) => (
+                        <tr key={i}>
+                          <td className="affinity-td-label">{row.name}</td>
+                          {row.stats.map((col, j) => {
+                            const pct = col.pct;
+                            let bg = 'transparent';
+                            let text = 'var(--text-muted)';
+                            if (pct !== null) {
+                              if (pct >= 70) { bg = 'rgba(52, 199, 89, 0.15)'; text = '#34c759'; }
+                              else if (pct >= 40) { bg = 'rgba(255, 149, 0, 0.12)'; text = '#ff9500'; }
+                              else { bg = 'rgba(255, 59, 48, 0.08)'; text = '#ff3b30'; }
+                            }
+                            return (
+                              <td
+                                key={j}
+                                className="affinity-cell"
+                                style={{ backgroundColor: bg, color: text }}
+                              >
+                                {pct !== null ? `${pct}%` : '—'}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Best Partners List */}
+              <div className="section-card glass">
+                <h4 className="section-title">🏅 Compañeros con Mayor Afinidad</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {affinity.map((row, i) => {
+                    const sortedStats = [...row.stats]
+                      .filter(s => s.pct !== null)
+                      .sort((a, b) => b.pct - a.pct)
+                      .slice(0, 2);
+
+                    return (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '4px' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>👤 {row.name}</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '12.5px' }}>
+                          {sortedStats.length > 0
+                            ? sortedStats.map(s => `${s.name.split(' ')[0]} (${s.pct}%)`).join('   ·   ')
+                            : 'Cargando disponibilidad...'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: MEMBERS */}
+          {activeTab === 'members' && (
+            <div className="dashboard-sections">
+              
+              {/* Left Col: List of Members */}
+              <div className="section-card glass">
+                <h4 className="section-title">👥 Miembros Registrados</h4>
+                <div className="members-list-card">
+                  {members.map((m, idx) => (
+                    <div className="member-row" key={idx}>
+                      <div className="member-row-info">
+                        <span className="member-row-name">
+                          {m.name}
+                          <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
+                            {m.active ? 'Participa' : 'Excluido'}
+                          </span>
+                        </span>
+                        <span className="member-row-details">📧 {m.email}</span>
+                        <span className="member-row-details">📍 {m.country} ({m.tz.split('/').pop().replace(/_/g, ' ')})</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Participa:</span>
+                          <label className="switch-control">
+                            <input
+                              type="checkbox"
+                              checked={m.active}
+                              onChange={() => toggleMemberActive(idx)}
+                            />
+                            <span className="switch-slider"></span>
+                          </label>
+                        </div>
+                        {m.email.toLowerCase() !== currentUser.email.toLowerCase() && (
+                          <button
+                            type="button"
+                            className="btn-danger-icon"
+                            onClick={() => deleteMember(m.email)}
+                            title="Eliminar de la sala"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right Col: Add Member Form */}
+              <div className="section-card glass" style={{ height: 'fit-content' }}>
+                <h4 className="section-title">➕ Agregar Nuevo Role-Player</h4>
+                <form className="add-member-form" onSubmit={handleAddMember}>
+                  <div className="form-group">
+                    <label htmlFor="mem-name" style={{ fontSize: '11px', fontWeight: '600' }}>Nombre Completo</label>
+                    <input
+                      type="text"
+                      id="mem-name"
+                      className="form-input"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      placeholder="Ej. Juan Pérez"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="mem-email" style={{ fontSize: '11px', fontWeight: '600' }}>Correo Electrónico (Gmail)</label>
+                    <input
+                      type="email"
+                      id="mem-email"
+                      className="form-input"
+                      value={newMemberEmail}
+                      onChange={(e) => setNewMemberEmail(e.target.value)}
+                      placeholder="Ej. juan@gmail.com"
+                      required
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="mem-country" style={{ fontSize: '11px', fontWeight: '600' }}>País de Origen</label>
+                    <select
+                      id="mem-country"
+                      className="form-select"
+                      value={newMemberCountry}
+                      onChange={(e) => setNewMemberCountry(e.target.value)}
+                    >
+                      {ZONAS.map(z => (
+                        <option key={z.country} value={z.country}>{z.country}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button type="submit" className="btn btn-indigo" style={{ marginTop: '8px', width: '100%' }}>
+                    <Plus size={16} /> Agregar a la Sala
+                  </button>
+                </form>
+              </div>
+
+            </div>
+          )}
+
+        </div>
+
+      </main>
+
+      {/* GOOGLE MEET CREATOR OVERLAY MODAL */}
+      {schedulingStatus && (
+        <div style={{
+          position: 'absolute',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(9, 9, 11, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 500,
+          animation: 'fadeIn 0.2s ease'
+        }}>
+          <div className="glass" style={{
+            width: '400px',
+            padding: '30px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            border: '1px solid var(--border-color)',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
+              {schedulingStatus === 'success' ? (
+                <div style={{
+                  width: '52px', height: '52px', borderRadius: '50%',
+                  backgroundColor: 'rgba(48, 209, 88, 0.12)', color: '#30d158',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px'
+                }}>
+                  <Check size={28} />
+                </div>
+              ) : (
+                <span className="spinner" style={{ width: '32px', height: '32px', color: 'var(--color-primary)' }}></span>
+              )}
+            </div>
+
+            <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)' }}>
+              {schedulingStatus === 'loading' && 'Conectando con Google Calendar API...'}
+              {schedulingStatus === 'authenticating' && 'Autenticando Usuario (OAuth 2.0)...'}
+              {schedulingStatus === 'creating' && 'Generando sala de Google Meet...'}
+              {schedulingStatus === 'success' && '¡Reunión Agendada con Éxito!'}
+            </h3>
+
+            <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+              {schedulingStatus === 'loading' && 'Estableciendo comunicación segura con los servicios de Google Cloud.'}
+              {schedulingStatus === 'authenticating' && 'Verificando permisos y tokens del organizador de la sala.'}
+              {schedulingStatus === 'creating' && `Creando el evento y agregando a los ${scheduledDetails?.attendeesCount} participantes correspondientes.`}
+              {schedulingStatus === 'success' && '📧 Google Calendar ha enviado invitaciones de correo oficiales a todos los participantes con el enlace de Google Meet para unirse.'}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
