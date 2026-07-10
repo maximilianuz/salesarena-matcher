@@ -79,6 +79,25 @@ const ZONAS = [
   { country: 'República Checa', tz: 'Europe/Prague' }
 ];
 
+const resolveTimezone = (countryName) => {
+  if (!countryName) return 'UTC';
+  const cleanName = countryName.trim().toLowerCase();
+  
+  // Buscar en las ZONAS predefinidas
+  const matched = ZONAS.find(z => 
+    z.country.toLowerCase().includes(cleanName) || 
+    cleanName.includes(z.country.toLowerCase())
+  );
+  if (matched) return matched.tz;
+  
+  // Como fallback, usar la zona horaria real del navegador del usuario
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch (e) {
+    return 'UTC';
+  }
+};
+
 const useMockDb = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
 
 const getRoomIdFromUrl = () => {
@@ -117,6 +136,8 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginCountry, setLoginCountry] = useState('Argentina');
+  const [customLoginCountry, setCustomLoginCountry] = useState('');
+  const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
 
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
@@ -673,12 +694,13 @@ export default function App() {
     e.preventDefault();
     if (!loginName || !loginCountry) return;
 
-    const resolved = ZONAS.find(z => z.country === loginCountry);
+    const finalCountry = loginCountry === 'Otro' ? customLoginCountry.trim() : loginCountry;
+    const finalTz = resolveTimezone(finalCountry);
     const newUser = {
       name: loginName.trim(),
       email: loginEmail.trim().toLowerCase(),
-      country: loginCountry,
-      tz: resolved ? resolved.tz : 'UTC',
+      country: finalCountry,
+      tz: finalTz,
       active: true
     };
 
@@ -724,12 +746,13 @@ export default function App() {
     e.preventDefault();
     if (!newMemberName || !newMemberEmail) return;
 
-    const resolved = ZONAS.find(z => z.country === newMemberCountry);
+    const finalCountry = newMemberCountry === 'Otro' ? customNewMemberCountry.trim() : newMemberCountry;
+    const finalTz = resolveTimezone(finalCountry);
     const newMember = {
       name: newMemberName,
       email: newMemberEmail,
-      country: newMemberCountry,
-      tz: resolved ? resolved.tz : 'UTC',
+      country: finalCountry,
+      tz: finalTz,
       active: true
     };
 
@@ -1149,12 +1172,24 @@ export default function App() {
                   className="form-select"
                   value={loginCountry}
                   onChange={(e) => setLoginCountry(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', marginBottom: loginCountry === 'Otro' ? '12px' : '0' }}
                 >
                   {ZONAS.map(z => (
                     <option key={z.country} value={z.country}>{z.country}</option>
                   ))}
+                  <option value="Otro">Otro (Escribir país)...</option>
                 </select>
+                {loginCountry === 'Otro' && (
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={customLoginCountry}
+                    onChange={(e) => setCustomLoginCountry(e.target.value)}
+                    placeholder="Escribe tu país de origen... Ej. Italia"
+                    required
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                  />
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
@@ -1793,11 +1828,24 @@ export default function App() {
                       className="form-select"
                       value={newMemberCountry}
                       onChange={(e) => setNewMemberCountry(e.target.value)}
+                      style={{ marginBottom: newMemberCountry === 'Otro' ? '10px' : '0' }}
                     >
                       {ZONAS.map(z => (
                         <option key={z.country} value={z.country}>{z.country}</option>
                       ))}
+                      <option value="Otro">Otro (Escribir país)...</option>
                     </select>
+                    {newMemberCountry === 'Otro' && (
+                      <input
+                        type="text"
+                        className="form-input"
+                        value={customNewMemberCountry}
+                        onChange={(e) => setCustomNewMemberCountry(e.target.value)}
+                        placeholder="Escribe el país... Ej. Italia"
+                        required
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
+                      />
+                    )}
                   </div>
 
                   <button type="submit" className="btn btn-indigo" style={{ marginTop: '8px', width: '100%' }}>
