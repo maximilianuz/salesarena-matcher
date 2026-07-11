@@ -1784,15 +1784,18 @@ export default function App() {
               {/* STEP 1: Bienvenida */}
               {wizardStep === 1 && (
                 <div>
+                  <div style={{ marginBottom: '8px', fontSize: '32px', filter: 'drop-shadow(0 0 14px rgba(10,132,255,0.35))' }}>🎯</div>
                   <h3 className="wizard-title">¡Hola de nuevo, {currentUser.name}!</h3>
                   <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
                   
                   <div className="wizard-options">
                     <button className="wizard-btn wizard-btn-primary" onClick={() => handleWizardParticipation(true)}>
-                      🟢 Sí, participaré
+                      <span className="wizard-btn-icon">✓</span>
+                      Sí, participaré esta semana
                     </button>
                     <button className="wizard-btn wizard-btn-danger" onClick={() => handleWizardParticipation(false)}>
-                      🔴 No, no puedo esta semana
+                      <span className="wizard-btn-icon">✕</span>
+                      No puedo esta semana
                     </button>
                   </div>
                 </div>
