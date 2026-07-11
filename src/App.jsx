@@ -179,6 +179,10 @@ export default function App() {
   // Reuniones agendadas
   const [meetings, setMeetings] = useState([]);
 
+  // Sistema de notificaciones premium (toast)
+  const [toasts, setToasts] = useState([]); // [{id, msg, type}]
+  const [confirmModal, setConfirmModal] = useState(null); // {msg, onConfirm, onCancel}
+
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
@@ -832,13 +836,12 @@ export default function App() {
 
   const handleDeleteRoom = async () => {
     if (currentRoomId === 'grupo-a') {
-      showNotification('La sala por defecto "grupo-a" no se puede eliminar.');
+      showNotification('La sala por defecto no se puede eliminar.', 'error');
       return;
     }
 
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar la sala "${roomName}"? Se borrarán todos los miembros, disponibilidades y reuniones guardadas en ella.`)) {
-      return;
-    }
+    const confirmed = await showConfirm(`¿Eliminar la sala "${roomName}"? Se borrarán todos los miembros, disponibilidades y reuniones guardadas en ella. Esta acción no se puede deshacer.`);
+    if (!confirmed) return;
 
     if (!useMockDb) {
       const { error } = await supabase.from('rooms').delete().eq('id', currentRoomId);
@@ -1101,9 +1104,21 @@ export default function App() {
     }, 1000);
   };
 
-  const showNotification = (msg) => {
-    alert(msg);
+  const showNotification = (msg, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, msg, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
   };
+
+  const showConfirm = (msg) => new Promise((resolve) => {
+    setConfirmModal({
+      msg,
+      onConfirm: () => { setConfirmModal(null); resolve(true); },
+      onCancel:  () => { setConfirmModal(null); resolve(false); }
+    });
+  });
 
   // --- GESTIÓN DE CELDAS DEL CALENDARIO ---
   const handleCellMouseDown = (dayIdx, hour) => {
@@ -1372,7 +1387,34 @@ export default function App() {
 
   return (
     <div className="layout-container">
-      
+
+      {/* TOAST NOTIFICATION SYSTEM */}
+      <div className="toast-container" aria-live="polite">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast-item toast-${t.type}`}>
+            <span className="toast-icon">
+              {t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : '🔗'}
+            </span>
+            <span className="toast-msg">{t.msg}</span>
+            <button className="toast-close" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>✕</button>
+          </div>
+        ))}
+      </div>
+
+      {/* CONFIRM MODAL */}
+      {confirmModal && (
+        <div className="confirm-overlay" role="dialog" aria-modal="true">
+          <div className="confirm-card">
+            <div className="confirm-icon">⚠️</div>
+            <p className="confirm-msg">{confirmModal.msg}</p>
+            <div className="confirm-actions">
+              <button className="btn btn-outline" onClick={confirmModal.onCancel}>Cancelar</button>
+              <button className="btn btn-danger" onClick={confirmModal.onConfirm}>Sí, eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE HEADER BAR */}
       <div className="mobile-header-bar">
         <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
