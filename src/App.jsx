@@ -488,7 +488,7 @@ export default function App() {
 
     // 2. Calcular Heatmap (7 días x 24 horas)
     const grid = [];
-    const viewOffset = getOffsetMinutes(currentUser.tz); // Ver en hora local del usuario activo
+    const viewOffset = getOffsetMinutes(currentUser?.tz || 'UTC'); // Ver en hora local del usuario activo
 
     for (let d = 0; d < 7; d++) {
       const hoursRow = [];
