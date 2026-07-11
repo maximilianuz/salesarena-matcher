@@ -181,22 +181,27 @@
   background-color: rgba(255, 59, 48, 0.08);
 }
 
-/* Wizard / Stepper */
+/* Wizard / Stepper - (theme-aware overrides in :root and html.dark) */
 .wizard-card {
-  max-width: 520px;
+  max-width: 560px;
   margin: 10px auto;
-  padding: 24px;
-  background-color: var(--bg-card);
+  padding: 36px 32px;
+  background: var(--wizard-card-bg);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--wizard-card-border);
+  border-radius: 24px;
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
   box-sizing: border-box;
+  box-shadow: var(--wizard-card-shadow);
 }
 
 @media (max-width: 768px) {
   .wizard-card {
-    padding: 16px;
+    padding: 24px 18px;
   }
 }
 
@@ -879,6 +884,24 @@ input:checked + .switch-slider:before {
     0 2px 8px rgba(0, 0, 0, 0.25),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   animation: toastSlideIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Wizard / Stepper */
+.wizard-card {
+  max-width: 560px;
+  margin: 10px auto;
+  padding: 36px 32px;
+  background: var(--wizard-card-bg);
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  border: 1px solid var(--wizard-card-border);
+  border-radius: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-sizing: border-box;
+  box-shadow: var(--wizard-card-shadow);
 }
 
 .toast-info   { border-left: 3px solid var(--color-primary); }
