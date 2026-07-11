@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }}>
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }} className="chess-knight-svg">
     <defs>
       <linearGradient id="salesArenaKnightBg" x1="0%" y1="0%" x2="100%" y2="100%">
         <stop offset="0%" stopColor="#0a84ff"/>
@@ -37,7 +37,7 @@ const ChessKnightIcon = ({ size = 26 }) => (
         <stop offset="100%" stopColor="#4d4ad9"/>
       </linearGradient>
     </defs>
-    <rect width="512" height="512" rx="115" fill="url(#salesArenaKnightBg)"/>
+    <rect className="knight-bg" width="512" height="512" rx="115" fill="url(#salesArenaKnightBg)"/>
     <g transform="translate(112, 112) scale(12)" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>
       <path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/>

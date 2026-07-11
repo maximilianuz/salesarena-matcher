@@ -161,19 +161,16 @@ html.dark .glass-hover:hover {
   border-radius: 9px;
   flex-shrink: 0;
   overflow: hidden;
-  /* En modo oscuro se ve con su gradiente original */
 }
 
-/* En modo claro el logo toma un look oscuro para contrastar con el fondo blanco */
-:root .brand-logo-container {
-  filter: brightness(0) saturate(100%);
-  border-radius: 9px;
-  background: transparent;
+/* En modo claro, el fondo del rect del SVG se vuelve oscuro para contrastar */
+:root .chess-knight-svg .knight-bg {
+  fill: #1c1c1e;
 }
 
-/* En modo oscuro se restaura el aspecto original con gradiente */
-html.dark .brand-logo-container {
-  filter: none;
+/* En modo oscuro, restauramos el gradiente original (se ignora este CSS, el SVG attr tiene precedencia) */
+html.dark .chess-knight-svg .knight-bg {
+  fill: url(#salesArenaKnightBg);
 }
 
 .brand-title-stacked {
