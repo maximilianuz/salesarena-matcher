@@ -1179,7 +1179,7 @@ export default function App() {
     setIsSidebarOpen(false); // Cierra el menú al cambiar de pestaña en móvil
   };
 
-  if (!isLoggedIn) {
+  if (!isLoggedIn || !currentUser) {
     return (
       <div style={{
         display: 'flex',
@@ -1839,7 +1839,7 @@ export default function App() {
               {wizardStep === 3 && (
                 <div className="editor-grid-container">
                   <h3 className="wizard-title">Modificar mis Horarios</h3>
-                  <p className="wizard-desc" style={{ fontSize: '11px' }}>Arrastra o haz clic sobre el calendario para pintar las horas que tienes libres en tu hora local ({currentUser.tz.split('/').pop()}):</p>
+                  <p className="wizard-desc" style={{ fontSize: '11px' }}>Arrastra o haz clic sobre el calendario para pintar las horas que tienes libres en tu hora local ({currentUser?.tz?.split('/').pop() || 'UTC'}):</p>
                   
                   <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
                     <table className="editor-table">
@@ -2048,7 +2048,7 @@ export default function App() {
                           </span>
                         </span>
                         <span className="member-row-details">📧 {m.email}</span>
-                        <span className="member-row-details">📍 {m.country} ({m.tz.split('/').pop().replace(/_/g, ' ')})</span>
+                        <span className="member-row-details">📍 {m.country} ({(m.tz || 'UTC').split('/').pop().replace(/_/g, ' ')})</span>
                       </div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
