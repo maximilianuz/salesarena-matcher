@@ -351,23 +351,32 @@ export default function App() {
     const email = session.user.email;
     setLoginEmail(email);
 
-    const { data: existing } = await supabase
-      .from('members')
-      .select('*')
-      .eq('room_id', currentRoomId)
-      .eq('email', email)
-      .maybeSingle();
+    try {
+      const { data: existing } = await supabase
+        .from('members')
+        .select('*')
+        .eq('room_id', currentRoomId)
+        .eq('email', email)
+        .maybeSingle();
 
-    if (existing) {
-      setCurrentUser({
-        name: existing.name,
-        email: existing.email,
-        country: existing.country,
-        tz: existing.timezone,
-        active: existing.active
-      });
-      setIsLoggedIn(true);
-    } else {
+      if (existing) {
+        const userObj = {
+          name: existing.name,
+          email: existing.email,
+          country: existing.country,
+          tz: existing.timezone,
+          active: existing.active
+        };
+        setCurrentUser(userObj);
+        setIsLoggedIn(true);
+        localStorage.setItem('salesarena-logged', 'true');
+        localStorage.setItem('salesarena-user', JSON.stringify(userObj));
+      } else {
+        setLoginStep(2);
+        setIsLoggedIn(false);
+      }
+    } catch (err) {
+      console.error('Error verificando usuario OAuth:', err);
       setLoginStep(2);
       setIsLoggedIn(false);
     }
@@ -728,9 +737,14 @@ export default function App() {
         showNotification('Error al registrar perfil en Supabase: ' + error.message);
         return;
       }
-    } else {
-      setMembers(prev => [...prev, newUser]);
     }
+
+    setMembers(prev => {
+      if (prev.some(m => m.email.toLowerCase() === newUser.email.toLowerCase())) {
+        return prev.map(m => m.email.toLowerCase() === newUser.email.toLowerCase() ? newUser : m);
+      }
+      return [...prev, newUser];
+    });
 
     setCurrentUser(newUser);
     setIsLoggedIn(true);
