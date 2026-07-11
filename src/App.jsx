@@ -1495,16 +1495,6 @@ export default function App() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={handleCopyRoomInvite}
-              className="btn-share-header"
-              title="Copiar enlace de invitación a esta sala (al entrar los llevará al registro inicial)"
-            >
-              <Share2 size={14} />
-              <span>Compartir Sala</span>
-            </button>
-
             <div 
               onClick={() => setIsRoomModalOpen(true)}
               className="glass" 
