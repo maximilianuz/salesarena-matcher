@@ -161,6 +161,19 @@ html.dark .glass-hover:hover {
   border-radius: 9px;
   flex-shrink: 0;
   overflow: hidden;
+  /* En modo oscuro se ve con su gradiente original */
+}
+
+/* En modo claro el logo toma un look oscuro para contrastar con el fondo blanco */
+:root .brand-logo-container {
+  filter: brightness(0) saturate(100%);
+  border-radius: 9px;
+  background: transparent;
+}
+
+/* En modo oscuro se restaura el aspecto original con gradiente */
+html.dark .brand-logo-container {
+  filter: none;
 }
 
 .brand-title-stacked {
