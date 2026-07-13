@@ -1006,7 +1006,7 @@ export default function App() {
     localStorage.setItem('realsaleslabs-logged', 'true');
     localStorage.setItem('realsaleslabs-user', JSON.stringify(newUser));
 
-    showNotification(`¡Registro completo! Bienvenido a Real Sales Labs Matcher, ${newUser.name}.`);
+    showNotification(`¡Registro completo! Bienvenido a Real Sales Labs, ${newUser.name}.`);
   };
 
   const handleLogout = async () => {
@@ -1303,7 +1303,7 @@ export default function App() {
               // Construimos el payload de Google Calendar Event
               const eventPayload = {
                 summary: `Real Sales Labs Roleplay: ${match.participants}`,
-                description: 'Videollamada de entrenamiento agendada mediante Real Sales Labs Matcher.',
+                description: 'Videollamada de entrenamiento agendada mediante Real Sales Labs.',
                 start: { dateTime: new Date().toISOString(), timeZone: 'UTC' }, // Se calcula a partir del match en producción
                 end: { dateTime: new Date(Date.now() + 60*60*1000).toISOString(), timeZone: 'UTC' },
                 attendees: match.participants.split(', ').map(name => {
@@ -1780,7 +1780,6 @@ export default function App() {
               <span className="brand-title-sales">Real Sales Labs</span>
               <span className="portal-badge-mini">PORTAL ↗</span>
             </div>
-            <span className="brand-title-arena">Matcher</span>
           </div>
         </a>
         <div style={{ width: '34px' }}></div> {/* Spacer to center the logo */}
@@ -1807,7 +1806,6 @@ export default function App() {
                 <span className="brand-title-sales">Real Sales Labs</span>
                 <span className="portal-badge-mini">PORTAL ↗</span>
               </div>
-              <span className="brand-title-arena">Matcher</span>
             </div>
           </a>
         </div>
