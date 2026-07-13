@@ -28,34 +28,6 @@ import {
   Copy
 } from 'lucide-react';
 
-const CalendarPremiumIcon = ({ size = 26 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block' }} className="calendar-premium-svg">
-    <style>
-      {`
-        .calendar-premium-svg {
-          color: var(--color-primary);
-        }
-      `}
-    </style>
-    {/* Calendar frame */}
-    <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8"/>
-    {/* Header bar with month/date */}
-    <rect x="3" y="4" width="18" height="4" fill="currentColor" opacity="0.15" rx="2"/>
-    {/* Decorative top bars for a more premium look */}
-    <line x1="7" y1="2" x2="7" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    <line x1="17" y1="2" x2="17" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-    {/* Date grid - 3x3 for a clean look */}
-    <circle cx="6" cy="10" r="1.2" fill="currentColor"/>
-    <circle cx="12" cy="10" r="1.2" fill="currentColor"/>
-    <circle cx="18" cy="10" r="1.2" fill="currentColor"/>
-    <circle cx="6" cy="14" r="1.2" fill="currentColor"/>
-    <circle cx="12" cy="14" r="1.2" fill="currentColor"/>
-    <circle cx="18" cy="14" r="1.2" fill="currentColor"/>
-    <circle cx="6" cy="18" r="1.2" fill="currentColor"/>
-    <circle cx="12" cy="18" r="1.2" fill="currentColor"/>
-    <circle cx="18" cy="18" r="1.2" fill="currentColor"/>
-  </svg>
-);
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
@@ -177,7 +149,7 @@ const LandingPage = ({ onEnter, theme }) => (
           background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
           boxShadow: '0 8px 32px rgba(37, 99, 235, 0.3)'
         }}>
-          <CalendarPremiumIcon size={60} />
+          <Calendar size={60} color="var(--color-primary)" strokeWidth={1.5} />
         </div>
         <h1 style={{
           margin: '0 0 8px 0',
@@ -1490,7 +1462,7 @@ export default function App() {
               className="brand-logo-interactive"
             >
               <div className="brand-logo-container calendar-glow-pulse">
-                <CalendarPremiumIcon size={44} />
+                <Calendar size={44} color="var(--color-primary)" strokeWidth={1.5} />
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
                 <span className="brand-title-sales" style={{ fontSize: '12px' }}>Real Sales Labs</span>
@@ -1767,7 +1739,7 @@ export default function App() {
         </button>
         <a href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247" target="_blank" rel="noopener noreferrer" title="Ir al portal de Real Sales Labs" className="brand-logo-interactive" style={{ margin: 0 }}>
           <div className="brand-logo-container calendar-glow-pulse">
-            <CalendarPremiumIcon size={34} />
+            <Calendar size={34} color="var(--color-primary)" strokeWidth={1.5} />
           </div>
           <div className="brand-title-stacked">
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -1793,7 +1765,7 @@ export default function App() {
             className="brand-logo-interactive"
           >
             <div className="brand-logo-container calendar-glow-pulse">
-              <CalendarPremiumIcon size={34} />
+              <Calendar size={34} color="var(--color-primary)" strokeWidth={1.5} />
             </div>
             <div className="brand-title-stacked">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
