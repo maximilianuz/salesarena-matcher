@@ -135,7 +135,193 @@ const slugifyRoomName = (name) => {
   return clean || 'grupo-a';
 };
 
+const LandingPage = ({ onEnter, theme }) => (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: 'var(--bg-main)',
+    backgroundImage: 'var(--bg-glows)',
+    backgroundAttachment: 'fixed',
+    color: 'var(--text-main)',
+    fontFamily: 'var(--font-sans)',
+    padding: '20px',
+    boxSizing: 'border-box',
+    position: 'relative'
+  }}>
+    {/* Theme selector top-right */}
+    <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '8px', zIndex: 10 }}>
+      <div className="theme-selector" style={{ margin: 0 }}>
+        <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => document.documentElement.classList.remove('dark')} title="Modo Claro">
+          <Sun size={12} />
+        </button>
+        <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => document.documentElement.classList.add('dark')} title="Modo Oscuro">
+          <Moon size={12} />
+        </button>
+      </div>
+    </div>
+
+    <div className="glass" style={{
+      width: '100%',
+      maxWidth: '520px',
+      padding: '60px 40px',
+      textAlign: 'center',
+      boxSizing: 'border-box'
+    }}>
+      {/* Logo & Title */}
+      <div style={{ marginBottom: '40px' }}>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '80px',
+          height: '80px',
+          borderRadius: '20px',
+          marginBottom: '24px',
+          background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+          boxShadow: '0 8px 32px rgba(37, 99, 235, 0.3)'
+        }}>
+          <CalendarPremiumIcon size={60} />
+        </div>
+        <h1 style={{
+          margin: '0 0 8px 0',
+          fontSize: '36px',
+          fontWeight: '900',
+          letterSpacing: '-0.5px',
+          color: 'var(--text-main)'
+        }}>
+          Real Sales Labs
+        </h1>
+        <p style={{
+          margin: '0 0 24px 0',
+          fontSize: '16px',
+          fontWeight: '600',
+          background: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          color: 'var(--color-primary)'
+        }}>
+          Matcher
+        </p>
+      </div>
+
+      {/* Description */}
+      <div style={{ marginBottom: '40px' }}>
+        <h2 style={{
+          margin: '0 0 16px 0',
+          fontSize: '24px',
+          fontWeight: '700',
+          letterSpacing: '-0.3px',
+          color: 'var(--text-main)'
+        }}>
+          Coordina tu disponibilidad
+        </h2>
+        <p style={{
+          margin: '0 0 12px 0',
+          fontSize: '15px',
+          color: 'var(--text-muted)',
+          lineHeight: '1.6'
+        }}>
+          Sincroniza horarios, detecta coincidencias y programa reuniones automáticamente con tu equipo.
+        </p>
+      </div>
+
+      {/* Features */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '16px',
+        marginBottom: '40px'
+      }}>
+        {[
+          { icon: Calendar, text: 'Disponibilidad' },
+          { icon: Users, text: 'Equipo' },
+          { icon: Video, text: 'Google Meet' },
+          { icon: Clock, text: 'Zonas Horarias' }
+        ].map((feature, i) => {
+          const IconComponent = feature.icon;
+          return (
+            <div key={i} style={{
+              padding: '16px',
+              borderRadius: '12px',
+              backgroundColor: 'var(--bg-card-hover)',
+              border: '1px solid var(--border-color)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '13px',
+              fontWeight: '500',
+              color: 'var(--text-main)'
+            }}>
+              <IconComponent size={18} style={{ color: 'var(--color-primary)', flexShrink: 0 }} />
+              {feature.text}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* CTA Button */}
+      <button
+        onClick={onEnter}
+        style={{
+          width: '100%',
+          padding: '16px 24px',
+          fontSize: '16px',
+          fontWeight: '700',
+          letterSpacing: '-0.3px',
+          backgroundColor: 'var(--color-primary)',
+          color: 'white',
+          border: 'none',
+          borderRadius: '12px',
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          boxShadow: '0 4px 16px rgba(37, 99, 235, 0.3)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '10px'
+        }}
+        onMouseEnter={(e) => {
+          e.target.style.backgroundColor = 'var(--color-primary-hover)';
+          e.target.style.transform = 'translateY(-2px)';
+          e.target.style.boxShadow = '0 8px 24px rgba(37, 99, 235, 0.4)';
+        }}
+        onMouseLeave={(e) => {
+          e.target.style.backgroundColor = 'var(--color-primary)';
+          e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 4px 16px rgba(37, 99, 235, 0.3)';
+        }}
+      >
+        <span>Ingresar a Matcher</span>
+        <ExternalLink size={18} />
+      </button>
+
+      {/* Footer note */}
+      <p style={{
+        margin: '24px 0 0 0',
+        fontSize: '12px',
+        color: 'var(--text-muted)',
+        lineHeight: '1.5'
+      }}>
+        Acceso gratuito para todos los miembros de la comunidad<br/>
+        <a href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247"
+           target="_blank"
+           rel="noopener noreferrer"
+           style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: '600' }}>
+          Real Sales Lab →
+        </a>
+      </p>
+    </div>
+  </div>
+);
+
 export default function App() {
+  const [showLandingPage, setShowLandingPage] = useState(() => {
+    return localStorage.getItem('realsaleslabs-visited') !== 'true';
+  });
+
   const [activeTab, setActiveTab] = useState('dashboard');
 
   const [currentRoomId, setCurrentRoomId] = useState(() => {
@@ -146,7 +332,7 @@ export default function App() {
     }
     return roomId;
   });
-  
+
   // Tema (light | dark | system)
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('realsaleslabs-theme') || 'system';
@@ -222,7 +408,19 @@ export default function App() {
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [dragMode, setDragMode] = useState(true); // true = pintar, false = borrar
 
+  // Session Recovery
+  const [showSessionRecovery, setShowSessionRecovery] = useState(false);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+
   // --- MOTOR DE COINCIDENCIAS (REACT PORT) ---
+  // --- SESSION RECOVERY CHECK ---
+  useEffect(() => {
+    // If user visited but localStorage was cleared and not logged in, show recovery
+    if (localStorage.getItem('realsaleslabs-visited') === 'true' && !isLoggedIn && !currentUser) {
+      setShowSessionRecovery(true);
+    }
+  }, []);
+
   useEffect(() => {
     calculateEngine();
   }, [members, availabilities]);
@@ -684,6 +882,51 @@ export default function App() {
       setActiveTab('dashboard');
       setWizardStep(1);
     }, 2000);
+  };
+
+  // --- SESSION RECOVERY BY EMAIL ---
+  const handleSessionRecovery = async (e) => {
+    if (e) e.preventDefault();
+    if (!recoveryEmail.trim()) {
+      showNotification('Por favor, ingresa un email válido.');
+      return;
+    }
+
+    try {
+      // Search for user in Supabase
+      const { data: memberData } = await supabase
+        .from('members')
+        .select('*')
+        .eq('room_id', currentRoomId)
+        .eq('email', recoveryEmail.toLowerCase())
+        .maybeSingle();
+
+      if (memberData) {
+        const userObj = {
+          name: memberData.name,
+          email: memberData.email,
+          country: memberData.country,
+          tz: memberData.timezone,
+          active: memberData.active
+        };
+        setCurrentUser(userObj);
+        setIsLoggedIn(true);
+        setLoginEmail(memberData.email);
+        localStorage.setItem('realsaleslabs-logged', 'true');
+        localStorage.setItem('realsaleslabs-user', JSON.stringify(userObj));
+        setShowSessionRecovery(false);
+        setRecoveryEmail('');
+        showNotification(`¡Bienvenido de vuelta, ${userObj.name}!`);
+      } else {
+        showNotification('No encontramos una cuenta con este email. Por favor, completa el registro.');
+        setShowSessionRecovery(false);
+        setRecoveryEmail('');
+        setLoginEmail(recoveryEmail.toLowerCase());
+        setLoginStep(2);
+      }
+    } catch (error) {
+      showNotification('Error al recuperar sesión: ' + error.message);
+    }
   };
 
   // --- SIMULACIÓN DE AUTENTICACIÓN GOOGLE ---
@@ -1194,6 +1437,15 @@ export default function App() {
     setIsSidebarOpen(false); // Cierra el menú al cambiar de pestaña en móvil
   };
 
+  const handleEnterFromLanding = () => {
+    setShowLandingPage(false);
+    localStorage.setItem('realsaleslabs-visited', 'true');
+  };
+
+  if (showLandingPage) {
+    return <LandingPage onEnter={handleEnterFromLanding} theme={theme} />;
+  }
+
   if (!isLoggedIn || !currentUser) {
     return (
       <div style={{
@@ -1410,6 +1662,76 @@ export default function App() {
             </a>
           </div>
         </div>
+
+        {/* SESSION RECOVERY MODAL */}
+        {showSessionRecovery && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            backdropFilter: 'blur(4px)'
+          }}>
+            <div className="glass" style={{
+              width: '100%',
+              maxWidth: '380px',
+              padding: '32px',
+              boxSizing: 'border-box'
+            }}>
+              <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '700', color: 'var(--text-main)' }}>
+                  Recuperar Sesión
+                </h3>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>
+                  Parece que tu sesión fue cerrada. Ingresa tu email para continuar.
+                </p>
+              </div>
+
+              <form onSubmit={handleSessionRecovery} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div className="form-group" style={{ textAlign: 'left' }}>
+                  <label htmlFor="recovery-email" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '4px', display: 'block' }}>Email registrado</label>
+                  <input
+                    type="email"
+                    id="recovery-email"
+                    className="form-input"
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    placeholder="tu.email@gmail.com"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
+                    autoFocus
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => {
+                      setShowSessionRecovery(false);
+                      setRecoveryEmail('');
+                    }}
+                    style={{ flex: 1 }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-indigo"
+                    style={{ flex: 1 }}
+                  >
+                    Recuperar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
