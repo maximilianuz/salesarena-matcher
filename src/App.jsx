@@ -203,7 +203,7 @@ const LandingPage = ({ onEnter, theme }) => (
           WebkitTextFillColor: 'transparent',
           color: 'var(--color-primary)'
         }}>
-          Matcher
+          Sincronización de Horarios
         </p>
       </div>
 
@@ -294,7 +294,7 @@ const LandingPage = ({ onEnter, theme }) => (
           e.target.style.boxShadow = '0 4px 16px rgba(37, 99, 235, 0.3)';
         }}
       >
-        <span>Ingresar a Matcher</span>
+        <span>Ingresar</span>
         <ExternalLink size={18} />
       </button>
 
@@ -326,11 +326,7 @@ export default function App() {
 
   const [currentRoomId, setCurrentRoomId] = useState(() => {
     const roomId = getRoomIdFromUrl();
-    if (!roomId) {
-      window.history.replaceState(null, '', '/room/grupo-a');
-      return 'grupo-a';
-    }
-    return roomId;
+    return roomId || null;
   });
 
   // Tema (light | dark | system)
@@ -355,7 +351,8 @@ export default function App() {
   const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
 
   const [roomName, setRoomName] = useState(() => {
-    const roomId = getRoomIdFromUrl() || 'grupo-a';
+    const roomId = getRoomIdFromUrl();
+    if (!roomId) return '';
     return 'Sala ' + roomId.charAt(0).toUpperCase() + roomId.slice(1);
   });
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -1440,9 +1437,13 @@ export default function App() {
   const handleEnterFromLanding = () => {
     setShowLandingPage(false);
     localStorage.setItem('realsaleslabs-visited', 'true');
+    // Navigate to default room
+    window.history.replaceState(null, '', '/room/grupo-a');
+    setCurrentRoomId('grupo-a');
   };
 
-  if (showLandingPage) {
+  // Show landing page if: explicitly set OR no room ID in URL
+  if (showLandingPage || !currentRoomId) {
     return <LandingPage onEnter={handleEnterFromLanding} theme={theme} />;
   }
 
@@ -1499,7 +1500,6 @@ export default function App() {
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
                 <span className="brand-title-sales" style={{ fontSize: '12px' }}>Real Sales Labs</span>
-                <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
               </div>
             </a>
           </div>
