@@ -29,37 +29,31 @@ import {
 } from 'lucide-react';
 
 const CalendarPremiumIcon = ({ size = 26 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }} className="calendar-premium-svg">
-    <defs>
-      <linearGradient id="calendarGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#2563eb"/>
-        <stop offset="100%" stopColor="#7c3aed"/>
-      </linearGradient>
-      <filter id="shadowFilter">
-        <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
-        <feOffset dx="0" dy="2" result="offsetblur"/>
-        <feComponentTransfer>
-          <feFuncA type="linear" slope="0.3"/>
-        </feComponentTransfer>
-        <feMerge>
-          <feMergeNode/>
-          <feMergeNode in="SourceGraphic"/>
-        </feMerge>
-      </filter>
-    </defs>
-    <rect width="512" height="512" rx="115" fill="url(#calendarGradient)"/>
-    <g transform="translate(100, 100)" fill="none" stroke="white" strokeWidth="24" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="20" y="60" width="312" height="292" rx="20"/>
-      <line x1="20" y1="140" x2="332" y2="140"/>
-      <line x1="104" y1="60" x2="104" y2="120"/>
-      <line x1="248" y1="60" x2="248" y2="120"/>
-      <circle cx="76" cy="200" r="16"/>
-      <circle cx="176" cy="200" r="16"/>
-      <circle cx="276" cy="200" r="16"/>
-      <circle cx="76" cy="280" r="16"/>
-      <circle cx="176" cy="280" r="16"/>
-      <circle cx="276" cy="280" r="16"/>
-    </g>
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" style={{ display: 'block' }} className="calendar-premium-svg">
+    <style>
+      {`
+        .calendar-premium-svg {
+          color: var(--color-primary);
+        }
+      `}
+    </style>
+    {/* Calendar frame */}
+    <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8"/>
+    {/* Header bar with month/date */}
+    <rect x="3" y="4" width="18" height="4" fill="currentColor" opacity="0.15" rx="2"/>
+    {/* Decorative top bars for a more premium look */}
+    <line x1="7" y1="2" x2="7" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    <line x1="17" y1="2" x2="17" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+    {/* Date grid - 3x3 for a clean look */}
+    <circle cx="6" cy="10" r="1.2" fill="currentColor"/>
+    <circle cx="12" cy="10" r="1.2" fill="currentColor"/>
+    <circle cx="18" cy="10" r="1.2" fill="currentColor"/>
+    <circle cx="6" cy="14" r="1.2" fill="currentColor"/>
+    <circle cx="12" cy="14" r="1.2" fill="currentColor"/>
+    <circle cx="18" cy="14" r="1.2" fill="currentColor"/>
+    <circle cx="6" cy="18" r="1.2" fill="currentColor"/>
+    <circle cx="12" cy="18" r="1.2" fill="currentColor"/>
+    <circle cx="18" cy="18" r="1.2" fill="currentColor"/>
   </svg>
 );
 
