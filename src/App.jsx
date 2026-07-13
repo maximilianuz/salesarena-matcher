@@ -134,7 +134,7 @@ export default function App() {
   
   // Tema (light | dark | system)
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('salesarena-theme') || 'system';
+    return localStorage.getItem('realsaleslabs-theme') || 'system';
   });
 
   // Estado del Sidebar móvil
@@ -142,7 +142,7 @@ export default function App() {
 
   // Autenticación de Google (Simulada)
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('salesarena-logged') === 'true';
+    return localStorage.getItem('realsaleslabs-logged') === 'true';
   });
 
   // Estado del flujo de Login/Registro
@@ -163,7 +163,7 @@ export default function App() {
 
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('salesarena-user');
+    const saved = localStorage.getItem('realsaleslabs-user');
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -232,7 +232,7 @@ export default function App() {
     };
 
     applyTheme(theme);
-    localStorage.setItem('salesarena-theme', theme);
+    localStorage.setItem('realsaleslabs-theme', theme);
 
     if (theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -369,8 +369,8 @@ export default function App() {
         };
         setCurrentUser(userObj);
         setIsLoggedIn(true);
-        localStorage.setItem('salesarena-logged', 'true');
-        localStorage.setItem('salesarena-user', JSON.stringify(userObj));
+        localStorage.setItem('realsaleslabs-logged', 'true');
+        localStorage.setItem('realsaleslabs-user', JSON.stringify(userObj));
       } else {
         setLoginStep(2);
         setIsLoggedIn(false);
@@ -702,8 +702,8 @@ export default function App() {
     if (existing) {
       setCurrentUser(existing);
       setIsLoggedIn(true);
-      localStorage.setItem('salesarena-logged', 'true');
-      localStorage.setItem('salesarena-user', JSON.stringify(existing));
+      localStorage.setItem('realsaleslabs-logged', 'true');
+      localStorage.setItem('realsaleslabs-user', JSON.stringify(existing));
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
       setLoginStep(2);
@@ -748,10 +748,10 @@ export default function App() {
 
     setCurrentUser(newUser);
     setIsLoggedIn(true);
-    localStorage.setItem('salesarena-logged', 'true');
-    localStorage.setItem('salesarena-user', JSON.stringify(newUser));
+    localStorage.setItem('realsaleslabs-logged', 'true');
+    localStorage.setItem('realsaleslabs-user', JSON.stringify(newUser));
 
-    showNotification(`¡Registro completo! Bienvenido a Sales-Arena Matcher, ${newUser.name}.`);
+    showNotification(`¡Registro completo! Bienvenido a Real Sales Labs Matcher, ${newUser.name}.`);
   };
 
   const handleLogout = async () => {
@@ -762,8 +762,8 @@ export default function App() {
     setLoginEmail('');
     setLoginName('');
     setLoginStep(1);
-    localStorage.removeItem('salesarena-logged');
-    localStorage.removeItem('salesarena-user');
+    localStorage.removeItem('realsaleslabs-logged');
+    localStorage.removeItem('realsaleslabs-user');
   };
 
   // --- GESTIÓN DE SALAS (ROOMS) ---
@@ -1047,8 +1047,8 @@ export default function App() {
             if (providerToken) {
               // Construimos el payload de Google Calendar Event
               const eventPayload = {
-                summary: `Sales-Arena Roleplay: ${match.participants}`,
-                description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
+                summary: `Real Sales Labs Roleplay: ${match.participants}`,
+                description: 'Videollamada de entrenamiento agendada mediante Real Sales Labs Matcher.',
                 start: { dateTime: new Date().toISOString(), timeZone: 'UTC' }, // Se calcula a partir del match en producción
                 end: { dateTime: new Date(Date.now() + 60*60*1000).toISOString(), timeZone: 'UTC' },
                 attendees: match.participants.split(', ').map(name => {
@@ -1221,17 +1221,17 @@ export default function App() {
           {/* Logo Brand Header */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
             <a 
-              href="https://sales-arena.netlify.app/" 
+              href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247" 
               target="_blank" 
               rel="noopener noreferrer" 
-              title="Haz clic en el caballo para visitar el portal oficial de Sales Arena"
+              title="Haz clic para visitar el portal de Real Sales Labs"
               className="brand-logo-interactive"
             >
               <div className="brand-logo-container horse-glow-pulse">
                 <ChessKnightIcon size={44} />
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
+                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Real Sales Labs</span>
                 <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
               </div>
             </a>
@@ -1376,7 +1376,7 @@ export default function App() {
           {/* Elegant Footer to official portal */}
           <div style={{ marginTop: '28px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center' }}>
             <a
-              href="https://sales-arena.netlify.app/"
+              href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -1434,13 +1434,13 @@ export default function App() {
         <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
           {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
-        <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a la web principal de Sales Arena" className="brand-logo-interactive" style={{ margin: 0 }}>
+        <a href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247" target="_blank" rel="noopener noreferrer" title="Ir al portal de Real Sales Labs" className="brand-logo-interactive" style={{ margin: 0 }}>
           <div className="brand-logo-container horse-glow-pulse">
             <ChessKnightIcon size={34} />
           </div>
           <div className="brand-title-stacked">
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span className="brand-title-sales">Sales-Arena</span>
+              <span className="brand-title-sales">Real Sales Labs</span>
               <span className="portal-badge-mini">PORTAL ↗</span>
             </div>
             <span className="brand-title-arena">Matcher</span>
@@ -1456,10 +1456,10 @@ export default function App() {
       <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div style={{ marginBottom: '28px' }}>
           <a 
-            href="https://sales-arena.netlify.app/" 
+            href="https://www.skool.com/real-sales-lab-8381/about?ref=6b5c94a4d70e488bba9eb815023e8247" 
             target="_blank" 
             rel="noopener noreferrer" 
-            title="Haz clic para visitar el Portal Oficial de Sales Arena" 
+            title="Haz clic para visitar el Portal de Real Sales Labs" 
             className="brand-logo-interactive"
           >
             <div className="brand-logo-container horse-glow-pulse">
@@ -1467,7 +1467,7 @@ export default function App() {
             </div>
             <div className="brand-title-stacked">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="brand-title-sales">Sales-Arena</span>
+                <span className="brand-title-sales">Real Sales Labs</span>
                 <span className="portal-badge-mini">PORTAL ↗</span>
               </div>
               <span className="brand-title-arena">Matcher</span>
