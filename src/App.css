@@ -787,20 +787,20 @@ input:checked + .switch-slider:before {
 }
 
 /* --- CABALLO DE SALES ARENA INDICADOR / ATENCIÓN --- */
-@keyframes horseGlowPulse {
+@keyframes calendarGlowPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.6), 0 0 12px rgba(94, 92, 230, 0.3);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.6), 0 0 12px rgba(124, 58, 237, 0.3);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(10, 132, 255, 0), 0 0 20px rgba(94, 92, 230, 0.5);
+    box-shadow: 0 0 0 10px rgba(37, 99, 235, 0), 0 0 20px rgba(124, 58, 237, 0.5);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(10, 132, 255, 0), 0 0 12px rgba(94, 92, 230, 0.3);
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 0 12px rgba(124, 58, 237, 0.3);
   }
 }
 
-.horse-glow-pulse {
-  animation: horseGlowPulse 2.4s infinite;
+.calendar-glow-pulse {
+  animation: calendarGlowPulse 2.4s infinite;
   position: relative;
 }
 

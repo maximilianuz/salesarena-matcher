@@ -1,57 +1,57 @@
 :root {
   /* Tema Claro */
-  --bg-main: #f0f0f5;
+  --bg-main: #f5f7fa;
   --bg-sidebar: #ffffff;
-  --bg-card: rgba(255, 255, 255, 0.85);
-  --bg-card-hover: rgba(245, 245, 250, 0.95);
-  --border-color: rgba(0, 0, 0, 0.08);
-  --text-main: #1c1c1e;
-  --text-muted: #6e6e73;
-  --color-primary: #5e5ce6;
-  --color-primary-hover: #4d4ad9;
-  --color-accent: #30d158;
-  --color-accent-hover: #24b147;
-  --color-danger: #ff453a;
-  --color-warning: #ff9f0a;
-  --color-secondary: #ff375f;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-card-hover: rgba(248, 250, 253, 0.95);
+  --border-color: rgba(0, 0, 0, 0.06);
+  --text-main: #1a202c;
+  --text-muted: #718096;
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-accent: #059669;
+  --color-accent-hover: #047857;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-secondary: #7c3aed;
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   --sidebar-width: 260px;
-  --header-bg: rgba(255, 255, 255, 0.75);
+  --header-bg: rgba(255, 255, 255, 0.8);
   --wizard-card-bg: rgba(255, 255, 255, 0.95);
-  --wizard-card-border: rgba(0, 0, 0, 0.08);
-  --wizard-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --wizard-card-border: rgba(0, 0, 0, 0.06);
+  --wizard-card-shadow: 0 4px 24px rgba(0, 0, 0, 0.05);
 
   /* Gradientes de Fondo Claro */
-  --bg-glows: radial-gradient(circle at 15% 15%, rgba(94, 92, 230, 0.06), transparent 30%),
-              radial-gradient(circle at 85% 15%, rgba(10, 132, 255, 0.05), transparent 30%),
-              radial-gradient(circle at 50% 80%, rgba(94, 92, 230, 0.04), transparent 30%);
+  --bg-glows: radial-gradient(circle at 15% 15%, rgba(37, 99, 235, 0.05), transparent 30%),
+              radial-gradient(circle at 85% 15%, rgba(124, 58, 237, 0.04), transparent 30%),
+              radial-gradient(circle at 50% 80%, rgba(37, 99, 235, 0.03), transparent 30%);
 }
 
-/* Tema Oscuro Oficial Sales Arena */
+/* Tema Oscuro Real Sales LAB */
 html.dark {
-  --bg-main: #09090b;
-  --bg-sidebar: #121214;
-  --bg-card: rgba(24, 24, 27, 0.75);
-  --bg-card-hover: rgba(39, 39, 42, 0.8);
-  --border-color: rgba(255, 255, 255, 0.06);
-  --text-main: #f5f5f7;
-  --text-muted: #98989d;
-  --color-primary: #5e5ce6;
-  --color-primary-hover: #4d4ad9;
-  --color-accent: #30d158;
-  --color-accent-hover: #24b147;
-  --color-danger: #ff453a;
-  --color-warning: #ff9f0a;
-  --color-secondary: #ff375f;
-  --header-bg: rgba(18, 18, 22, 0.75);
-  --wizard-card-bg: rgba(18, 18, 28, 0.88);
-  --wizard-card-border: rgba(255, 255, 255, 0.09);
-  --wizard-card-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --bg-main: #0f172a;
+  --bg-sidebar: #1e293b;
+  --bg-card: rgba(30, 41, 59, 0.8);
+  --bg-card-hover: rgba(51, 65, 85, 0.85);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --text-main: #f1f5f9;
+  --text-muted: #cbd5e1;
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-accent: #10b981;
+  --color-accent-hover: #059669;
+  --color-danger: #f87171;
+  --color-warning: #fbbf24;
+  --color-secondary: #a78bfa;
+  --header-bg: rgba(15, 23, 42, 0.8);
+  --wizard-card-bg: rgba(15, 23, 42, 0.9);
+  --wizard-card-border: rgba(255, 255, 255, 0.1);
+  --wizard-card-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
   /* Gradientes de Brillo Ambiental */
-  --bg-glows: radial-gradient(circle at 15% 15%, rgba(94, 92, 230, 0.07), transparent 30%),
-              radial-gradient(circle at 85% 15%, rgba(10, 132, 255, 0.05), transparent 30%),
-              radial-gradient(circle at 50% 80%, rgba(94, 92, 230, 0.04), transparent 30%);
+  --bg-glows: radial-gradient(circle at 15% 15%, rgba(37, 99, 235, 0.08), transparent 30%),
+              radial-gradient(circle at 85% 15%, rgba(124, 58, 237, 0.06), transparent 30%),
+              radial-gradient(circle at 50% 80%, rgba(37, 99, 235, 0.04), transparent 30%);
 }
 
 body {
@@ -163,14 +163,13 @@ html.dark .glass-hover:hover {
   overflow: hidden;
 }
 
-/* En modo claro, el fondo del rect del SVG se vuelve oscuro para contrastar */
-:root .chess-knight-svg .knight-bg {
-  fill: #1c1c1e;
+/* Calendar Premium Icon - Theme adaptive styles */
+:root .calendar-premium-svg rect {
+  fill: url(#calendarGradient);
 }
 
-/* En modo oscuro, restauramos el gradiente original (se ignora este CSS, el SVG attr tiene precedencia) */
-html.dark .chess-knight-svg .knight-bg {
-  fill: url(#salesArenaKnightBg);
+html.dark .calendar-premium-svg rect {
+  fill: url(#calendarGradient);
 }
 
 .brand-title-stacked {
@@ -192,7 +191,7 @@ html.dark .chess-knight-svg .knight-bg {
   font-weight: 900;
   letter-spacing: -0.5px;
   text-transform: uppercase;
-  background: linear-gradient(135deg, #0a84ff 0%, #5e5ce6 55%, #4d4ad9 100%);
+  background: linear-gradient(135deg, #2563eb 0%, #7c3aed 55%, #6d28d9 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   color: var(--color-primary);
