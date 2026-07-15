@@ -127,6 +127,31 @@ const getAvatarColor = (name) => {
 // Nombre corto de la zona horaria (ciudad)
 const tzCity = (tz) => (tz || 'UTC').split('/').pop().replace(/_/g, ' ');
 
+// Offset real en minutos respecto de UTC para cualquier zona IANA.
+// Usa Intl (nativo del navegador) y refleja automáticamente el horario
+// de verano (DST) vigente en el momento del cálculo.
+const tzOffsetCache = {};
+const getOffsetMinutes = (tz) => {
+  if (!tz || tz === 'UTC') return 0;
+  if (tzOffsetCache[tz] !== undefined) return tzOffsetCache[tz];
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'shortOffset'
+    }).formatToParts(new Date());
+    const name = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT';
+    // name es "GMT-3", "GMT+5:30" o "GMT" (=UTC)
+    const m = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+    const offset = m
+      ? (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0))
+      : 0;
+    tzOffsetCache[tz] = offset;
+    return offset;
+  } catch {
+    return 0; // zona inválida → tratar como UTC
+  }
+};
+
 const resolveTimezone = (countryName) => {
   if (!countryName) return 'UTC';
   const cleanName = countryName.trim().toLowerCase();
@@ -144,6 +169,32 @@ const resolveTimezone = (countryName) => {
   } catch (e) {
     return 'UTC';
   }
+};
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Fecha/hora UTC real de la próxima ocurrencia del match.
+// match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
+const getNextMatchDateUtc = (match) => {
+  const dayIdx = Math.floor(match.startSlot / 24); // 0 = Lunes ... 6 = Domingo
+  const hourUtc = match.startSlot % 24;
+  const now = new Date();
+  const start = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
+  ));
+  // getUTCDay(): 0=Domingo..6=Sábado → convertir a 0=Lunes..6=Domingo
+  const todayIdx = (start.getUTCDay() + 6) % 7;
+  let delta = (dayIdx - todayIdx + 7) % 7;
+  if (delta === 0 && start <= now) delta = 7; // ya pasó hoy → semana próxima
+  start.setUTCDate(start.getUTCDate() + delta);
+  return start;
+};
+
+const formatMeetingDateUtc = (date, dayName) => {
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  return `${dayName} ${dd}/${mm} · ${hh}:00 UTC`;
 };
 
 const useMockDb = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
@@ -452,18 +503,6 @@ export default function App() {
       setLoginStep(2);
       setIsLoggedIn(false);
     }
-  };
-
-  // Obtener offset en minutos para una hora y zona horaria dada
-  const getOffsetMinutes = (tz) => {
-    const offsets = {
-      'America/Argentina/Buenos_Aires': -180,
-      'Europe/Madrid': 120, // UTC+2
-      'America/Mexico_City': -360,
-      'America/Santiago': -240, // Chile
-      'America/Los_Angeles': -480
-    };
-    return offsets[tz] || 0;
   };
 
   const calculateEngine = () => {
@@ -1074,100 +1113,118 @@ export default function App() {
   // --- AGENDAR REUNIÓN CON APIS REALES DE GOOGLE CALENDAR / MEET ---
   const scheduleMeeting = async (matchIndex) => {
     const match = matches[matchIndex];
-    
+    const title = `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`;
+
     setSchedulingStatus('loading');
     setScheduledDetails({
-      title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
+      title,
       attendeesCount: match.participants.split(', ').length
     });
 
-    // 1. Establecer conexión
-    setTimeout(async () => {
-      setSchedulingStatus('authenticating');
-      
-      // 2. Autenticar OAuth con Google a través de Supabase
-      setTimeout(async () => {
-        setSchedulingStatus('creating');
-        
-        let meetUrl = `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
+    // Fecha/hora UTC real de la próxima ocurrencia del match (punto de inicio
+    // de la ventana coincidente; el role-play dura 60 minutos)
+    const startDate = getNextMatchDateUtc(match);
+    const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
-        if (!useMockDb) {
-          try {
-            const { data: sessionData } = await supabase.auth.getSession();
-            const providerToken = sessionData.session?.provider_token; // Token de Google OAuth
+    await sleep(1000);
+    setSchedulingStatus('authenticating');
+    await sleep(1200);
+    setSchedulingStatus('creating');
 
-            if (providerToken) {
-              // Construimos el payload de Google Calendar Event
-              const eventPayload = {
-                summary: `Sales-Arena Roleplay: ${match.participants}`,
-                description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
-                start: { dateTime: new Date().toISOString(), timeZone: 'UTC' }, // Se calcula a partir del match en producción
-                end: { dateTime: new Date(Date.now() + 60*60*1000).toISOString(), timeZone: 'UTC' },
-                attendees: match.participants.split(', ').map(name => {
-                  const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
-                  return found ? { email: found.email } : null;
-                }).filter(Boolean),
-                conferenceData: {
-                  createRequest: {
-                    requestId: Math.random().toString(36).substring(2),
-                    conferenceSolutionKey: { type: 'hangoutsMeet' }
-                  }
-                }
-              };
+    let meetUrl;
 
-              // Petición oficial a la REST API de Google Calendar
-              const response = await fetch(
-                'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all',
-                {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${providerToken}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify(eventPayload)
-                }
-              );
+    if (useMockDb) {
+      // Solo para demo local sin Supabase: enlace simulado
+      meetUrl = `https://meet.google.com/${Math.random().toString(36).substring(2, 5)}-${Math.random().toString(36).substring(2, 6)}-${Math.random().toString(36).substring(2, 5)}`;
+    } else {
+      // Producción: el enlace DEBE venir de Google Calendar. Si algo falla,
+      // se informa el error y no se guarda ninguna reunión falsa.
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const providerToken = sessionData.session?.provider_token; // Token de Google OAuth
 
-              const eventData = await response.json();
-              if (eventData.hangoutLink) {
-                meetUrl = eventData.hangoutLink; // Enlace real generado
-              }
-            }
-          } catch (err) {
-            console.error('Error al generar enlace real de Meet:', err);
-          }
+        if (!providerToken) {
+          throw new Error('Tu sesión de Google expiró o no otorgó permisos de Calendar. Cierra sesión y vuelve a ingresar con Google.');
         }
 
-        // 3. Insertar registro de reunión en base de datos
-        const newMeeting = {
-          title: `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`,
-          dateUtc: `Próximo ${match.day} a las ${match.startStr}`,
-          duration: 60,
-          participants: match.participants,
-          meetLink: meetUrl,
-          status: 'Creado (Meet)'
+        const eventPayload = {
+          summary: `Sales-Arena Roleplay: ${match.participants}`,
+          description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
+          start: { dateTime: startDate.toISOString(), timeZone: 'UTC' },
+          end: { dateTime: endDate.toISOString(), timeZone: 'UTC' },
+          attendees: match.participants.split(', ').map(name => {
+            const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
+            return found ? { email: found.email } : null;
+          }).filter(Boolean),
+          conferenceData: {
+            createRequest: {
+              requestId: Math.random().toString(36).substring(2),
+              conferenceSolutionKey: { type: 'hangoutsMeet' }
+            }
+          }
         };
 
-        if (!useMockDb) {
-          await supabase.from('meetings').insert({
-            room_id: currentRoomId,
-            title: newMeeting.title,
-            date_utc: newMeeting.dateUtc,
-            duration: newMeeting.duration,
-            participants: newMeeting.participants,
-            meet_link: newMeeting.meetLink
-          });
+        // Petición oficial a la REST API de Google Calendar
+        const response = await fetch(
+          'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${providerToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(eventPayload)
+          }
+        );
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null);
+          throw new Error(errBody?.error?.message || `Google Calendar respondió con error ${response.status}.`);
         }
 
-        setMeetings(prev => [...prev, newMeeting]);
-        setSchedulingStatus('success');
+        const eventData = await response.json();
+        if (!eventData.hangoutLink) {
+          throw new Error('Google Calendar creó el evento pero no devolvió un enlace de Meet.');
+        }
+        meetUrl = eventData.hangoutLink;
+      } catch (err) {
+        console.error('Error al agendar en Google Calendar:', err);
+        setSchedulingStatus(null);
+        showNotification(`No se pudo agendar la reunión: ${err.message}`, 'error');
+        return;
+      }
+    }
 
-        // 4. Cerrar overlay automáticamente
-        setTimeout(() => {
-          setSchedulingStatus(null);
-        }, 3000);
-      }, 1200);
-    }, 1000);
+    const newMeeting = {
+      title,
+      dateUtc: formatMeetingDateUtc(startDate, match.day),
+      duration: 60,
+      participants: match.participants,
+      meetLink: meetUrl,
+      status: 'Creado (Meet)'
+    };
+
+    if (!useMockDb) {
+      const { error: insertError } = await supabase.from('meetings').insert({
+        room_id: currentRoomId,
+        title: newMeeting.title,
+        date_utc: newMeeting.dateUtc,
+        duration: newMeeting.duration,
+        participants: newMeeting.participants,
+        meet_link: newMeeting.meetLink
+      });
+      if (insertError) {
+        // El evento de Calendar ya existe; avisar que no quedó registrado en la sala
+        showNotification('La reunión se creó en Google Calendar, pero no se pudo guardar en la sala: ' + insertError.message, 'error');
+      }
+    }
+
+    setMeetings(prev => [...prev, newMeeting]);
+    setSchedulingStatus('success');
+
+    setTimeout(() => {
+      setSchedulingStatus(null);
+    }, 3000);
   };
 
   const showNotification = (msg, type = 'info') => {
