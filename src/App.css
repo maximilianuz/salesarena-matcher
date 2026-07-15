@@ -1177,6 +1177,134 @@ input:checked + .switch-slider:before {
 }
 
 /* =========================================
+   BOTONERA PREMIUM DE PARTICIPACIÓN (Sí / No)
+   ========================================= */
+.participation-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.choice-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.25s ease,
+              border-color 0.25s ease,
+              background 0.25s ease;
+}
+
+/* Franja de acento a la izquierda */
+.choice-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 4px 0 0 4px;
+  transition: width 0.25s ease;
+}
+
+.choice-icon {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+.choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choice-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--text-main);
+}
+
+.choice-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* --- Opción SÍ (verde premium) --- */
+.choice-yes::before {
+  background: linear-gradient(180deg, #34d399, #059669);
+}
+
+.choice-yes .choice-icon {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 55%, #059669 100%);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.35);
+}
+
+.choice-yes:hover {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(52, 211, 153, 0.03));
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.18);
+  transform: translateY(-3px);
+}
+
+.choice-yes:hover::before { width: 6px; }
+.choice-yes:hover .choice-icon { transform: scale(1.06); box-shadow: 0 8px 22px rgba(16, 185, 129, 0.45); }
+
+/* --- Opción NO (rojo premium) --- */
+.choice-no::before {
+  background: linear-gradient(180deg, #fb7185, #e11d48);
+}
+
+.choice-no .choice-icon {
+  background: linear-gradient(135deg, #fb7185 0%, #f43f5e 55%, #e11d48 100%);
+  box-shadow: 0 6px 16px rgba(244, 63, 94, 0.32);
+}
+
+.choice-no:hover {
+  border-color: rgba(244, 63, 94, 0.5);
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.07), rgba(251, 113, 133, 0.03));
+  box-shadow: 0 12px 30px rgba(244, 63, 94, 0.16);
+  transform: translateY(-3px);
+}
+
+.choice-no:hover::before { width: 6px; }
+.choice-no:hover .choice-icon { transform: scale(1.06); box-shadow: 0 8px 22px rgba(244, 63, 94, 0.42); }
+
+.choice-card:active { transform: translateY(-1px) scale(0.99); }
+
+@media (min-width: 520px) {
+  .participation-choice {
+    flex-direction: row;
+  }
+  .choice-card {
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 22px 20px;
+  }
+}
+
+/* =========================================
    ESTADOS VACÍOS
    ========================================= */
 .empty-state {

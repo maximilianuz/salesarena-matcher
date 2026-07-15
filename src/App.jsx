@@ -1918,12 +1918,24 @@ export default function App() {
                   <h3 className="wizard-title">¡Hola de nuevo, {currentUser.name}!</h3>
                   <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
 
-                  <div className="wizard-options">
-                    <button className="wizard-btn wizard-btn-primary" onClick={() => handleWizardParticipation(true)}>
-                      <Check size={16} /> Sí, participaré esta semana
+                  <div className="participation-choice">
+                    <button className="choice-card choice-yes" onClick={() => handleWizardParticipation(true)}>
+                      <span className="choice-icon">
+                        <Check size={24} strokeWidth={3} />
+                      </span>
+                      <span className="choice-text">
+                        <span className="choice-title">Sí, participaré</span>
+                        <span className="choice-sub">Coincidiré con mi equipo esta semana</span>
+                      </span>
                     </button>
-                    <button className="wizard-btn wizard-btn-danger" onClick={() => handleWizardParticipation(false)}>
-                      <X size={16} /> No puedo esta semana
+                    <button className="choice-card choice-no" onClick={() => handleWizardParticipation(false)}>
+                      <span className="choice-icon">
+                        <X size={24} strokeWidth={3} />
+                      </span>
+                      <span className="choice-text">
+                        <span className="choice-title">No puedo esta semana</span>
+                        <span className="choice-sub">Me excluyo de los emparejamientos</span>
+                      </span>
                     </button>
                   </div>
                 </div>
