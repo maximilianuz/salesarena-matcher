@@ -39,7 +39,8 @@ import {
   UserPlus,
   Briefcase,
   Sunrise,
-  Sunset
+  Sunset,
+  Lock
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -990,26 +991,6 @@ export default function App() {
     setNewMemberName('');
     setNewMemberEmail('');
     showNotification('Miembro agregado correctamente.');
-  };
-
-  const toggleMemberActive = async (index) => {
-    const updated = [...members];
-    const prevActiveState = updated[index].active;
-    updated[index].active = !updated[index].active;
-    
-    if (!useMockDb) {
-      const { error } = await supabase.from('members')
-        .update({ active: updated[index].active })
-        .eq('room_id', currentRoomId)
-        .eq('email', updated[index].email);
-      if (error) {
-        showNotification('Error al actualizar en Supabase');
-        updated[index].active = prevActiveState;
-        return;
-      }
-    }
-    
-    setMembers(updated);
   };
 
   const deleteMember = async (emailToDelete) => {
@@ -2211,8 +2192,10 @@ export default function App() {
                   Miembros Registrados
                 </h4>
                 <div className="members-list-card">
-                  {members.map((m, idx) => (
-                    <div className="member-row" key={idx}>
+                  {members.map((m, idx) => {
+                    const isSelf = m.email.toLowerCase() === currentUser.email.toLowerCase();
+                    return (
+                    <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={idx}>
                       <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
                         {getInitials(m.name)}
                       </div>
@@ -2220,6 +2203,7 @@ export default function App() {
                         <span className="member-row-name">
                           {m.name}
                           <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
+                          {isSelf && <span className="member-badge-self">Tú</span>}
                           <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
                             {m.active ? 'Participa' : 'Excluido'}
                           </span>
@@ -2227,20 +2211,26 @@ export default function App() {
                         <span className="member-row-details"><Mail size={11} /> {m.email}</span>
                         <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
                       </div>
-                      
+
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Participa:</span>
-                          <label className="switch-control">
-                            <input
-                              type="checkbox"
-                              checked={m.active}
-                              onChange={() => toggleMemberActive(idx)}
-                            />
-                            <span className="switch-slider"></span>
-                          </label>
-                        </div>
-                        {m.email.toLowerCase() !== currentUser.email.toLowerCase() && (
+                        {isSelf ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Participa:</span>
+                            <label className="switch-control" title="Activa o desactiva tu participación">
+                              <input
+                                type="checkbox"
+                                checked={m.active}
+                                onChange={toggleCurrentUserActive}
+                              />
+                              <span className="switch-slider"></span>
+                            </label>
+                          </div>
+                        ) : (
+                          <span className="member-lock-chip" title="Solo este miembro puede cambiar su propia participación">
+                            <Lock size={11} /> Solo {m.name.split(' ')[0]}
+                          </span>
+                        )}
+                        {!isSelf && (
                           <button
                             type="button"
                             className="btn-danger-icon"
@@ -2252,7 +2242,8 @@ export default function App() {
                         )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

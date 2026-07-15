@@ -617,6 +617,37 @@
   color: var(--color-danger);
 }
 
+.member-badge-self {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: rgba(94, 92, 230, 0.14);
+  color: var(--color-primary);
+  border: 1px solid rgba(94, 92, 230, 0.28);
+}
+
+/* Fila del propio usuario: leve realce */
+.member-row-self {
+  border-color: rgba(94, 92, 230, 0.35);
+  background: linear-gradient(135deg, rgba(94, 92, 230, 0.06), rgba(10, 132, 255, 0.03));
+}
+
+/* Chip de solo lectura para otros miembros */
+.member-lock-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background-color: rgba(120, 120, 120, 0.08);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
 .member-row-details {
   font-size: 11.5px;
   color: var(--text-muted);
