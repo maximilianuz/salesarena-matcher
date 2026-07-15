@@ -1454,6 +1454,145 @@ input:checked + .switch-slider:before {
 }
 
 /* =========================================
+   COMPROMISO DE ASISTENCIA
+   ========================================= */
+.attendance-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.attendance-prompt-card {
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(255, 159, 10, 0.32) !important;
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.05), rgba(255, 149, 0, 0.02)) !important;
+}
+
+.attendance-prompt-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.attendance-prompt-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.attendance-prompt-question {
+  font-size: 13.5px;
+  color: var(--text-main);
+}
+
+.attendance-prompt-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.attendance-prompt-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attendance-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+.attendance-btn-yes:hover {
+  border-color: rgba(48, 209, 88, 0.55);
+  background-color: rgba(48, 209, 88, 0.1);
+  color: #30d158;
+}
+
+.attendance-btn-no:hover {
+  border-color: rgba(255, 69, 58, 0.5);
+  background-color: rgba(255, 69, 58, 0.08);
+  color: var(--color-danger);
+}
+
+.attendance-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.attendance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.attendance-chip-asistio {
+  background-color: rgba(48, 209, 88, 0.12);
+  color: #30d158;
+  border: 1px solid rgba(48, 209, 88, 0.28);
+}
+
+.attendance-chip-no_show {
+  background-color: rgba(255, 69, 58, 0.1);
+  color: var(--color-danger);
+  border: 1px solid rgba(255, 69, 58, 0.26);
+}
+
+.attendance-chip-cancelado_con_aviso {
+  background-color: rgba(255, 159, 10, 0.12);
+  color: var(--color-warning);
+  border: 1px solid rgba(255, 159, 10, 0.3);
+}
+
+.btn-cancel-notice {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-cancel-notice:hover {
+  border-color: rgba(255, 159, 10, 0.5);
+  color: var(--color-warning);
+  background-color: rgba(255, 159, 10, 0.08);
+}
+
+/* =========================================
    CÓDIGO DE INVITACIÓN (SALA PRIVADA)
    ========================================= */
 .invite-lock-icon {

@@ -280,6 +280,18 @@ export default function App() {
   // Reuniones agendadas
   const [meetings, setMeetings] = useState([]);
 
+  // Asistencia por reunión: {id, meetingId, memberEmail, memberName, status, reportedBy, reportedAt}
+  // status: confirmado | asistio | no_show | cancelado_con_aviso
+  const [attendances, setAttendances] = useState([]);
+
+  // Tick por minuto: hace aparecer el prompt de asistencia cuando una sesión
+  // termina con la página abierta, sin necesidad de recargar
+  const [, setMinuteTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setMinuteTick(v => v + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
+
   // Sistema de notificaciones premium (toast)
   const [toasts, setToasts] = useState([]); // [{id, msg, type}]
   const [confirmModal, setConfirmModal] = useState(null); // {msg, onConfirm, onCancel}
@@ -390,6 +402,52 @@ export default function App() {
     setRoomInviteCode(code);
   }, [currentRoomId]);
 
+  // Modo demo local: reuniones y asistencia persisten en localStorage
+  const mockHydratedRef = React.useRef(false);
+  useEffect(() => {
+    if (!useMockDb) return;
+    try {
+      const m = JSON.parse(localStorage.getItem(`salesarena-mock-meetings-${currentRoomId}`) || '[]');
+      const a = JSON.parse(localStorage.getItem(`salesarena-mock-attendees-${currentRoomId}`) || '[]');
+      if (m.length) setMeetings(m);
+      if (a.length) setAttendances(a);
+    } catch { /* datos corruptos: se ignoran */ }
+    mockHydratedRef.current = true;
+  }, [currentRoomId]);
+
+  useEffect(() => {
+    if (!useMockDb || !mockHydratedRef.current) return;
+    localStorage.setItem(`salesarena-mock-meetings-${currentRoomId}`, JSON.stringify(meetings));
+    localStorage.setItem(`salesarena-mock-attendees-${currentRoomId}`, JSON.stringify(attendances));
+  }, [meetings, attendances, currentRoomId]);
+
+  // ¿La sesión ya terminó? (inicio + duración)
+  const meetingHasEnded = (meeting) => {
+    if (!meeting.startsAt) return false; // reuniones viejas sin timestamp: sin prompt
+    return Date.now() > new Date(meeting.startsAt).getTime() + (meeting.duration || 60) * 60000;
+  };
+
+  const meetingHasStarted = (meeting) => {
+    if (!meeting.startsAt) return true; // sin timestamp no se permite cancelar
+    return Date.now() >= new Date(meeting.startsAt).getTime();
+  };
+
+  // Reportes pendientes del usuario actual: por cada sesión terminada en la que
+  // participó, cada compañero que sigue en 'confirmado' (nadie reportó aún)
+  const pendingReports = !currentUser ? [] : meetings
+    .filter(m => m.id != null && meetingHasEnded(m))
+    .flatMap(m => {
+      const rows = attendances.filter(a => a.meetingId === m.id);
+      const myRow = rows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
+      if (!myRow || myRow.status === 'cancelado_con_aviso') return [];
+      return rows
+        .filter(a =>
+          a.memberEmail.toLowerCase() !== currentUser.email.toLowerCase() &&
+          a.status === 'confirmado'
+        )
+        .map(a => ({ meeting: m, attendance: a }));
+    });
+
   // ¿El código provisto coincide con el de la sala?
   const hasValidInvite = (code) =>
     !!roomInviteCode && (code || '').trim().toUpperCase() === roomInviteCode.toUpperCase();
@@ -469,12 +527,31 @@ export default function App() {
         .eq('room_id', currentRoomId);
       if (meetData) {
         setMeetings(meetData.map(d => ({
+          id: d.id,
           title: d.title,
           dateUtc: d.date_utc,
           duration: d.duration || 60,
           participants: d.participants,
           meetLink: d.meet_link,
+          startsAt: d.starts_at,
           status: 'Creado (Meet)'
+        })));
+      }
+
+      // 5. Fetch Asistencia (tabla meeting_attendees)
+      const { data: attData, error: attError } = await supabase
+        .from('meeting_attendees')
+        .select('*')
+        .eq('room_id', currentRoomId);
+      if (!attError && attData) {
+        setAttendances(attData.map(d => ({
+          id: d.id,
+          meetingId: d.meeting_id,
+          memberEmail: d.member_email,
+          memberName: d.member_name,
+          status: d.status,
+          reportedBy: d.reported_by,
+          reportedAt: d.reported_at
         })));
       }
     };
@@ -1311,27 +1388,77 @@ export default function App() {
     }
 
     const newMeeting = {
+      id: null,
       title,
       dateUtc: formatMeetingDateUtc(startDate, match.day),
       duration: 60,
       participants: match.participants,
       meetLink: meetUrl,
+      startsAt: startDate.toISOString(),
       status: 'Creado (Meet)'
     };
 
+    // Participantes con su email (para las filas de compromiso de asistencia)
+    const participantRows = match.participants.split(', ')
+      .map(name => {
+        const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
+        return found ? { name: found.name, email: found.email } : null;
+      })
+      .filter(Boolean);
+
     if (!useMockDb) {
-      const { error: insertError } = await supabase.from('meetings').insert({
+      const { data: inserted, error: insertError } = await supabase.from('meetings').insert({
         room_id: currentRoomId,
         title: newMeeting.title,
         date_utc: newMeeting.dateUtc,
         duration: newMeeting.duration,
         participants: newMeeting.participants,
-        meet_link: newMeeting.meetLink
-      });
-      if (insertError) {
+        meet_link: newMeeting.meetLink,
+        starts_at: newMeeting.startsAt
+      }).select().single();
+
+      if (insertError || !inserted) {
         // El evento de Calendar ya existe; avisar que no quedó registrado en la sala
-        showNotification('La reunión se creó en Google Calendar, pero no se pudo guardar en la sala: ' + insertError.message, 'error');
+        showNotification('La reunión se creó en Google Calendar, pero no se pudo guardar en la sala: ' + (insertError?.message || 'error desconocido'), 'error');
+      } else {
+        newMeeting.id = inserted.id;
+        // Compromiso de asistencia: una fila 'confirmado' por participante
+        const { data: attInserted, error: attError } = await supabase
+          .from('meeting_attendees')
+          .insert(participantRows.map(p => ({
+            meeting_id: inserted.id,
+            room_id: currentRoomId,
+            member_email: p.email,
+            member_name: p.name,
+            status: 'confirmado'
+          })))
+          .select();
+        if (attError) {
+          showNotification('La reunión se guardó, pero no se pudo registrar el compromiso de asistencia: ' + attError.message, 'error');
+        } else if (attInserted) {
+          setAttendances(prev => [...prev, ...attInserted.map(d => ({
+            id: d.id,
+            meetingId: d.meeting_id,
+            memberEmail: d.member_email,
+            memberName: d.member_name,
+            status: d.status,
+            reportedBy: d.reported_by,
+            reportedAt: d.reported_at
+          }))]);
+        }
       }
+    } else {
+      // Modo demo: ids locales
+      newMeeting.id = Date.now();
+      setAttendances(prev => [...prev, ...participantRows.map((p, i) => ({
+        id: newMeeting.id + i + 1,
+        meetingId: newMeeting.id,
+        memberEmail: p.email,
+        memberName: p.name,
+        status: 'confirmado',
+        reportedBy: null,
+        reportedAt: null
+      }))]);
     }
 
     setMeetings(prev => [...prev, newMeeting]);
@@ -1340,6 +1467,65 @@ export default function App() {
     setTimeout(() => {
       setSchedulingStatus(null);
     }, 3000);
+  };
+
+  // --- COMPROMISO DE ASISTENCIA ---
+  // El compañero reporta si el otro se conectó (asistio / no_show)
+  const reportAttendance = async (attendance, didAttend) => {
+    const newStatus = didAttend ? 'asistio' : 'no_show';
+    const reportedAt = new Date().toISOString();
+
+    if (!useMockDb) {
+      const { error } = await supabase.from('meeting_attendees')
+        .update({ status: newStatus, reported_by: currentUser.email, reported_at: reportedAt })
+        .eq('id', attendance.id);
+      if (error) {
+        showNotification('No se pudo guardar el reporte: ' + error.message, 'error');
+        return;
+      }
+    }
+
+    setAttendances(prev => prev.map(a =>
+      a.id === attendance.id
+        ? { ...a, status: newStatus, reportedBy: currentUser.email, reportedAt }
+        : a
+    ));
+    showNotification(
+      didAttend
+        ? `Confirmaste que ${attendance.memberName} asistió a la sesión.`
+        : `Reportaste que ${attendance.memberName} no se presentó.`,
+      'success'
+    );
+  };
+
+  // El propio usuario cancela su asistencia ANTES del inicio (no cuenta como no-show)
+  const cancelMyAttendance = async (meeting) => {
+    const mine = attendances.find(a =>
+      a.meetingId === meeting.id &&
+      a.memberEmail.toLowerCase() === currentUser.email.toLowerCase()
+    );
+    if (!mine || mine.status !== 'confirmado' || meetingHasStarted(meeting)) return;
+
+    const confirmed = await showConfirm(`¿Cancelar con aviso tu asistencia a "${meeting.title}"? Tus compañeros lo verán reflejado y no contará como ausencia sin aviso.`);
+    if (!confirmed) return;
+
+    const reportedAt = new Date().toISOString();
+    if (!useMockDb) {
+      const { error } = await supabase.from('meeting_attendees')
+        .update({ status: 'cancelado_con_aviso', reported_by: currentUser.email, reported_at: reportedAt })
+        .eq('id', mine.id);
+      if (error) {
+        showNotification('No se pudo cancelar: ' + error.message, 'error');
+        return;
+      }
+    }
+
+    setAttendances(prev => prev.map(a =>
+      a.id === mine.id
+        ? { ...a, status: 'cancelado_con_aviso', reportedBy: currentUser.email, reportedAt }
+        : a
+    ));
+    showNotification('Cancelaste tu asistencia con aviso.', 'success');
   };
 
   const showNotification = (msg, type = 'info') => {
@@ -1931,6 +2117,45 @@ export default function App() {
                 </button>
               </div>
 
+              {/* PROMPTS DE ASISTENCIA PENDIENTES */}
+              {pendingReports.length > 0 && (
+                <div className="attendance-prompts">
+                  {pendingReports.map(({ meeting, attendance }) => (
+                    <div className="attendance-prompt-card glass" key={attendance.id}>
+                      <div className="attendance-prompt-info">
+                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(attendance.memberName) }}>
+                          {getInitials(attendance.memberName)}
+                        </div>
+                        <div>
+                          <div className="attendance-prompt-question">
+                            ¿Se conectó <strong>{attendance.memberName}</strong> a la sesión?
+                          </div>
+                          <div className="attendance-prompt-meta">
+                            {meeting.title} · {meeting.dateUtc}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="attendance-prompt-actions">
+                        <button
+                          type="button"
+                          className="attendance-btn attendance-btn-yes"
+                          onClick={() => reportAttendance(attendance, true)}
+                        >
+                          <Check size={14} /> Sí, asistió
+                        </button>
+                        <button
+                          type="button"
+                          className="attendance-btn attendance-btn-no"
+                          onClick={() => reportAttendance(attendance, false)}
+                        >
+                          <X size={14} /> No se presentó
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* KPIs */}
               <div className="metrics-grid">
                 <div className="kpi-card glass glass-hover">
@@ -2079,20 +2304,52 @@ export default function App() {
                         <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet.</span>
                       </div>
                     ) : (
-                      meetings.map((meet, idx) => (
-                        <div className="meeting-item" key={idx}>
-                          <div className="meeting-info">
-                            <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
-                            <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
-                            <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Users size={10} /> {meet.participants}
-                            </span>
+                      meetings.map((meet, idx) => {
+                        const meetRows = attendances.filter(a => a.meetingId === meet.id);
+                        const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
+                        const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
+                        const statusRows = meetRows.filter(a => a.status !== 'confirmado');
+
+                        return (
+                          <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
+                            <div className="meeting-info">
+                              <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
+                              <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
+                              <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Users size={10} /> {meet.participants}
+                              </span>
+                              {statusRows.length > 0 && (
+                                <div className="attendance-chips">
+                                  {statusRows.map(a => (
+                                    <span key={a.id} className={`attendance-chip attendance-chip-${a.status}`}>
+                                      {a.status === 'asistio' && <Check size={9} />}
+                                      {a.status === 'no_show' && <X size={9} />}
+                                      {a.status === 'cancelado_con_aviso' && <AlertCircle size={9} />}
+                                      {a.memberName.split(' ')[0]}
+                                      {a.status === 'asistio' ? ' asistió' : a.status === 'no_show' ? ' no asistió' : ' canceló con aviso'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                              <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
+                                <Video size={12} /> Meet
+                              </a>
+                              {canCancel && (
+                                <button
+                                  type="button"
+                                  className="btn-cancel-notice"
+                                  onClick={() => cancelMyAttendance(meet)}
+                                  title="Cancela tu asistencia antes del inicio; no cuenta como ausencia"
+                                >
+                                  Cancelar con aviso
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
-                            <Video size={12} /> Meet
-                          </a>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
