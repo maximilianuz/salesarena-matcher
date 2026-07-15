@@ -7,16 +7,12 @@ import {
   Flame,
   Users,
   UserCheck,
-  CheckCircle,
   Video,
   Clock,
   Sparkles,
   MapPin,
   Check,
-  Plus,
-  RefreshCw,
   Trash2,
-  Calendar,
   AlertCircle,
   Sun,
   Moon,
@@ -24,8 +20,26 @@ import {
   Menu,
   X,
   Share2,
-  ExternalLink,
-  Copy
+  Copy,
+  LogOut,
+  Settings,
+  HelpCircle,
+  ChevronRight,
+  ChevronLeft,
+  Globe,
+  CalendarCheck,
+  CalendarDays,
+  Handshake,
+  Trophy,
+  Mail,
+  Pencil,
+  Save,
+  Eraser,
+  Target,
+  UserPlus,
+  Briefcase,
+  Sunrise,
+  Sunset
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -53,34 +67,64 @@ const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', '
 // Paises y Zonas Horarias
 const ZONAS = [
   // América
-  { country: 'Argentina', tz: 'America/Argentina/Buenos_Aires' },
-  { country: 'Chile', tz: 'America/Santiago' },
-  { country: 'Colombia', tz: 'America/Bogota' },
-  { country: 'México', tz: 'America/Mexico_City' },
-  { country: 'Estados Unidos (Este)', tz: 'America/New_York' },
-  { country: 'Estados Unidos (Pacífico)', tz: 'America/Los_Angeles' },
-  { country: 'Perú', tz: 'America/Lima' },
-  { country: 'Uruguay', tz: 'America/Montevideo' },
-  { country: 'Ecuador', tz: 'America/Guayaquil' },
-  { country: 'Paraguay', tz: 'America/Asuncion' },
-  { country: 'Bolivia', tz: 'America/La_Paz' },
-  { country: 'Costa Rica', tz: 'America/Costa_Rica' },
-  { country: 'Panamá', tz: 'America/Panama' },
-  { country: 'Venezuela', tz: 'America/Caracas' },
-  
+  { country: 'Argentina', tz: 'America/Argentina/Buenos_Aires', flag: '🇦🇷' },
+  { country: 'Chile', tz: 'America/Santiago', flag: '🇨🇱' },
+  { country: 'Colombia', tz: 'America/Bogota', flag: '🇨🇴' },
+  { country: 'México', tz: 'America/Mexico_City', flag: '🇲🇽' },
+  { country: 'Estados Unidos (Este)', tz: 'America/New_York', flag: '🇺🇸' },
+  { country: 'Estados Unidos (Pacífico)', tz: 'America/Los_Angeles', flag: '🇺🇸' },
+  { country: 'Perú', tz: 'America/Lima', flag: '🇵🇪' },
+  { country: 'Uruguay', tz: 'America/Montevideo', flag: '🇺🇾' },
+  { country: 'Ecuador', tz: 'America/Guayaquil', flag: '🇪🇨' },
+  { country: 'Paraguay', tz: 'America/Asuncion', flag: '🇵🇾' },
+  { country: 'Bolivia', tz: 'America/La_Paz', flag: '🇧🇴' },
+  { country: 'Costa Rica', tz: 'America/Costa_Rica', flag: '🇨🇷' },
+  { country: 'Panamá', tz: 'America/Panama', flag: '🇵🇦' },
+  { country: 'Venezuela', tz: 'America/Caracas', flag: '🇻🇪' },
+
   // Europa Central / Occidental
-  { country: 'España', tz: 'Europe/Madrid' },
-  { country: 'Alemania', tz: 'Europe/Berlin' },
-  { country: 'Francia', tz: 'Europe/Paris' },
-  { country: 'Italia', tz: 'Europe/Rome' },
-  { country: 'Reino Unido', tz: 'Europe/London' },
-  { country: 'Suiza', tz: 'Europe/Zurich' },
-  { country: 'Austria', tz: 'Europe/Vienna' },
-  { country: 'Polonia', tz: 'Europe/Warsaw' },
-  { country: 'Países Bajos', tz: 'Europe/Amsterdam' },
-  { country: 'Bélgica', tz: 'Europe/Brussels' },
-  { country: 'República Checa', tz: 'Europe/Prague' }
+  { country: 'España', tz: 'Europe/Madrid', flag: '🇪🇸' },
+  { country: 'Alemania', tz: 'Europe/Berlin', flag: '🇩🇪' },
+  { country: 'Francia', tz: 'Europe/Paris', flag: '🇫🇷' },
+  { country: 'Italia', tz: 'Europe/Rome', flag: '🇮🇹' },
+  { country: 'Reino Unido', tz: 'Europe/London', flag: '🇬🇧' },
+  { country: 'Suiza', tz: 'Europe/Zurich', flag: '🇨🇭' },
+  { country: 'Austria', tz: 'Europe/Vienna', flag: '🇦🇹' },
+  { country: 'Polonia', tz: 'Europe/Warsaw', flag: '🇵🇱' },
+  { country: 'Países Bajos', tz: 'Europe/Amsterdam', flag: '🇳🇱' },
+  { country: 'Bélgica', tz: 'Europe/Brussels', flag: '🇧🇪' },
+  { country: 'República Checa', tz: 'Europe/Prague', flag: '🇨🇿' }
 ];
+
+// Bandera del país (fallback a globo si no está en la lista)
+const getCountryFlag = (countryName) => {
+  if (!countryName) return '🌐';
+  const cleanName = countryName.trim().toLowerCase();
+  const matched = ZONAS.find(z =>
+    z.country.toLowerCase().includes(cleanName) ||
+    cleanName.includes(z.country.toLowerCase())
+  );
+  return matched ? matched.flag : '🌐';
+};
+
+// Iniciales para avatares (máx. 2 letras)
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+};
+
+// Color de avatar estable por nombre
+const AVATAR_COLORS = ['#5e5ce6', '#0a84ff', '#30d158', '#ff9f0a', '#ff375f', '#bf5af2', '#64d2ff', '#ffd60a'];
+const getAvatarColor = (name) => {
+  if (!name) return AVATAR_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+};
+
+// Nombre corto de la zona horaria (ciudad)
+const tzCity = (tz) => (tz || 'UTC').split('/').pop().replace(/_/g, ' ');
 
 const resolveTimezone = (countryName) => {
   if (!countryName) return 'UTC';
@@ -206,6 +250,33 @@ export default function App() {
   // Variables para arrastre en la grilla visual
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [dragMode, setDragMode] = useState(true); // true = pintar, false = borrar
+
+  // Rango horario visible en el editor (estilo Cal.com: horas útiles por defecto)
+  const [showAllHours, setShowAllHours] = useState(false);
+
+  // Guía de bienvenida (onboarding) para nuevos usuarios
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+
+  // Mostrar la guía automáticamente en el primer ingreso de cada usuario
+  useEffect(() => {
+    if (isLoggedIn && currentUser && !localStorage.getItem(`salesarena-guide-${currentUser.email.toLowerCase()}`)) {
+      setOnboardingStep(0);
+      setShowOnboarding(true);
+    }
+  }, [isLoggedIn, currentUser?.email]);
+
+  const closeOnboarding = () => {
+    if (currentUser) {
+      localStorage.setItem(`salesarena-guide-${currentUser.email.toLowerCase()}`, 'true');
+    }
+    setShowOnboarding(false);
+  };
+
+  const openOnboarding = () => {
+    setOnboardingStep(0);
+    setShowOnboarding(true);
+  };
 
   // --- MOTOR DE COINCIDENCIAS (REACT PORT) ---
   useEffect(() => {
@@ -1164,14 +1235,28 @@ export default function App() {
     setWizardGrid([]);
   };
 
-  const fillAllCells = () => {
-    const all = [];
-    for (let d = 0; d < 7; d++) {
-      for (let h = 0; h < 24; h++) {
-        all.push({ dayIdx: d, hour: h });
-      }
-    }
-    setWizardGrid(all);
+  // Presets rápidos de disponibilidad (se suman a la selección actual)
+  const applyPreset = (preset) => {
+    const slots = [];
+    const addRange = (days, from, to) => {
+      days.forEach(d => {
+        for (let h = from; h < to; h++) slots.push({ dayIdx: d, hour: h });
+      });
+    };
+    const WORKDAYS = [0, 1, 2, 3, 4];
+    const ALLDAYS = [0, 1, 2, 3, 4, 5, 6];
+
+    if (preset === 'work') addRange(WORKDAYS, 9, 18);
+    if (preset === 'mornings') addRange(ALLDAYS, 8, 12);
+    if (preset === 'evenings') addRange(ALLDAYS, 18, 22);
+
+    setWizardGrid(prev => {
+      const merged = [...prev];
+      slots.forEach(s => {
+        if (!merged.some(m => m.dayIdx === s.dayIdx && m.hour === s.hour)) merged.push(s);
+      });
+      return merged;
+    });
   };
 
   const handleTabClick = (tab) => {
@@ -1407,7 +1492,7 @@ export default function App() {
         {toasts.map(t => (
           <div key={t.id} className={`toast-item toast-${t.type}`}>
             <span className="toast-icon">
-              {t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : '🔗'}
+              {t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : 'i'}
             </span>
             <span className="toast-msg">{t.msg}</span>
             <button className="toast-close" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>✕</button>
@@ -1419,7 +1504,7 @@ export default function App() {
       {confirmModal && (
         <div className="confirm-overlay" role="dialog" aria-modal="true">
           <div className="confirm-card">
-            <div className="confirm-icon">⚠️</div>
+            <div className="confirm-icon"><AlertCircle size={36} /></div>
             <p className="confirm-msg">{confirmModal.msg}</p>
             <div className="confirm-actions">
               <button className="btn btn-outline" onClick={confirmModal.onCancel}>Cancelar</button>
@@ -1506,26 +1591,31 @@ export default function App() {
           </button>
         </div>
 
-        <div className="profile-widget">
-          <div className="profile-name">👤 {currentUser.name}</div>
-          <div className="profile-email">{currentUser.email}</div>
-          <div style={{ fontSize: '9px', color: 'var(--text-muted)', marginTop: '2px' }}>Zona: {currentUser.tz.split('/').pop().replace(/_/g, ' ')}</div>
-          <button 
-            type="button"
-            onClick={handleLogout} 
-            className="btn-small" 
-            style={{ 
-              marginTop: '10px', 
-              padding: '4px 8px', 
-              fontSize: '10px', 
-              width: '100%', 
-              backgroundColor: 'rgba(255, 69, 58, 0.12)', 
-              color: 'var(--color-danger)', 
-              border: '1px solid rgba(255, 69, 58, 0.2)' 
-            }}
-          >
-            Cerrar Sesión
-          </button>
+        <div className="profile-card">
+          <div className="profile-card-top">
+            <div className="profile-avatar" style={{ backgroundColor: getAvatarColor(currentUser.name) }}>
+              {getInitials(currentUser.name)}
+              <span className={`profile-status-dot ${currentUser.active ? 'on' : 'off'}`} title={currentUser.active ? 'Participando esta semana' : 'Inactivo esta semana'}></span>
+            </div>
+            <div className="profile-card-info">
+              <div className="profile-card-name">
+                {currentUser.name}
+                <span className="profile-flag" title={currentUser.country}>{getCountryFlag(currentUser.country)}</span>
+              </div>
+              <div className="profile-card-email">{currentUser.email}</div>
+              <div className="profile-card-tz">
+                <Globe size={10} /> {tzCity(currentUser.tz)}
+              </div>
+            </div>
+          </div>
+          <div className="profile-card-actions">
+            <button type="button" className="profile-action-btn" onClick={openOnboarding} title="Ver la guía de uso">
+              <HelpCircle size={13} /> Guía
+            </button>
+            <button type="button" className="profile-action-btn danger" onClick={handleLogout} title="Cerrar sesión">
+              <LogOut size={13} /> Salir
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -1551,27 +1641,14 @@ export default function App() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div 
+            <div
               onClick={() => setIsRoomModalOpen(true)}
-              className="glass" 
-              style={{ 
-                padding: '8px 16px', 
-                fontSize: '12px', 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: '8px', 
-                color: 'var(--color-primary)', 
-                borderColor: 'var(--border-color)',
-                cursor: 'pointer',
-                userSelect: 'none',
-                transition: 'opacity 0.2s',
-                hover: { opacity: 0.9 }
-              }}
+              className="glass room-chip"
               title="Gestionar salas"
             >
-              <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--color-primary)', borderRadius: '50%' }}></span>
+              <span className="room-indicator-dot"></span>
               <span>Sala Activa: <strong>{roomName}</strong></span>
-              <span style={{ marginLeft: '4px', fontSize: '10px', opacity: 0.8 }}>⚙️</span>
+              <Settings size={13} style={{ opacity: 0.75 }} />
             </div>
           </div>
         </header>
@@ -1629,8 +1706,11 @@ export default function App() {
                     boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
                   }}></div>
                   <div>
-                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)' }}>
-                      Mi Participación Semanal: {currentUser.active ? '🟢 ACTIVO' : '🔴 INACTIVO'}
+                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      Mi Participación Semanal:
+                      <span className={currentUser.active ? 'member-badge-active' : 'member-badge-inactive'}>
+                        {currentUser.active ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
                       {currentUser.active
@@ -1693,48 +1773,73 @@ export default function App() {
                 
                 {/* Left Col: Coincidencias */}
                 <div className="section-card glass">
-                  <h4 className="section-title">🔎 Mejores Horarios Coincidentes (Para esta semana)</h4>
+                  <h4 className="section-title">
+                    <Sparkles size={15} className="section-title-icon" />
+                    Mejores Horarios Coincidentes (Para esta semana)
+                  </h4>
                   <div className="matches-list">
                     {matches.length === 0 ? (
-                      <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
-                        <AlertCircle size={32} style={{ margin: '0 auto 10px auto', display: 'block' }} />
-                        No hay suficientes miembros cargados o coincidencias encontradas.
+                      <div className="empty-state">
+                        <AlertCircle size={30} />
+                        <span className="empty-state-title">Aún no hay coincidencias</span>
+                        <span className="empty-state-desc">Cuando dos o más integrantes carguen su disponibilidad, verás aquí los horarios en común.</span>
                       </div>
                     ) : (
                       matches.map((m, idx) => {
-                        const participantBadges = m.participants.split(', ').map(name => {
-                          const nameParts = name.split(' ');
-                          return nameParts[0] + (nameParts[1] ? ` ${nameParts[1][0]}.` : '');
-                        });
-                        
+                        const participantNames = m.participants.split(', ');
+                        const userIsIn = participantNames.some(n => n.toLowerCase() === currentUser.name.toLowerCase());
+
                         const localTimes = m.localDetail.split(' | ').map(item => {
                           const parts = item.split(': ');
                           return { name: parts[0], range: parts[1] };
                         });
 
                         return (
-                          <div className="match-card glass glass-hover" key={idx}>
+                          <div className={`match-card glass glass-hover ${userIsIn ? 'match-card-mine' : ''}`} key={idx}>
                             <div className="match-card-header">
                               <div className="match-card-time-group">
                                 <span className="match-card-day">{m.day}</span>
                                 <span className="match-card-time">{m.startStr.replace(' UTC', '')} - {m.endStr}</span>
                               </div>
-                              <span className="match-card-score-pill">
-                                {m.score}% Match
-                              </span>
-                            </div>
-                            
-                            <div className="match-card-body">
-                              <div className="match-section-label">👥 Integrantes disponibles</div>
-                              <div className="match-participants-flex">
-                                {participantBadges.map((badge, bIdx) => (
-                                  <span key={bIdx} className="match-participant-tag">
-                                    {badge}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {userIsIn && (
+                                  <span className="match-mine-badge" title="Tu disponibilidad coincide con este horario">
+                                    <Check size={11} /> Coincides
                                   </span>
-                                ))}
+                                )}
+                                <span className="match-card-score-pill">{m.score}% Match</span>
                               </div>
-                              
-                              <div className="match-section-label" style={{ marginTop: '10px' }}>🕒 Horarios locales</div>
+                            </div>
+
+                            <div className="match-score-bar">
+                              <div className="match-score-bar-fill" style={{ width: `${m.score}%` }}></div>
+                            </div>
+
+                            <div className="match-card-body">
+                              <div className="match-section-label">
+                                <Users size={11} /> Integrantes disponibles ({participantNames.length})
+                              </div>
+                              <div className="match-participants-flex">
+                                {participantNames.map((name, bIdx) => {
+                                  const memberData = members.find(mm => mm.name.toLowerCase() === name.toLowerCase());
+                                  const isMe = name.toLowerCase() === currentUser.name.toLowerCase();
+                                  const nameParts = name.split(' ');
+                                  const shortName = nameParts[0] + (nameParts[1] ? ` ${nameParts[1][0]}.` : '');
+                                  return (
+                                    <span key={bIdx} className={`match-participant-tag ${isMe ? 'me' : ''}`}>
+                                      <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(name) }}>
+                                        {getInitials(name)}
+                                      </span>
+                                      {isMe ? 'Tú' : shortName}
+                                      {memberData && <span className="participant-flag">{getCountryFlag(memberData.country)}</span>}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+
+                              <div className="match-section-label" style={{ marginTop: '10px' }}>
+                                <Clock size={11} /> Horarios locales
+                              </div>
                               <div className="match-times-grid">
                                 {localTimes.map((lt, lIdx) => (
                                   <div key={lIdx} className="match-time-pill">
@@ -1744,7 +1849,7 @@ export default function App() {
                                 ))}
                               </div>
                             </div>
-                            
+
                             <div className="match-card-footer">
                               <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => scheduleMeeting(idx)}>
                                 <Video size={14} /> Agendar en Google Calendar
@@ -1759,17 +1864,26 @@ export default function App() {
 
                 {/* Right Col: Historial / Meets */}
                 <div className="section-card glass">
-                  <h4 className="section-title">📅 Próximos Role-Plays Agendados</h4>
+                  <h4 className="section-title">
+                    <CalendarCheck size={15} className="section-title-icon" />
+                    Próximos Role-Plays Agendados
+                  </h4>
                   <div className="meetings-list">
                     {meetings.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No hay reuniones agendadas todavía.</p>
+                      <div className="empty-state">
+                        <CalendarDays size={30} />
+                        <span className="empty-state-title">Sin reuniones agendadas</span>
+                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet.</span>
+                      </div>
                     ) : (
                       meetings.map((meet, idx) => (
                         <div className="meeting-item" key={idx}>
                           <div className="meeting-info">
                             <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
                             <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
-                            <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>M: {meet.participants}</span>
+                            <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Users size={10} /> {meet.participants}
+                            </span>
                           </div>
                           <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
                             <Video size={12} /> Meet
@@ -1798,18 +1912,18 @@ export default function App() {
               {/* STEP 1: Bienvenida */}
               {wizardStep === 1 && (
                 <div>
-                  <div style={{ marginBottom: '8px', fontSize: '32px', filter: 'drop-shadow(0 0 14px rgba(10,132,255,0.35))' }}>🎯</div>
+                  <div className="wizard-hero-icon">
+                    <Target size={30} />
+                  </div>
                   <h3 className="wizard-title">¡Hola de nuevo, {currentUser.name}!</h3>
                   <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
-                  
+
                   <div className="wizard-options">
                     <button className="wizard-btn wizard-btn-primary" onClick={() => handleWizardParticipation(true)}>
-                      <span className="wizard-btn-icon">✓</span>
-                      Sí, participaré esta semana
+                      <Check size={16} /> Sí, participaré esta semana
                     </button>
                     <button className="wizard-btn wizard-btn-danger" onClick={() => handleWizardParticipation(false)}>
-                      <span className="wizard-btn-icon">✕</span>
-                      No puedo esta semana
+                      <X size={16} /> No puedo esta semana
                     </button>
                   </div>
                 </div>
@@ -1818,69 +1932,96 @@ export default function App() {
               {/* STEP 2: Usar Plantilla vs Carga manual */}
               {wizardStep === 2 && (
                 <div>
+                  <div className="wizard-hero-icon">
+                    <CalendarRange size={30} />
+                  </div>
                   <h3 className="wizard-title">Carga de Disponibilidad</h3>
                   <p className="wizard-desc">Elige si deseas restablecer tu disponibilidad desde tu plantilla base cargada o configurarlo a mano:</p>
-                  
+
                   <div className="wizard-options">
                     <button className="wizard-btn wizard-btn-primary" onClick={handleUseTemplate}>
-                      📅 Usar mi horario base habitual (Plantilla)
+                      <CalendarCheck size={16} /> Usar mi horario base habitual (Plantilla)
                     </button>
                     <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(3)}>
-                      ✏️ Cargar/Editar horarios específicos para esta semana
+                      <Pencil size={15} /> Cargar/Editar horarios específicos para esta semana
                     </button>
                     <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(1)}>
-                      Atrás
+                      <ChevronLeft size={15} /> Atrás
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 3: Grid Semanal */}
+              {/* STEP 3: Grid Semanal (estilo Cal.com) */}
               {wizardStep === 3 && (
                 <div className="editor-grid-container">
-                  <h3 className="wizard-title">Modificar mis Horarios</h3>
-                  <p className="wizard-desc" style={{ fontSize: '11px' }}>Arrastra o haz clic sobre el calendario para pintar las horas que tienes libres en tu hora local ({currentUser?.tz?.split('/').pop() || 'UTC'}):</p>
-                  
+                  <h3 className="wizard-title">Marca tu Disponibilidad</h3>
+                  <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
+                    Haz clic o arrastra sobre el calendario para pintar tus horas libres.
+                  </p>
+
+                  <div className="editor-toolbar">
+                    <span className="tz-chip" title="Tus horarios se guardan en esta zona horaria">
+                      <Globe size={12} /> {tzCity(currentUser?.tz)}
+                    </span>
+                    <span className="hours-counter">
+                      <Clock size={12} /> {wizardGrid.length} {wizardGrid.length === 1 ? 'hora seleccionada' : 'horas seleccionadas'}
+                    </span>
+                  </div>
+
+                  <div className="preset-bar">
+                    <button type="button" className="preset-btn" onClick={() => applyPreset('work')} title="Lunes a Viernes, 9:00 a 18:00">
+                      <Briefcase size={12} /> Laboral 9–18
+                    </button>
+                    <button type="button" className="preset-btn" onClick={() => applyPreset('mornings')} title="Todos los días, 8:00 a 12:00">
+                      <Sunrise size={12} /> Mañanas
+                    </button>
+                    <button type="button" className="preset-btn" onClick={() => applyPreset('evenings')} title="Todos los días, 18:00 a 22:00">
+                      <Sunset size={12} /> Noches
+                    </button>
+                    <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
+                      <Eraser size={12} /> Limpiar
+                    </button>
+                  </div>
+
                   <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
                     <table className="editor-table">
                       <thead>
-                        <tr style={{ backgroundColor: 'var(--bg-sidebar)', fontSize: '9px' }}>
-                          <th style={{ padding: '6px', color: 'var(--text-main)' }}>Hora</th>
-                          <th style={{ color: 'var(--text-main)' }}>Lun</th>
-                          <th style={{ color: 'var(--text-main)' }}>Mar</th>
-                          <th style={{ color: 'var(--text-main)' }}>Mié</th>
-                          <th style={{ color: 'var(--text-main)' }}>Jue</th>
-                          <th style={{ color: 'var(--text-main)' }}>Vie</th>
-                          <th style={{ color: 'var(--text-main)' }}>Sáb</th>
-                          <th style={{ color: 'var(--text-main)' }}>Dom</th>
+                        <tr>
+                          <th className="editor-th editor-th-hour">Hora</th>
+                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d, i) => (
+                            <th key={d} className={`editor-th ${i >= 5 ? 'weekend' : ''}`}>{d}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {Array.from({ length: 24 }).map((_, h) => (
-                          <tr key={h}>
-                            <td className="hour-label" style={{ height: '24px', fontSize: '9px', textAlign: 'center', backgroundColor: 'var(--bg-sidebar)', color: 'var(--text-muted)', borderRight: '1px solid var(--border-color)', borderBottom: '1px solid var(--border-color)' }}>{String(h).padStart(2, '0')}:00</td>
-                            {Array.from({ length: 7 }).map((_, d) => {
-                              const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
-                              return (
-                                <td
-                                  key={d}
-                                  className={`editor-cell ${isActive ? 'active' : ''}`}
-                                  onMouseDown={() => handleCellMouseDown(d, h)}
-                                  onMouseEnter={() => handleCellMouseEnter(d, h)}
-                                  onMouseUp={() => setIsMouseDown(false)}
-                                ></td>
-                              );
-                            })}
-                          </tr>
-                        ))}
+                        {Array.from({ length: 24 }).map((_, h) => {
+                          if (!showAllHours && (h < 6)) return null;
+                          return (
+                            <tr key={h}>
+                              <td className="editor-hour-label">{String(h).padStart(2, '0')}:00</td>
+                              {Array.from({ length: 7 }).map((_, d) => {
+                                const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
+                                return (
+                                  <td
+                                    key={d}
+                                    className={`editor-cell ${isActive ? 'active' : ''}`}
+                                    onMouseDown={() => handleCellMouseDown(d, h)}
+                                    onMouseEnter={() => handleCellMouseEnter(d, h)}
+                                    onMouseUp={() => setIsMouseDown(false)}
+                                  ></td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
-                  <div className="actions-bar">
-                    <button className="btn-small" onClick={clearAllCells}>Limpiar Grilla</button>
-                    <button className="btn-small" onClick={fillAllCells}>Marcar Todo</button>
-                  </div>
+                  <button type="button" className="show-hours-toggle" onClick={() => setShowAllHours(!showAllHours)}>
+                    {showAllHours ? 'Ocultar madrugada (00:00–06:00)' : 'Mostrar madrugada (00:00–06:00)'}
+                  </button>
 
                   <div className="checkbox-container" style={{ margin: '4px 0' }}>
                     <input
@@ -1889,14 +2030,16 @@ export default function App() {
                       checked={saveAsTemplate}
                       onChange={(e) => setSaveAsTemplate(e.target.checked)}
                     />
-                    <label htmlFor="saveTemplate" style={{ margin: 0 }}>💾 Guardar como mi Plantilla Base habitual</label>
+                    <label htmlFor="saveTemplate" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Save size={13} /> Guardar como mi Plantilla Base habitual
+                    </label>
                   </div>
 
                   <button className="wizard-btn wizard-btn-primary" onClick={saveWizardGrid}>
-                    Guardar Horarios
+                    <Check size={16} /> Guardar Horarios
                   </button>
                   <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(2)}>
-                    Atrás
+                    <ChevronLeft size={15} /> Atrás
                   </button>
                 </div>
               )}
@@ -1909,8 +2052,12 @@ export default function App() {
             <div className="section-card glass" style={{ maxWidth: '100%' }}>
               <div className="heatmap-container">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px' }}>🔥 Mapa de Calor Colectivo</h3>
-                  <span style={{ fontSize: '11px', color: 'var(--color-primary)' }}>Hora local de {currentUser?.name || ''} ({currentUser?.tz?.split('/').pop().replace(/_/g, ' ')})</span>
+                  <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Flame size={17} className="section-title-icon" /> Mapa de Calor Colectivo
+                  </h3>
+                  <span className="tz-chip">
+                    <Globe size={12} /> Hora local de {currentUser?.name?.split(' ')[0] || ''} ({tzCity(currentUser?.tz)})
+                  </span>
                 </div>
                 <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
                   El color verde muestra cuántas personas están disponibles en cada bloque. Pasa el cursor para ver los nombres.
@@ -1960,7 +2107,10 @@ export default function App() {
           {activeTab === 'affinity' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div className="section-card glass">
-                <h4 className="section-title">🤝 Solapamiento Horario por Parejas</h4>
+                <h4 className="section-title">
+                  <Handshake size={15} className="section-title-icon" />
+                  Solapamiento Horario por Parejas
+                </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
                   El valor muestra el porcentaje de solapamiento relativo de horas disponibles en común. Verde = excelente afinidad horaria.
                 </p>
@@ -2006,7 +2156,10 @@ export default function App() {
 
               {/* Best Partners List */}
               <div className="section-card glass">
-                <h4 className="section-title">🏅 Compañeros con Mayor Afinidad</h4>
+                <h4 className="section-title">
+                  <Trophy size={15} className="section-title-icon" />
+                  Compañeros con Mayor Afinidad
+                </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {affinity.map((row, i) => {
                     const sortedStats = [...row.stats]
@@ -2015,8 +2168,13 @@ export default function App() {
                       .slice(0, 2);
 
                     return (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '4px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>👤 {row.name}</span>
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '4px' }}>
+                        <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(row.name) }}>
+                            {getInitials(row.name)}
+                          </span>
+                          {row.name}
+                        </span>
                         <span style={{ color: 'var(--text-muted)', fontSize: '12.5px' }}>
                           {sortedStats.length > 0
                             ? sortedStats.map(s => `${s.name.split(' ')[0]} (${s.pct}%)`).join('   ·   ')
@@ -2036,19 +2194,26 @@ export default function App() {
               
               {/* Left Col: List of Members */}
               <div className="section-card glass">
-                <h4 className="section-title">👥 Miembros Registrados</h4>
+                <h4 className="section-title">
+                  <Users size={15} className="section-title-icon" />
+                  Miembros Registrados
+                </h4>
                 <div className="members-list-card">
                   {members.map((m, idx) => (
                     <div className="member-row" key={idx}>
+                      <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
+                        {getInitials(m.name)}
+                      </div>
                       <div className="member-row-info">
                         <span className="member-row-name">
                           {m.name}
+                          <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
                           <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
                             {m.active ? 'Participa' : 'Excluido'}
                           </span>
                         </span>
-                        <span className="member-row-details">📧 {m.email}</span>
-                        <span className="member-row-details">📍 {m.country} ({(m.tz || 'UTC').split('/').pop().replace(/_/g, ' ')})</span>
+                        <span className="member-row-details"><Mail size={11} /> {m.email}</span>
+                        <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
                       </div>
                       
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
@@ -2081,7 +2246,10 @@ export default function App() {
 
               {/* Right Col: Add Member Form */}
               <div className="section-card glass" style={{ height: 'fit-content' }}>
-                <h4 className="section-title">➕ Agregar Nuevo Role-Player</h4>
+                <h4 className="section-title">
+                  <UserPlus size={15} className="section-title-icon" />
+                  Agregar Nuevo Role-Player
+                </h4>
                 <form className="add-member-form" onSubmit={handleAddMember}>
                   <div className="form-group">
                     <label htmlFor="mem-name" style={{ fontSize: '11px', fontWeight: '600' }}>Nombre Completo</label>
@@ -2137,7 +2305,7 @@ export default function App() {
                   </div>
 
                   <button type="submit" className="btn btn-indigo" style={{ marginTop: '8px', width: '100%' }}>
-                    <Plus size={16} /> Agregar a la Sala
+                    <UserPlus size={16} /> Agregar a la Sala
                   </button>
                 </form>
               </div>
@@ -2232,21 +2400,21 @@ export default function App() {
           }}>
             {/* Header del Modal */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)' }}>
-                ⚙️ Gestión de Salas
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={17} className="section-title-icon" /> Gestión de Salas
               </h3>
-              <button 
+              <button
                 onClick={() => setIsRoomModalOpen(false)}
                 style={{
                   background: 'none',
                   border: 'none',
                   color: 'var(--text-muted)',
-                  fontSize: '20px',
                   cursor: 'pointer',
-                  padding: '4px'
+                  padding: '4px',
+                  display: 'flex'
                 }}
               >
-                ✕
+                <X size={18} />
               </button>
             </div>
 
@@ -2348,6 +2516,82 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* GUÍA DE BIENVENIDA (ONBOARDING) */}
+      {showOnboarding && (() => {
+        const steps = [
+          {
+            icon: <ChessKnightIcon size={44} />,
+            title: `¡Bienvenido, ${currentUser.name.split(' ')[0]}!`,
+            desc: 'Sales-Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad horaria de todos, sin importar en qué país estén. Esta mini guía te muestra cómo funciona en 3 pasos.'
+          },
+          {
+            icon: <CalendarRange size={34} />,
+            title: '1 · Carga tu disponibilidad',
+            desc: 'Entra a "Cargar Disponibilidad" y pinta en el calendario las horas libres de tu semana (en tu hora local). Puedes usar presets rápidos o guardar tu horario como plantilla para reutilizarlo cada semana.'
+          },
+          {
+            icon: <Sparkles size={34} />,
+            title: '2 · Descubre las coincidencias',
+            desc: 'El motor cruza automáticamente los horarios de todo el equipo. En el Panel de Control verás los mejores horarios en común, con el % de match y la etiqueta "Coincides" cuando tú estás incluido.'
+          },
+          {
+            icon: <Video size={34} />,
+            title: '3 · Agenda y comparte',
+            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet para todos. Invita a más compañeros compartiendo el link de tu sala desde el Panel de Control.'
+          }
+        ];
+        const step = steps[onboardingStep];
+        const isLast = onboardingStep === steps.length - 1;
+
+        return (
+          <div className="onboarding-overlay" role="dialog" aria-modal="true">
+            <div className="onboarding-card glass">
+              <button className="onboarding-close" onClick={closeOnboarding} title="Cerrar guía">
+                <X size={16} />
+              </button>
+
+              <div className={`onboarding-icon ${onboardingStep === 0 ? 'brand' : ''}`}>
+                {step.icon}
+              </div>
+              <h3 className="onboarding-title">{step.title}</h3>
+              <p className="onboarding-desc">{step.desc}</p>
+
+              <div className="onboarding-dots">
+                {steps.map((_, i) => (
+                  <button
+                    key={i}
+                    className={`onboarding-dot ${i === onboardingStep ? 'active' : ''}`}
+                    onClick={() => setOnboardingStep(i)}
+                    aria-label={`Paso ${i + 1}`}
+                  />
+                ))}
+              </div>
+
+              <div className="onboarding-actions">
+                {onboardingStep > 0 ? (
+                  <button className="btn btn-outline" onClick={() => setOnboardingStep(onboardingStep - 1)}>
+                    <ChevronLeft size={14} /> Atrás
+                  </button>
+                ) : (
+                  <button className="btn btn-outline" onClick={closeOnboarding}>
+                    Saltar guía
+                  </button>
+                )}
+                {isLast ? (
+                  <button className="btn btn-indigo" onClick={() => { closeOnboarding(); setActiveTab('wizard'); setWizardStep(1); }}>
+                    <CalendarCheck size={14} /> Cargar mi disponibilidad
+                  </button>
+                ) : (
+                  <button className="btn btn-indigo" onClick={() => setOnboardingStep(onboardingStep + 1)}>
+                    Siguiente <ChevronRight size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
