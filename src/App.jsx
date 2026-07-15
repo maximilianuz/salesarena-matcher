@@ -40,7 +40,8 @@ import {
   Briefcase,
   Sunrise,
   Sunset,
-  Lock
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -173,6 +174,15 @@ const resolveTimezone = (countryName) => {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Código de invitación de sala: 6 caracteres alfanuméricos en mayúscula
+const generateInviteCode = () => {
+  let code = '';
+  while (code.length < 6) {
+    code += Math.random().toString(36).replace(/[^a-z0-9]/g, '');
+  }
+  return code.substring(0, 6).toUpperCase();
+};
+
 // Fecha/hora UTC real de la próxima ocurrencia del match.
 // match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
 const getNextMatchDateUtc = (match) => {
@@ -205,17 +215,6 @@ const getRoomIdFromUrl = () => {
   return match ? match[1] : null;
 };
 
-const slugifyRoomName = (name) => {
-  if (!name) return 'grupo-a';
-  const clean = name.toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/\s+/g, '-');
-  return clean || 'grupo-a';
-};
-
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -242,8 +241,14 @@ export default function App() {
   });
 
   // Estado del flujo de Login/Registro
-  const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form
+  const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form, 3: Código de invitación
   const [loginEmail, setLoginEmail] = useState('');
+
+  // Código de invitación de la sala (protección de acceso)
+  const [roomInviteCode, setRoomInviteCode] = useState('');
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [urlInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
   const [loginName, setLoginName] = useState('');
   const [loginCountry, setLoginCountry] = useState('Argentina');
   const [customLoginCountry, setCustomLoginCountry] = useState('');
@@ -368,15 +373,26 @@ export default function App() {
     }
   }, [theme]);
 
-  // Sincronizar automáticamente la URL del navegador con el nombre de la sala
+  // Nota: la URL del navegador refleja siempre currentRoomId. Renombrar o crear
+  // salas redirige explícitamente; no se reescribe la URL con el nombre
+  // slugificado porque en salas con nombre por defecto ("Sala Grupo-a") ese
+  // slug apunta a una sala distinta y rompía el refresh y los links copiados.
+
+  // Código de invitación en modo demo local (sin Supabase): persistido por sala
   useEffect(() => {
-    if (roomName) {
-      const targetSlug = slugifyRoomName(roomName);
-      if (targetSlug && window.location.pathname !== `/room/${targetSlug}`) {
-        window.history.replaceState(null, '', `/room/${targetSlug}`);
-      }
+    if (!useMockDb) return;
+    const key = `salesarena-invite-${currentRoomId}`;
+    let code = localStorage.getItem(key);
+    if (!code) {
+      code = generateInviteCode();
+      localStorage.setItem(key, code);
     }
-  }, [roomName]);
+    setRoomInviteCode(code);
+  }, [currentRoomId]);
+
+  // ¿El código provisto coincide con el de la sala?
+  const hasValidInvite = (code) =>
+    !!roomInviteCode && (code || '').trim().toUpperCase() === roomInviteCode.toUpperCase();
 
   // --- REAL-TIME DATA SYNCHRONIZATION WITH SUPABASE ---
   useEffect(() => {
@@ -392,12 +408,29 @@ export default function App() {
 
       if (roomError || !roomData) {
         const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
+        const newCode = generateInviteCode();
         await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
         setRoomName(defaultName);
         setRenameRoomInput(defaultName);
+        // Asignar código de invitación (si la columna aún no existe, se ignora
+        // el error y la sala queda sin protección hasta correr la migración)
+        const { error: codeError } = await supabase.from('rooms')
+          .update({ invite_code: newCode })
+          .eq('id', currentRoomId);
+        if (!codeError) setRoomInviteCode(newCode);
       } else {
         setRoomName(roomData.name);
         setRenameRoomInput(roomData.name);
+        if (roomData.invite_code) {
+          setRoomInviteCode(roomData.invite_code);
+        } else {
+          // Sala creada antes de la migración: generar código ahora
+          const newCode = generateInviteCode();
+          const { error: codeError } = await supabase.from('rooms')
+            .update({ invite_code: newCode })
+            .eq('id', currentRoomId);
+          if (!codeError) setRoomInviteCode(newCode);
+        }
       }
 
       // 2. Fetch Members
@@ -495,12 +528,31 @@ export default function App() {
         localStorage.setItem('salesarena-logged', 'true');
         localStorage.setItem('salesarena-user', JSON.stringify(userObj));
       } else {
-        setLoginStep(2);
+        // Usuario nuevo: validar acceso a la sala por código de invitación.
+        // Se consulta el código directo de la DB para evitar closures viejos.
+        const { count } = await supabase
+          .from('members')
+          .select('*', { count: 'exact', head: true })
+          .eq('room_id', currentRoomId);
+        const { data: roomRow } = await supabase
+          .from('rooms')
+          .select('invite_code')
+          .eq('id', currentRoomId)
+          .maybeSingle();
+        const realCode = roomRow?.invite_code || '';
+        const isFounder = !count; // sala vacía: el primer miembro entra sin código
+        const inviteOk = (urlInviteCode || '').trim().toUpperCase() === realCode.toUpperCase();
+
+        if (isFounder || !realCode || inviteOk) {
+          setLoginStep(2);
+        } else {
+          setLoginStep(3);
+        }
         setIsLoggedIn(false);
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
-      setLoginStep(2);
+      setLoginStep(2); // el guard de handleProfileRegisterSubmit re-valida el código
       setIsLoggedIn(false);
     }
   };
@@ -817,13 +869,39 @@ export default function App() {
       localStorage.setItem('salesarena-user', JSON.stringify(existing));
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
+      // Usuario nuevo: la sala vacía no exige código (fundador);
+      // con miembros existentes se requiere invitación válida
+      const isFounder = members.length === 0;
+      if (isFounder || !roomInviteCode || hasValidInvite(urlInviteCode)) {
+        setLoginStep(2);
+      } else {
+        setLoginStep(3);
+      }
+    }
+  };
+
+  const handleInviteCodeSubmit = (e) => {
+    e.preventDefault();
+    if (hasValidInvite(inviteCodeInput)) {
+      setInviteError('');
       setLoginStep(2);
+    } else {
+      setInviteError('Código incorrecto. Pídele el código vigente a quien administra la sala.');
     }
   };
 
   const handleProfileRegisterSubmit = async (e) => {
     e.preventDefault();
     if (!loginName || !loginCountry) return;
+
+    // Guard de acceso: sin código válido no se puede registrar en una sala
+    // protegida que ya tiene miembros (defensa en profundidad del paso 3)
+    const inviteOk = members.length === 0 || !roomInviteCode ||
+      hasValidInvite(urlInviteCode) || hasValidInvite(inviteCodeInput);
+    if (!inviteOk) {
+      setLoginStep(3);
+      return;
+    }
 
     const finalCountry = loginCountry === 'Otro' ? customLoginCountry.trim() : loginCountry;
     const finalTz = resolveTimezone(finalCountry);
@@ -901,6 +979,10 @@ export default function App() {
       if (newSlug !== currentRoomId) {
         // 1. Crear o actualizar la nueva sala con el slug correcto
         await supabase.from('rooms').upsert({ id: newSlug, name: nextName });
+        // Conservar el código de invitación en el nuevo slug
+        if (roomInviteCode) {
+          await supabase.from('rooms').update({ invite_code: roomInviteCode }).eq('id', newSlug);
+        }
         // 2. Migrar los registros vinculados a la nueva sala
         await supabase.from('members').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('availabilities').update({ room_id: newSlug }).eq('room_id', currentRoomId);
@@ -916,9 +998,12 @@ export default function App() {
     }
 
     if (newSlug !== currentRoomId) {
+      if (useMockDb && roomInviteCode) {
+        localStorage.setItem(`salesarena-invite-${newSlug}`, roomInviteCode);
+      }
       showNotification(`¡Sala renombrada a "${nextName}"! Actualizando enlace a /room/${newSlug}...`);
       setIsRoomModalOpen(false);
-      window.location.href = `/room/${newSlug}`;
+      window.location.href = `/room/${newSlug}${roomInviteCode ? `?invite=${roomInviteCode}` : ''}`;
     } else {
       showNotification(`Sala renombrada con éxito a "${nextName}"`);
       setIsRoomModalOpen(false);
@@ -942,6 +1027,8 @@ export default function App() {
       return;
     }
 
+    const newCode = generateInviteCode();
+
     if (!useMockDb) {
       // 1. Create the room in Supabase
       const { error } = await supabase.from('rooms').insert({ id: slug, name: rawName });
@@ -949,14 +1036,20 @@ export default function App() {
         showNotification('Error al crear sala en base de datos: ' + error.message);
         return;
       }
+      // 2. Asignar código de invitación (se ignora si la columna aún no existe)
+      if (!error) {
+        await supabase.from('rooms').update({ invite_code: newCode }).eq('id', slug);
+      }
+    } else {
+      localStorage.setItem(`salesarena-invite-${slug}`, newCode);
     }
 
     showNotification(`¡Sala "${rawName}" creada con éxito! Redirigiendo...`);
     setIsRoomModalOpen(false);
     setNewRoomNameInput('');
-    
-    // Redirect browser to the new room URL
-    window.location.href = `/room/${slug}`;
+
+    // Redirect browser to the new room URL (con invitación para el creador)
+    window.location.href = `/room/${slug}?invite=${newCode}`;
   };
 
   const handleDeleteRoom = async () => {
@@ -982,12 +1075,34 @@ export default function App() {
     window.location.href = `/room/grupo-a`;
   };
 
+  // El enlace de invitación apunta SIEMPRE al id real de la sala (no al nombre
+  // slugificado, que puede diferir en salas con nombre por defecto)
+  const buildInviteUrl = () => {
+    return `${window.location.origin}/room/${currentRoomId}${roomInviteCode ? `?invite=${roomInviteCode}` : ''}`;
+  };
+
+  const handleRegenerateInviteCode = async () => {
+    const newCode = generateInviteCode();
+    if (!useMockDb) {
+      const { error } = await supabase.from('rooms')
+        .update({ invite_code: newCode })
+        .eq('id', currentRoomId);
+      if (error) {
+        showNotification('No se pudo regenerar el código: ' + error.message, 'error');
+        return;
+      }
+    } else {
+      localStorage.setItem(`salesarena-invite-${currentRoomId}`, newCode);
+    }
+    setRoomInviteCode(newCode);
+    showNotification('Código regenerado. Los enlaces de invitación anteriores dejaron de funcionar.', 'success');
+  };
+
   const handleCopyRoomInvite = () => {
-    const slug = slugifyRoomName(roomName);
-    const inviteUrl = `${window.location.origin}/room/${slug}`;
+    const inviteUrl = buildInviteUrl();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(inviteUrl).then(() => {
-        showNotification(`🔗 Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\n¡Cualquier persona que entre con este link irá directo al registro inicial de esta sala!`);
+        showNotification(`Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\nIncluye el código de invitación: quien entre con este link va directo al registro de esta sala.`, 'success');
       }).catch(() => {
         prompt('Copia el enlace para compartir tu sala:', inviteUrl);
       });
@@ -1368,6 +1483,11 @@ export default function App() {
                   <span className="room-indicator-dot"></span>
                   <span>Sala de coordinación: <strong>{roomName}</strong></span>
                 </div>
+                {urlInviteCode && hasValidInvite(urlInviteCode) && (
+                  <div className="invite-valid-badge">
+                    <Check size={11} /> Invitación válida detectada
+                  </div>
+                )}
                 <h2 style={{ margin: '10px 0 6px 0', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta de Google para ingresar al coordinador de roleplays.</p>
               </div>
@@ -1491,6 +1611,51 @@ export default function App() {
                 </button>
                 <button type="submit" className="btn btn-indigo" style={{ flex: 2, padding: '10px', fontWeight: '600' }}>
                   Finalizar Registro
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* STEP 3: CÓDIGO DE INVITACIÓN (SALA PROTEGIDA) */}
+          {loginStep === 3 && (
+            <form onSubmit={handleInviteCodeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div className="invite-lock-icon">
+                  <Lock size={26} />
+                </div>
+                <h2 style={{ margin: '14px 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Sala Privada</h2>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                  Para unirte a <strong>{roomName}</strong> necesitas un código de invitación.
+                  Pídeselo a la persona que te compartió la sala, o usa su enlace de invitación completo.
+                </p>
+              </div>
+
+              <div className="form-group" style={{ textAlign: 'left' }}>
+                <label htmlFor="invite-code" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Código de Invitación</label>
+                <input
+                  type="text"
+                  id="invite-code"
+                  className="form-input invite-code-input"
+                  value={inviteCodeInput}
+                  onChange={(e) => { setInviteCodeInput(e.target.value.toUpperCase()); setInviteError(''); }}
+                  placeholder="······"
+                  maxLength={6}
+                  autoComplete="off"
+                  required
+                />
+                {inviteError && (
+                  <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <AlertCircle size={13} /> {inviteError}
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" className="btn btn-outline" style={{ flex: 1, padding: '10px' }} onClick={() => { setLoginStep(1); setInviteError(''); setInviteCodeInput(''); }}>
+                  Atrás
+                </button>
+                <button type="submit" className="btn btn-indigo" style={{ flex: 2, padding: '10px', fontWeight: '600' }}>
+                  Validar Código
                 </button>
               </div>
             </form>
@@ -2491,7 +2656,7 @@ export default function App() {
                   type="text"
                   readOnly
                   className="form-input"
-                  value={`${window.location.origin}/room/${slugifyRoomName(roomName)}`}
+                  value={buildInviteUrl()}
                   style={{ flex: 1, padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-card)' }}
                 />
                 <button
@@ -2502,6 +2667,25 @@ export default function App() {
                 >
                   <Copy size={14} />
                   Copiar
+                </button>
+              </div>
+
+              {/* Código de invitación de la sala */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Lock size={12} /> Código de acceso:
+                  </span>
+                  <span className="invite-code-chip">{roomInviteCode || 'Sin protección'}</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={handleRegenerateInviteCode}
+                  title="Genera un código nuevo e invalida los enlaces anteriores"
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <RefreshCw size={12} /> Regenerar
                 </button>
               </div>
             </div>

@@ -1454,6 +1454,61 @@ input:checked + .switch-slider:before {
 }
 
 /* =========================================
+   CÓDIGO DE INVITACIÓN (SALA PRIVADA)
+   ========================================= */
+.invite-lock-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255, 159, 10, 0.14), rgba(255, 149, 0, 0.18));
+  border: 1px solid rgba(255, 159, 10, 0.32);
+  color: var(--color-warning);
+  box-shadow: 0 6px 18px rgba(255, 159, 10, 0.16);
+}
+
+.invite-code-input {
+  text-align: center;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 20px !important;
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-transform: uppercase;
+}
+
+.invite-code-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-family: 'SF Mono', 'Cascadia Code', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  background-color: rgba(94, 92, 230, 0.1);
+  border: 1px solid rgba(94, 92, 230, 0.26);
+  color: var(--color-primary);
+  user-select: all;
+}
+
+.invite-valid-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: rgba(48, 209, 88, 0.12);
+  border: 1px solid rgba(48, 209, 88, 0.3);
+  color: #30d158;
+}
+
+/* =========================================
    GUÍA DE BIENVENIDA (ONBOARDING)
    ========================================= */
 .onboarding-overlay {
