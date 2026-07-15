@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
+import { buildWeeklyPairs, currentWeekStartISO } from './matcher';
 import {
   LayoutDashboard,
   CalendarRange,
@@ -41,7 +42,8 @@ import {
   Sunrise,
   Sunset,
   Lock,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -127,6 +129,26 @@ const getAvatarColor = (name) => {
 
 // Nombre corto de la zona horaria (ciudad)
 const tzCity = (tz) => (tz || 'UTC').split('/').pop().replace(/_/g, ' ');
+
+// Badge de confiabilidad: % de asistencia en sesiones reportadas (60 días)
+const ReliabilityBadge = ({ pct }) => {
+  if (pct === null || pct === undefined) {
+    return (
+      <span className="reliability-badge reliability-new" title="Sin historial de sesiones reportadas en los últimos 60 días">
+        Nuevo
+      </span>
+    );
+  }
+  const tier = pct >= 80 ? 'high' : pct >= 50 ? 'mid' : 'low';
+  return (
+    <span
+      className={`reliability-badge reliability-${tier}`}
+      title={`Confiabilidad: ${pct}% de asistencia sobre sesiones reportadas en los últimos 60 días`}
+    >
+      <ShieldCheck size={10} /> {pct}%
+    </span>
+  );
+};
 
 // Offset real en minutos respecto de UTC para cualquier zona IANA.
 // Usa Intl (nativo del navegador) y refleja automáticamente el horario
@@ -284,6 +306,10 @@ export default function App() {
   // status: confirmado | asistio | no_show | cancelado_con_aviso
   const [attendances, setAttendances] = useState([]);
 
+  // Propuestas de emparejamiento 1:1 (doble opt-in). Cada usuario ve SOLO la suya.
+  // {id, weekStart, aEmail, aName, bEmail, bName, slot, statusA, statusB, status, respondBy, meetingId}
+  const [proposals, setProposals] = useState([]);
+
   // Tick por minuto: hace aparecer el prompt de asistencia cuando una sesión
   // termina con la página abierta, sin necesidad de recargar
   const [, setMinuteTick] = useState(0);
@@ -311,8 +337,7 @@ export default function App() {
   const [schedulingStatus, setSchedulingStatus] = useState(null); // null | 'loading' | 'authenticating' | 'creating' | 'success'
   const [scheduledDetails, setScheduledDetails] = useState(null); // { title, attendeesCount }
 
-  // Resultados del Motor calculados dinámicamente
-  const [matches, setMatches] = useState([]);
+  // Resultados agregados calculados dinámicamente (heatmap y afinidad)
   const [heatmap, setHeatmap] = useState([]); // 7x24 grid
   const [affinity, setAffinity] = useState([]);
 
@@ -402,15 +427,17 @@ export default function App() {
     setRoomInviteCode(code);
   }, [currentRoomId]);
 
-  // Modo demo local: reuniones y asistencia persisten en localStorage
+  // Modo demo local: reuniones, asistencia y propuestas persisten en localStorage
   const mockHydratedRef = React.useRef(false);
   useEffect(() => {
     if (!useMockDb) return;
     try {
       const m = JSON.parse(localStorage.getItem(`salesarena-mock-meetings-${currentRoomId}`) || '[]');
       const a = JSON.parse(localStorage.getItem(`salesarena-mock-attendees-${currentRoomId}`) || '[]');
+      const p = JSON.parse(localStorage.getItem(`salesarena-mock-proposals-${currentRoomId}`) || '[]');
       if (m.length) setMeetings(m);
       if (a.length) setAttendances(a);
+      if (p.length) setProposals(p);
     } catch { /* datos corruptos: se ignoran */ }
     mockHydratedRef.current = true;
   }, [currentRoomId]);
@@ -419,7 +446,117 @@ export default function App() {
     if (!useMockDb || !mockHydratedRef.current) return;
     localStorage.setItem(`salesarena-mock-meetings-${currentRoomId}`, JSON.stringify(meetings));
     localStorage.setItem(`salesarena-mock-attendees-${currentRoomId}`, JSON.stringify(attendances));
-  }, [meetings, attendances, currentRoomId]);
+    localStorage.setItem(`salesarena-mock-proposals-${currentRoomId}`, JSON.stringify(proposals));
+  }, [meetings, attendances, proposals, currentRoomId]);
+
+  // Producción: cargar SOLO la propuesta propia de la semana actual
+  useEffect(() => {
+    if (useMockDb || !currentUser) return;
+    const week = currentWeekStartISO();
+    supabase.from('match_proposals')
+      .select('*')
+      .eq('room_id', currentRoomId)
+      .eq('week_start', week)
+      .or(`member_a_email.eq.${currentUser.email},member_b_email.eq.${currentUser.email}`)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setProposals(data.map(d => ({
+            id: d.id,
+            weekStart: d.week_start,
+            aEmail: d.member_a_email,
+            aName: d.member_a_name,
+            bEmail: d.member_b_email,
+            bName: d.member_b_name,
+            slot: d.slot_start,
+            statusA: d.status_a,
+            statusB: d.status_b,
+            status: d.status,
+            respondBy: d.respond_by,
+            meetingId: d.meeting_id
+          })));
+        }
+      });
+  }, [currentUser?.email, currentRoomId]);
+
+  // Slots UTC (0..167) libres por miembro, a partir de su disponibilidad local
+  const computeSlotSets = (mems, avails) => {
+    const map = new Map();
+    mems.forEach(member => {
+      const offset = getOffsetMinutes(member.tz);
+      const set = new Set();
+      avails
+        .filter(a => a.user.toLowerCase() === member.name.toLowerCase())
+        .forEach(rule => {
+          const startUtcMin = rule.dayIdx * 1440 + rule.startHour * 60 - offset;
+          const endUtcMin = rule.dayIdx * 1440 + rule.endHour * 60 - offset;
+          for (let s = 0; s < 168; s++) {
+            if (s * 60 >= startUtcMin && (s + 1) * 60 <= endUtcMin) set.add(s);
+          }
+        });
+      map.set(member.email, set);
+    });
+    return map;
+  };
+
+  // Slot UTC → etiqueta en la hora local de una zona ("Lunes 14:00")
+  const slotToLocalLabel = (slot, tz) => {
+    const localMin = slot * 60 + getOffsetMinutes(tz);
+    const norm = ((localMin % 10080) + 10080) % 10080; // 10080 = minutos por semana
+    const day = DIAS[Math.floor(norm / 1440)];
+    const hour = Math.floor((norm % 1440) / 60);
+    return `${day} ${String(hour).padStart(2, '0')}:00`;
+  };
+
+  // Propuesta activa del usuario esta semana (y la última, para mensajes de estado)
+  const myEmailLower = currentUser?.email?.toLowerCase();
+  const myWeekProposals = !currentUser ? [] : proposals.filter(p =>
+    p.weekStart === currentWeekStartISO() &&
+    (p.aEmail.toLowerCase() === myEmailLower || p.bEmail.toLowerCase() === myEmailLower)
+  );
+  const myProposal = myWeekProposals.find(p => p.status === 'propuesto' || p.status === 'confirmado') || null;
+  const myLastClosedProposal = myProposal ? null : myWeekProposals.sort((x, y) => (y.id || 0) - (x.id || 0))[0] || null;
+
+  // Modo demo: correr el emparejador localmente (en producción lo hace la
+  // Edge Function semanal weekly-matcher; el cliente solo lee su propuesta)
+  useEffect(() => {
+    if (!useMockDb || !currentUser || myProposal) return;
+    const week = currentWeekStartISO();
+    const takenOrRejected = new Set(
+      proposals
+        .filter(p => p.weekStart === week && (p.status === 'propuesto' || p.status === 'confirmado'))
+        .flatMap(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()])
+    );
+    const rejectedPairs = new Set(
+      proposals
+        .filter(p => p.weekStart === week && (p.status === 'rechazado' || p.status === 'expirado'))
+        .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
+    );
+    const pool = members.filter(m => m.active && !takenOrRejected.has(m.email.toLowerCase()));
+    if (pool.length < 2) return;
+
+    const slotSets = computeSlotSets(pool, availabilities);
+    const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
+    const { pairs } = buildWeeklyPairs(pool, slotSets, scores, rejectedPairs);
+    if (pairs.length === 0) return;
+
+    const respondBy = new Date(Date.now() + 24 * 3600e3).toISOString();
+    const baseId = Date.now();
+    setProposals(prev => [...prev, ...pairs.map((p, i) => ({
+      id: baseId + i,
+      weekStart: week,
+      aEmail: p.a.email,
+      aName: p.a.name,
+      bEmail: p.b.email,
+      bName: p.b.name,
+      slot: p.slot,
+      statusA: 'pendiente',
+      statusB: 'pendiente',
+      status: 'propuesto',
+      respondBy,
+      meetingId: null
+    }))]);
+  }, [members, availabilities, currentUser, proposals]);
 
   // ¿La sesión ya terminó? (inicio + duración)
   const meetingHasEnded = (meeting) => {
@@ -430,6 +567,23 @@ export default function App() {
   const meetingHasStarted = (meeting) => {
     if (!meeting.startsAt) return true; // sin timestamp no se permite cancelar
     return Date.now() >= new Date(meeting.startsAt).getTime();
+  };
+
+  // Score de confiabilidad: % de sesiones con 'asistio' sobre el total de
+  // sesiones reportadas (asistio + no_show) en los últimos 60 días.
+  // Las canceladas con aviso y las no reportadas no cuentan en el denominador.
+  // null = sin historial suficiente.
+  const getReliability = (email) => {
+    const cutoff = Date.now() - 60 * 24 * 3600e3;
+    const rows = attendances.filter(a => {
+      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
+      if (a.status !== 'asistio' && a.status !== 'no_show') return false;
+      const meeting = meetings.find(m => m.id === a.meetingId);
+      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
+      return !Number.isNaN(when) && when >= cutoff;
+    });
+    if (rows.length === 0) return null;
+    return Math.round((rows.filter(a => a.status === 'asistio').length / rows.length) * 100);
   };
 
   // Reportes pendientes del usuario actual: por cada sesión terminada en la que
@@ -634,10 +788,13 @@ export default function App() {
     }
   };
 
+  // Calcula heatmap y afinidad (agregados). El emparejamiento ya NO se hace
+  // acá: lo resuelve el job semanal 1:1 (weekly-matcher) vía match_proposals.
   const calculateEngine = () => {
     const activeMembers = members.filter(m => m.active);
     if (activeMembers.length < 2) {
-      setMatches([]);
+      setHeatmap([]);
+      setAffinity([]);
       return;
     }
 
@@ -673,60 +830,7 @@ export default function App() {
       });
     });
 
-    // 1. Calcular Matches (fusionando slots contiguos)
-    const minParticipants = 2;
-    const windows = [];
-    let currentWindow = null;
-
-    for (let s = 0; s < nSlots; s++) {
-      const idxs = presence[s];
-      const presentNames = idxs.map(i => activeMembers[i].name);
-      const sig = [...idxs].sort().join('|');
-
-      if (currentWindow && currentWindow.sig === sig && presentNames.length >= minParticipants) {
-        currentWindow.endSlot = s + 1;
-      } else {
-        if (currentWindow) windows.push(currentWindow);
-        currentWindow = (presentNames.length >= minParticipants)
-          ? { sig, startSlot: s, endSlot: s + 1, members: presentNames }
-          : null;
-      }
-    }
-    if (currentWindow) windows.push(currentWindow);
-
-    // Formatear y ordenar ventanas
-    const calculatedMatches = windows.map((w, index) => {
-      const startHourUtc = w.startSlot % 24;
-      const startDayIdx = Math.floor(w.startSlot / 24);
-      const endHourUtc = w.endSlot % 24;
-      const endDayIdx = Math.floor(w.endSlot / 24);
-
-      const localDetail = activeMembers.map(m => {
-        const offset = getOffsetMinutes(m.tz);
-        const localStartHour = (startHourUtc + (offset / 60) + 24) % 24;
-        const localEndHour = (endHourUtc + (offset / 60) + 24) % 24;
-        return `${m.name.split(' ')[0]}: ${String(Math.floor(localStartHour)).padStart(2, '0')}:00-${String(Math.floor(localEndHour)).padStart(2, '0')}:00`;
-      }).join(' | ');
-
-      const score = Math.round((w.members.length / activeMembers.length) * 100);
-
-      return {
-        rank: index + 1,
-        day: DIAS[startDayIdx],
-        startStr: `${String(startHourUtc).padStart(2, '0')}:00 UTC`,
-        endStr: `${String(endHourUtc).padStart(2, '0')}:00 UTC`,
-        participants: w.members.join(', '),
-        localDetail,
-        score,
-        startSlot: w.startSlot,
-        endSlot: w.endSlot
-      };
-    });
-
-    calculatedMatches.sort((a, b) => b.score - a.score || (b.endSlot - b.startSlot) - (a.endSlot - a.startSlot));
-    setMatches(calculatedMatches.slice(0, 5));
-
-    // 2. Calcular Heatmap (7 días x 24 horas)
+    // 1. Calcular Heatmap (7 días x 24 horas)
     const grid = [];
     const viewOffset = getOffsetMinutes(currentUser?.tz || 'UTC'); // Ver en hora local del usuario activo
 
@@ -1303,19 +1407,20 @@ export default function App() {
   };
 
   // --- AGENDAR REUNIÓN CON APIS REALES DE GOOGLE CALENDAR / MEET ---
-  const scheduleMeeting = async (matchIndex) => {
-    const match = matches[matchIndex];
-    const title = `Roleplay — ${match.participants.split(', ').map(n => n.split(' ')[0]).join(' · ')}`;
+  // Crea la reunión real (Meet + registro + compromiso de asistencia) para una
+  // propuesta 1:1 confirmada por ambas partes
+  const createProposalMeeting = async (proposal) => {
+    const participantsStr = `${proposal.aName}, ${proposal.bName}`;
+    const title = `Roleplay — ${proposal.aName.split(' ')[0]} · ${proposal.bName.split(' ')[0]}`;
 
     setSchedulingStatus('loading');
     setScheduledDetails({
       title,
-      attendeesCount: match.participants.split(', ').length
+      attendeesCount: 2
     });
 
-    // Fecha/hora UTC real de la próxima ocurrencia del match (punto de inicio
-    // de la ventana coincidente; el role-play dura 60 minutos)
-    const startDate = getNextMatchDateUtc(match);
+    // Fecha/hora UTC real de la próxima ocurrencia del slot propuesto
+    const startDate = getNextMatchDateUtc({ startSlot: proposal.slot });
     const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
     await sleep(1000);
@@ -1340,14 +1445,11 @@ export default function App() {
         }
 
         const eventPayload = {
-          summary: `Sales-Arena Roleplay: ${match.participants}`,
+          summary: `Sales-Arena Roleplay: ${participantsStr}`,
           description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
           start: { dateTime: startDate.toISOString(), timeZone: 'UTC' },
           end: { dateTime: endDate.toISOString(), timeZone: 'UTC' },
-          attendees: match.participants.split(', ').map(name => {
-            const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
-            return found ? { email: found.email } : null;
-          }).filter(Boolean),
+          attendees: [{ email: proposal.aEmail }, { email: proposal.bEmail }],
           conferenceData: {
             createRequest: {
               requestId: Math.random().toString(36).substring(2),
@@ -1382,7 +1484,7 @@ export default function App() {
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
-        showNotification(`No se pudo agendar la reunión: ${err.message}`, 'error');
+        showNotification(`No se pudo crear el Meet: ${err.message}. La dupla quedó confirmada; reintenta desde la tarjeta de tu propuesta.`, 'error');
         return;
       }
     }
@@ -1390,21 +1492,19 @@ export default function App() {
     const newMeeting = {
       id: null,
       title,
-      dateUtc: formatMeetingDateUtc(startDate, match.day),
+      dateUtc: formatMeetingDateUtc(startDate, DIAS[Math.floor(proposal.slot / 24)]),
       duration: 60,
-      participants: match.participants,
+      participants: participantsStr,
       meetLink: meetUrl,
       startsAt: startDate.toISOString(),
       status: 'Creado (Meet)'
     };
 
-    // Participantes con su email (para las filas de compromiso de asistencia)
-    const participantRows = match.participants.split(', ')
-      .map(name => {
-        const found = members.find(m => m.name.toLowerCase() === name.toLowerCase());
-        return found ? { name: found.name, email: found.email } : null;
-      })
-      .filter(Boolean);
+    // Participantes de la dupla (para las filas de compromiso de asistencia)
+    const participantRows = [
+      { name: proposal.aName, email: proposal.aEmail },
+      { name: proposal.bName, email: proposal.bEmail }
+    ];
 
     if (!useMockDb) {
       const { data: inserted, error: insertError } = await supabase.from('meetings').insert({
@@ -1461,12 +1561,58 @@ export default function App() {
       }))]);
     }
 
+    // Vincular la reunión creada a la propuesta
+    if (!useMockDb && newMeeting.id != null) {
+      await supabase.from('match_proposals').update({ meeting_id: newMeeting.id }).eq('id', proposal.id);
+    }
+    setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, meetingId: newMeeting.id } : p));
+
     setMeetings(prev => [...prev, newMeeting]);
     setSchedulingStatus('success');
 
     setTimeout(() => {
       setSchedulingStatus(null);
     }, 3000);
+  };
+
+  // Doble opt-in: aceptar o rechazar mi propuesta semanal. La reunión real
+  // solo se crea cuando AMBAS partes aceptaron.
+  const respondToProposal = async (proposal, accept) => {
+    const meIsA = proposal.aEmail.toLowerCase() === currentUser.email.toLowerCase();
+    const otherStatus = meIsA ? proposal.statusB : proposal.statusA;
+    const newSide = accept ? 'aceptado' : 'rechazado';
+
+    let newStatus = proposal.status;
+    if (!accept) newStatus = 'rechazado';
+    else if (otherStatus === 'aceptado') newStatus = 'confirmado';
+
+    if (!useMockDb) {
+      const dbPatch = meIsA ? { status_a: newSide } : { status_b: newSide };
+      dbPatch.status = newStatus;
+      const { error } = await supabase.from('match_proposals').update(dbPatch).eq('id', proposal.id);
+      if (error) {
+        showNotification('No se pudo guardar tu respuesta: ' + error.message, 'error');
+        return;
+      }
+    }
+
+    const updated = {
+      ...proposal,
+      [meIsA ? 'statusA' : 'statusB']: newSide,
+      status: newStatus
+    };
+    setProposals(prev => prev.map(p => p.id === proposal.id ? updated : p));
+
+    if (!accept) {
+      showNotification('Rechazaste la propuesta. El emparejador te asignará otro compañero disponible en la próxima corrida.');
+      return;
+    }
+    if (newStatus === 'confirmado') {
+      await createProposalMeeting(updated);
+    } else {
+      const partnerName = meIsA ? proposal.bName : proposal.aName;
+      showNotification(`¡Aceptaste! Esperando la confirmación de ${partnerName.split(' ')[0]}.`, 'success');
+    }
   };
 
   // --- COMPROMISO DE ASISTENCIA ---
@@ -2181,8 +2327,8 @@ export default function App() {
                     <Sparkles size={18} />
                   </div>
                   <div className="kpi-info">
-                    <span className="kpi-val">{matches.length}</span>
-                    <span className="kpi-label">Coincidencias</span>
+                    <span className="kpi-val">{myProposal ? 1 : 0}</span>
+                    <span className="kpi-label">Mi Propuesta Activa</span>
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
@@ -2199,95 +2345,106 @@ export default function App() {
               {/* 2-Columns */}
               <div className="dashboard-sections">
                 
-                {/* Left Col: Coincidencias */}
+                {/* Left Col: Mi propuesta 1:1 de la semana (privada) */}
                 <div className="section-card glass">
                   <h4 className="section-title">
                     <Sparkles size={15} className="section-title-icon" />
-                    Mejores Horarios Coincidentes (Para esta semana)
+                    Mi Role-Play de la Semana
                   </h4>
-                  <div className="matches-list">
-                    {matches.length === 0 ? (
-                      <div className="empty-state">
-                        <AlertCircle size={30} />
-                        <span className="empty-state-title">Aún no hay coincidencias</span>
-                        <span className="empty-state-desc">Cuando dos o más integrantes carguen su disponibilidad, verás aquí los horarios en común.</span>
-                      </div>
-                    ) : (
-                      matches.map((m, idx) => {
-                        const participantNames = m.participants.split(', ');
-                        const userIsIn = participantNames.some(n => n.toLowerCase() === currentUser.name.toLowerCase());
+                  {!myProposal ? (
+                    <div className="empty-state">
+                      <AlertCircle size={30} />
+                      <span className="empty-state-title">
+                        {myLastClosedProposal ? 'Buscando nuevo compañero' : 'Aún sin compañero asignado'}
+                      </span>
+                      <span className="empty-state-desc">
+                        {myLastClosedProposal
+                          ? 'Tu propuesta anterior se cerró. El emparejador te asignará otro candidato disponible en su próxima corrida.'
+                          : 'El emparejador semanal te asigna un compañero 1:1 según tu disponibilidad y confiabilidad. Asegúrate de tener tu disponibilidad cargada.'}
+                      </span>
+                    </div>
+                  ) : (() => {
+                    const meIsA = myProposal.aEmail.toLowerCase() === myEmailLower;
+                    const partnerName = meIsA ? myProposal.bName : myProposal.aName;
+                    const partnerEmail = meIsA ? myProposal.bEmail : myProposal.aEmail;
+                    const partnerMember = members.find(m => m.email.toLowerCase() === partnerEmail.toLowerCase());
+                    const mySide = meIsA ? myProposal.statusA : myProposal.statusB;
+                    const linkedMeeting = meetings.find(mm => mm.id === myProposal.meetingId);
+                    const isConfirmed = myProposal.status === 'confirmado';
 
-                        const localTimes = m.localDetail.split(' | ').map(item => {
-                          const parts = item.split(': ');
-                          return { name: parts[0], range: parts[1] };
-                        });
-
-                        return (
-                          <div className={`match-card glass glass-hover ${userIsIn ? 'match-card-mine' : ''}`} key={idx}>
-                            <div className="match-card-header">
-                              <div className="match-card-time-group">
-                                <span className="match-card-day">{m.day}</span>
-                                <span className="match-card-time">{m.startStr.replace(' UTC', '')} - {m.endStr}</span>
+                    return (
+                      <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
+                        <div className="match-card-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(partnerName), width: '34px', height: '34px', fontSize: '12px' }}>
+                              {getInitials(partnerName)}
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                {partnerName}
+                                {partnerMember && <span className="participant-flag">{getCountryFlag(partnerMember.country)}</span>}
+                                <ReliabilityBadge pct={getReliability(partnerEmail)} />
                               </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                {userIsIn && (
-                                  <span className="match-mine-badge" title="Tu disponibilidad coincide con este horario">
-                                    <Check size={11} /> Coincides
-                                  </span>
-                                )}
-                                <span className="match-card-score-pill">{m.score}% Match</span>
-                              </div>
-                            </div>
-
-                            <div className="match-score-bar">
-                              <div className="match-score-bar-fill" style={{ width: `${m.score}%` }}></div>
-                            </div>
-
-                            <div className="match-card-body">
-                              <div className="match-section-label">
-                                <Users size={11} /> Integrantes disponibles ({participantNames.length})
-                              </div>
-                              <div className="match-participants-flex">
-                                {participantNames.map((name, bIdx) => {
-                                  const memberData = members.find(mm => mm.name.toLowerCase() === name.toLowerCase());
-                                  const isMe = name.toLowerCase() === currentUser.name.toLowerCase();
-                                  const nameParts = name.split(' ');
-                                  const shortName = nameParts[0] + (nameParts[1] ? ` ${nameParts[1][0]}.` : '');
-                                  return (
-                                    <span key={bIdx} className={`match-participant-tag ${isMe ? 'me' : ''}`}>
-                                      <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(name) }}>
-                                        {getInitials(name)}
-                                      </span>
-                                      {isMe ? 'Tú' : shortName}
-                                      {memberData && <span className="participant-flag">{getCountryFlag(memberData.country)}</span>}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-
-                              <div className="match-section-label" style={{ marginTop: '10px' }}>
-                                <Clock size={11} /> Horarios locales
-                              </div>
-                              <div className="match-times-grid">
-                                {localTimes.map((lt, lIdx) => (
-                                  <div key={lIdx} className="match-time-pill">
-                                    <span className="match-time-name">{lt.name}</span>
-                                    <span className="match-time-range">{lt.range}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-
-                            <div className="match-card-footer">
-                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => scheduleMeeting(idx)}>
-                                <Video size={14} /> Agendar en Google Calendar
-                              </button>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tu compañero propuesto para esta semana</div>
                             </div>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                          <span className={`proposal-status-pill ${isConfirmed ? 'confirmed' : 'pending'}`}>
+                            {isConfirmed ? 'Confirmado' : 'Propuesto'}
+                          </span>
+                        </div>
+
+                        <div className="match-card-body">
+                          <div className="match-section-label"><Clock size={11} /> Horario de la sesión (hora local de cada uno)</div>
+                          <div className="match-times-grid">
+                            <div className="match-time-pill">
+                              <span className="match-time-name">Tú</span>
+                              <span className="match-time-range">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                            </div>
+                            {partnerMember && (
+                              <div className="match-time-pill">
+                                <span className="match-time-name">{partnerName.split(' ')[0]}</span>
+                                <span className="match-time-range">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
+                              </div>
+                            )}
+                          </div>
+                          {!isConfirmed && myProposal.respondBy && (
+                            <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <AlertCircle size={12} />
+                              Responde antes del {new Date(myProposal.respondBy).toLocaleString()} o el cupo se reasigna.
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="match-card-footer">
+                          {isConfirmed ? (
+                            linkedMeeting ? (
+                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }}>
+                                <Video size={14} /> Abrir Google Meet
+                              </a>
+                            ) : (
+                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => createProposalMeeting(myProposal)}>
+                                <Video size={14} /> Crear Meet de la dupla
+                              </button>
+                            )
+                          ) : mySide === 'pendiente' ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className="attendance-btn attendance-btn-yes" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(myProposal, true)}>
+                                <Check size={14} /> Aceptar
+                              </button>
+                              <button className="attendance-btn attendance-btn-no" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(myProposal, false)}>
+                                <X size={14} /> Rechazar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="proposal-waiting">
+                              <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
+                              Aceptaste la propuesta. Esperando a {partnerName.split(' ')[0]}...
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Right Col: Historial / Meets */}
@@ -2562,7 +2719,7 @@ export default function App() {
                                   backgroundColor: cellData.count > 0 ? `rgba(52, 199, 89, ${0.1 + opacity * 0.9})` : 'transparent',
                                   borderRight: '1px solid var(--border-color)'
                                 }}
-                                title={cellData.count > 0 ? `${cellData.count} libres: ${cellData.names}` : 'Nadie disponible'}
+                                title={cellData.count > 0 ? `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}` : 'Nadie disponible'}
                               ></td>
                             );
                           })}
@@ -2581,10 +2738,10 @@ export default function App() {
               <div className="section-card glass">
                 <h4 className="section-title">
                   <Handshake size={15} className="section-title-icon" />
-                  Solapamiento Horario por Parejas
+                  Tu Solapamiento Horario con el Equipo
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  El valor muestra el porcentaje de solapamiento relativo de horas disponibles en común. Verde = excelente afinidad horaria.
+                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Verde = excelente afinidad horaria. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
                 </p>
                 <div className="table-responsive-wrapper">
                   <table className="affinity-table">
@@ -2597,7 +2754,7 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {affinity.map((row, i) => (
+                      {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => (
                         <tr key={i}>
                           <td className="affinity-td-label">{row.name}</td>
                           {row.stats.map((col, j) => {
@@ -2630,10 +2787,10 @@ export default function App() {
               <div className="section-card glass">
                 <h4 className="section-title">
                   <Trophy size={15} className="section-title-icon" />
-                  Compañeros con Mayor Afinidad
+                  Tus Compañeros con Mayor Afinidad
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {affinity.map((row, i) => {
+                  {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => {
                     const sortedStats = [...row.stats]
                       .filter(s => s.pct !== null)
                       .sort((a, b) => b.pct - a.pct)
@@ -2686,6 +2843,7 @@ export default function App() {
                           <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
                             {m.active ? 'Participa' : 'Excluido'}
                           </span>
+                          <ReliabilityBadge pct={getReliability(m.email)} />
                         </span>
                         <span className="member-row-details"><Mail size={11} /> {m.email}</span>
                         <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
