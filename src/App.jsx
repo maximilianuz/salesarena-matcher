@@ -326,6 +326,8 @@ export default function App() {
   // Sistema de notificaciones premium (toast)
   const [toasts, setToasts] = useState([]); // [{id, msg, type}]
   const [confirmModal, setConfirmModal] = useState(null); // {msg, onConfirm, onCancel}
+  const [promptModal, setPromptModal] = useState(null); // {msg, placeholder, onSubmit, onCancel}
+  const [promptValue, setPromptValue] = useState('');
 
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
@@ -594,22 +596,41 @@ export default function App() {
     return Date.now() >= new Date(meeting.startsAt).getTime();
   };
 
-  // Score de confiabilidad: % de sesiones con 'asistio' sobre el total de
-  // sesiones reportadas (asistio + no_show) en los últimos 60 días.
-  // Las canceladas con aviso y las no reportadas no cuentan en el denominador.
-  // null = sin historial suficiente.
+  // Score de confiabilidad (últimos 60 días), ponderado por puntualidad:
+  //   asistió a tiempo = 1 · asistió tarde = 0.5 · no-show = 0 ·
+  //   cancelado tarde = 0 · cancelado con aviso / sin reportar = no computa.
+  // null = sin historial suficiente. Debe coincidir con la Edge Function.
+  const scoreValue = (status, punctuality) => {
+    if (status === 'asistio') return punctuality === 'tarde' ? 0.5 : 1;
+    if (status === 'no_show' || status === 'cancelado_tarde') return 0;
+    return null;
+  };
   const getReliability = (email) => {
     const cutoff = Date.now() - 60 * 24 * 3600e3;
-    const rows = attendances.filter(a => {
+    const vals = attendances.filter(a => {
       if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
-      if (a.status !== 'asistio' && a.status !== 'no_show') return false;
       const meeting = meetings.find(m => m.id === a.meetingId);
       const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
       return !Number.isNaN(when) && when >= cutoff;
-    });
-    if (rows.length === 0) return null;
-    return Math.round((rows.filter(a => a.status === 'asistio').length / rows.length) * 100);
+    }).map(a => scoreValue(a.status, a.punctuality)).filter(v => v !== null);
+    if (vals.length === 0) return null;
+    return Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100);
   };
+
+  // Faltas del mes calendario (no_show + cancelado_tarde) y bloqueo (3+).
+  // Refleja en la UI lo que la Edge Function aplica en el emparejamiento.
+  const getMonthlyFaltas = (email) => {
+    const now = new Date();
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    return attendances.filter(a => {
+      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
+      if (a.status !== 'no_show' && a.status !== 'cancelado_tarde') return false;
+      const meeting = meetings.find(m => m.id === a.meetingId);
+      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
+      return !Number.isNaN(when) && when >= monthStart;
+    }).length;
+  };
+  const isBlocked = (email) => getMonthlyFaltas(email) >= 3;
 
   // Reportes pendientes del usuario actual: por cada sesión terminada en la que
   // participó, cada compañero que sigue en 'confirmado' (nadie reportó aún)
@@ -730,6 +751,8 @@ export default function App() {
           memberEmail: d.member_email,
           memberName: d.member_name,
           status: d.status,
+          punctuality: d.punctuality,
+          cancelReason: d.cancel_reason,
           reportedBy: d.reported_by,
           reportedAt: d.reported_at
         })));
@@ -1612,6 +1635,8 @@ export default function App() {
             memberEmail: d.member_email,
             memberName: d.member_name,
             status: d.status,
+            punctuality: d.punctuality,
+            cancelReason: d.cancel_reason,
             reportedBy: d.reported_by,
             reportedAt: d.reported_at
           }))]);
@@ -1686,14 +1711,18 @@ export default function App() {
   };
 
   // --- COMPROMISO DE ASISTENCIA ---
-  // El compañero reporta si el otro se conectó (asistio / no_show)
-  const reportAttendance = async (attendance, didAttend) => {
-    const newStatus = didAttend ? 'asistio' : 'no_show';
+  // El compañero reporta el resultado del otro. outcome:
+  //   'a_tiempo' → asistió dentro de los 10 min de tolerancia
+  //   'tarde'    → asistió pero fuera de la tolerancia
+  //   'no_show'  → no se presentó (cuenta como falta)
+  const reportAttendance = async (attendance, outcome) => {
+    const newStatus = outcome === 'no_show' ? 'no_show' : 'asistio';
+    const punctuality = outcome === 'no_show' ? null : outcome;
     const reportedAt = new Date().toISOString();
 
     if (!useMockDb) {
       const { error } = await supabase.from('meeting_attendees')
-        .update({ status: newStatus, reported_by: currentUser.email, reported_at: reportedAt })
+        .update({ status: newStatus, punctuality, reported_by: currentUser.email, reported_at: reportedAt })
         .eq('id', attendance.id);
       if (error) {
         showNotification('No se pudo guardar el reporte: ' + error.message, 'error');
@@ -1703,18 +1732,21 @@ export default function App() {
 
     setAttendances(prev => prev.map(a =>
       a.id === attendance.id
-        ? { ...a, status: newStatus, reportedBy: currentUser.email, reportedAt }
+        ? { ...a, status: newStatus, punctuality, reportedBy: currentUser.email, reportedAt }
         : a
     ));
-    showNotification(
-      didAttend
-        ? `Confirmaste que ${attendance.memberName} asistió a la sesión.`
-        : `Reportaste que ${attendance.memberName} no se presentó.`,
-      'success'
-    );
+    const msg = {
+      a_tiempo: `Confirmaste que ${attendance.memberName} asistió a tiempo.`,
+      tarde: `Registraste que ${attendance.memberName} llegó tarde.`,
+      no_show: `Reportaste que ${attendance.memberName} no se presentó.`
+    }[outcome];
+    showNotification(msg, 'success');
   };
 
-  // El propio usuario cancela su asistencia ANTES del inicio (no cuenta como no-show)
+  // El propio usuario cancela su asistencia ANTES del inicio.
+  //   +24hs de antelación → 'cancelado_con_aviso' (no penaliza)
+  //   <24hs               → 'cancelado_tarde' con MOTIVO obligatorio (cuenta
+  //                          como falta; 3 en el mes bloquean al miembro)
   const cancelMyAttendance = async (meeting) => {
     const mine = attendances.find(a =>
       a.meetingId === meeting.id &&
@@ -1722,13 +1754,32 @@ export default function App() {
     );
     if (!mine || mine.status !== 'confirmado' || meetingHasStarted(meeting)) return;
 
-    const confirmed = await showConfirm(`¿Cancelar con aviso tu asistencia a "${meeting.title}"? Tus compañeros lo verán reflejado y no contará como ausencia sin aviso.`);
-    if (!confirmed) return;
+    const hoursUntil = meeting.startsAt
+      ? (new Date(meeting.startsAt).getTime() - Date.now()) / 3600000
+      : Infinity;
+    const isLate = hoursUntil < 24;
+
+    let newStatus, cancelReason = null;
+    if (isLate) {
+      const reason = await showPrompt(
+        `Faltan menos de 24hs para "${meeting.title}". Cancelar ahora cuenta como falta. Detallá el motivo (obligatorio). Con 3 faltas en el mes quedarás sin emparejamientos hasta el mes siguiente.`,
+        'Ej: surgió una urgencia laboral...'
+      );
+      if (reason === null) return; // el usuario desistió
+      newStatus = 'cancelado_tarde';
+      cancelReason = reason;
+    } else {
+      const confirmed = await showConfirm(
+        `¿Cancelar con aviso tu asistencia a "${meeting.title}"? Faltan más de 24hs, así que NO cuenta como falta. Tus compañeros lo verán reflejado.`
+      );
+      if (!confirmed) return;
+      newStatus = 'cancelado_con_aviso';
+    }
 
     const reportedAt = new Date().toISOString();
     if (!useMockDb) {
       const { error } = await supabase.from('meeting_attendees')
-        .update({ status: 'cancelado_con_aviso', reported_by: currentUser.email, reported_at: reportedAt })
+        .update({ status: newStatus, cancel_reason: cancelReason, reported_by: currentUser.email, reported_at: reportedAt })
         .eq('id', mine.id);
       if (error) {
         showNotification('No se pudo cancelar: ' + error.message, 'error');
@@ -1738,10 +1789,15 @@ export default function App() {
 
     setAttendances(prev => prev.map(a =>
       a.id === mine.id
-        ? { ...a, status: 'cancelado_con_aviso', reportedBy: currentUser.email, reportedAt }
+        ? { ...a, status: newStatus, cancelReason, reportedBy: currentUser.email, reportedAt }
         : a
     ));
-    showNotification('Cancelaste tu asistencia con aviso.', 'success');
+    showNotification(
+      isLate
+        ? 'Cancelaste sobre la hora. Quedó registrada como falta del mes.'
+        : 'Cancelaste tu asistencia con aviso. No cuenta como falta.',
+      isLate ? 'error' : 'success'
+    );
   };
 
   const showNotification = (msg, type = 'info') => {
@@ -1757,6 +1813,18 @@ export default function App() {
       msg,
       onConfirm: () => { setConfirmModal(null); resolve(true); },
       onCancel:  () => { setConfirmModal(null); resolve(false); }
+    });
+  });
+
+  // Pide un texto obligatorio (ej. motivo de cancelación tardía). Resuelve con
+  // el texto ingresado, o null si el usuario cancela.
+  const showPrompt = (msg, placeholder = '') => new Promise((resolve) => {
+    setPromptValue('');
+    setPromptModal({
+      msg,
+      placeholder,
+      onSubmit: (val) => { setPromptModal(null); resolve(val); },
+      onCancel: () => { setPromptModal(null); resolve(null); }
     });
   });
 
@@ -2123,6 +2191,35 @@ export default function App() {
         </div>
       )}
 
+      {promptModal && (
+        <div className="confirm-overlay" role="dialog" aria-modal="true">
+          <div className="confirm-card">
+            <div className="confirm-icon"><AlertCircle size={36} /></div>
+            <p className="confirm-msg">{promptModal.msg}</p>
+            <textarea
+              className="prompt-textarea"
+              autoFocus
+              rows={3}
+              maxLength={300}
+              value={promptValue}
+              placeholder={promptModal.placeholder}
+              onChange={(e) => setPromptValue(e.target.value)}
+              style={{ width: '100%', resize: 'vertical', marginBottom: '14px' }}
+            />
+            <div className="confirm-actions">
+              <button className="btn btn-outline" onClick={promptModal.onCancel}>Cancelar</button>
+              <button
+                className="btn btn-danger"
+                disabled={promptValue.trim().length < 3}
+                onClick={() => promptModal.onSubmit(promptValue.trim())}
+              >
+                Confirmar cancelación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE HEADER BAR */}
       <div className="mobile-header-bar">
         <button
@@ -2310,6 +2407,16 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Aviso de bloqueo por faltas del mes (3+) */}
+              {currentUser && isBlocked(currentUser.email) && (
+                <div className="glass" style={{ padding: '14px 18px', marginBottom: '16px', border: '1px solid var(--color-danger)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Lock size={18} style={{ color: 'var(--color-danger)', flexShrink: 0 }} />
+                  <div style={{ fontSize: '13px', color: 'var(--text-main)' }}>
+                    <strong>Estás sin emparejamientos este mes.</strong> Acumulaste {getMonthlyFaltas(currentUser.email)} faltas (no presentarte o cancelar sobre la hora). Volverás a entrar en la rotación el 1ero del mes que viene.
+                  </div>
+                </div>
+              )}
+
               {/* Tarjeta de Estado Semanal de Tomás */}
               <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2354,7 +2461,7 @@ export default function App() {
                         </div>
                         <div>
                           <div className="attendance-prompt-question">
-                            ¿Se conectó <strong>{attendance.memberName}</strong> a la sesión?
+                            ¿Se conectó <strong>{attendance.memberName}</strong> y llegó a tiempo? <span style={{ fontWeight: 400, opacity: 0.7 }}>(tolerancia 10 min)</span>
                           </div>
                           <div className="attendance-prompt-meta">
                             {meeting.title} · {meeting.dateUtc}
@@ -2365,14 +2472,21 @@ export default function App() {
                         <button
                           type="button"
                           className="attendance-btn attendance-btn-yes"
-                          onClick={() => reportAttendance(attendance, true)}
+                          onClick={() => reportAttendance(attendance, 'a_tiempo')}
                         >
-                          <Check size={14} /> Sí, asistió
+                          <Check size={14} /> Sí, a tiempo
+                        </button>
+                        <button
+                          type="button"
+                          className="attendance-btn attendance-btn-late"
+                          onClick={() => reportAttendance(attendance, 'tarde')}
+                        >
+                          <Clock size={14} /> Llegó tarde
                         </button>
                         <button
                           type="button"
                           className="attendance-btn attendance-btn-no"
-                          onClick={() => reportAttendance(attendance, false)}
+                          onClick={() => reportAttendance(attendance, 'no_show')}
                         >
                           <X size={14} /> No se presentó
                         </button>
@@ -2596,12 +2710,16 @@ export default function App() {
                               {statusRows.length > 0 && (
                                 <div className="attendance-chips">
                                   {statusRows.map(a => (
-                                    <span key={a.id} className={`attendance-chip attendance-chip-${a.status}`}>
+                                    <span key={a.id} className={`attendance-chip attendance-chip-${a.status}`} title={a.cancelReason || undefined}>
                                       {a.status === 'asistio' && <Check size={9} />}
                                       {a.status === 'no_show' && <X size={9} />}
-                                      {a.status === 'cancelado_con_aviso' && <AlertCircle size={9} />}
+                                      {(a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde') && <AlertCircle size={9} />}
                                       {a.memberName.split(' ')[0]}
-                                      {a.status === 'asistio' ? ' asistió' : a.status === 'no_show' ? ' no asistió' : ' canceló con aviso'}
+                                      {a.status === 'asistio'
+                                        ? (a.punctuality === 'tarde' ? ' llegó tarde' : ' asistió a tiempo')
+                                        : a.status === 'no_show' ? ' no asistió'
+                                        : a.status === 'cancelado_tarde' ? ' canceló tarde'
+                                        : ' canceló con aviso'}
                                     </span>
                                   ))}
                                 </div>

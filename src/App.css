@@ -1819,6 +1819,27 @@ input:checked + .switch-slider:before {
   color: var(--color-danger);
 }
 
+.attendance-btn-late:hover {
+  border-color: rgba(255, 159, 10, 0.5);
+  background-color: rgba(255, 159, 10, 0.1);
+  color: var(--color-warning);
+}
+
+.prompt-textarea {
+  border: 1px solid var(--border-color, rgba(120, 120, 120, 0.3));
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-main);
+  background-color: var(--bg-card-hover, rgba(120, 120, 120, 0.06));
+}
+
+.prompt-textarea:focus {
+  outline: none;
+  border-color: var(--color-accent, #5e5ce6);
+}
+
 .attendance-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1852,6 +1873,12 @@ input:checked + .switch-slider:before {
   background-color: rgba(255, 159, 10, 0.12);
   color: var(--color-warning);
   border: 1px solid rgba(255, 159, 10, 0.3);
+}
+
+.attendance-chip-cancelado_tarde {
+  background-color: rgba(255, 69, 58, 0.1);
+  color: var(--color-danger);
+  border: 1px solid rgba(255, 69, 58, 0.26);
 }
 
 .meeting-open-badge {
