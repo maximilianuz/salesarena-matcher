@@ -82,6 +82,13 @@
   flex-shrink: 0;
 }
 
+.section-subtitle {
+  margin: -10px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 /* Lists and Items */
 .matches-list, .meetings-list {
   display: flex;
@@ -1745,6 +1752,22 @@ input:checked + .switch-slider:before {
   background-color: rgba(255, 159, 10, 0.12);
   color: var(--color-warning);
   border: 1px solid rgba(255, 159, 10, 0.3);
+}
+
+.meeting-open-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  background-color: rgba(10, 132, 255, 0.1);
+  color: var(--color-info, #0a84ff);
+  border: 1px solid rgba(10, 132, 255, 0.25);
+  white-space: nowrap;
+  width: fit-content;
 }
 
 .btn-cancel-notice {

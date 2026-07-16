@@ -2489,6 +2489,9 @@ export default function App() {
                     <CalendarCheck size={15} className="section-title-icon" />
                     Próximos Role-Plays Agendados
                   </h4>
+                  <p className="section-subtitle">
+                    Estos links son visibles para toda la sala: si querés mirar o sumarte como observador a un role-play de otros compañeros, podés unirte desde acá.
+                  </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
                       <div aria-busy="true" aria-label="Cargando reuniones agendadas" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -2499,7 +2502,7 @@ export default function App() {
                       <div className="empty-state">
                         <CalendarDays size={30} />
                         <span className="empty-state-title">Sin reuniones agendadas</span>
-                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet.</span>
+                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet, visible para toda la sala.</span>
                       </div>
                     ) : (
                       meetings.map((meet, idx) => {
@@ -2516,6 +2519,9 @@ export default function App() {
                               <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Users size={10} /> {meet.participants}
                               </span>
+                              <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador">
+                                <Globe size={10} /> Abierto a la sala
+                              </span>
                               {statusRows.length > 0 && (
                                 <div className="attendance-chips">
                                   {statusRows.map(a => (
@@ -2531,7 +2537,14 @@ export default function App() {
                               )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                              <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
+                              <a
+                                href={meet.meetLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-indigo"
+                                style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
+                                aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
+                              >
                                 <Video size={12} /> Meet
                               </a>
                               {canCancel && (
@@ -3295,7 +3308,7 @@ export default function App() {
           {
             icon: <Video size={34} />,
             title: '3 · Agenda y comparte',
-            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet para todos. Invita a más compañeros compartiendo el link de tu sala desde el Panel de Control.'
+            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet. Ese link queda visible para toda la sala en el Panel de Control: cualquier compañero puede sumarse a mirar o participar, no solo la dupla emparejada.'
           }
         ];
         const step = steps[onboardingStep];
