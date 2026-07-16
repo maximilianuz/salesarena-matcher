@@ -345,6 +345,11 @@ export default function App() {
   const [heatmap, setHeatmap] = useState([]); // 7x24 grid
   const [affinity, setAffinity] = useState([]);
 
+  // Celda del mapa de calor seleccionada (click o foco+Enter): reemplaza al
+  // tooltip como única forma de ver quiénes están disponibles en ese bloque
+  // (el tooltip solo no funciona en mobile ni con teclado/lector de pantalla).
+  const [selectedHeatmapCell, setSelectedHeatmapCell] = useState(null); // { day, hour, count, names }
+
   // Variables para arrastre en la grilla visual
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [dragMode, setDragMode] = useState(true); // true = pintar, false = borrar
@@ -2707,60 +2712,115 @@ export default function App() {
           )}
 
           {/* VIEW: HEATMAP */}
-          {activeTab === 'heatmap' && (
-            <div className="section-card glass" style={{ maxWidth: '100%' }}>
-              <div className="heatmap-container">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Flame size={17} className="section-title-icon" /> Mapa de Calor Colectivo
-                  </h3>
-                  <span className="tz-chip">
-                    <Globe size={12} /> Hora local de {currentUser?.name?.split(' ')[0] || ''} ({tzCity(currentUser?.tz)})
-                  </span>
-                </div>
-                <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
-                  El color verde muestra cuántas personas están disponibles en cada bloque. Pasa el cursor para ver los nombres.
-                </p>
+          {activeTab === 'heatmap' && (() => {
+            const totalActive = members.filter(m => m.active).length;
+            // Escalones fijos (no una rampa continua): con muchos miembros la opacidad
+            // lineal (count/total) vuelve casi indistinguibles conteos distintos.
+            // Los escalones garantizan contraste perceptible sin importar el tamaño del equipo.
+            const HEATMAP_LEVELS = [
+              { max: 0,    bg: 'transparent',                 ink: 'var(--text-muted)', label: 'Nadie' },
+              { max: 0.25, bg: 'rgba(52, 199, 89, 0.18)',      ink: 'var(--text-main)',  label: 'Hasta 25%' },
+              { max: 0.5,  bg: 'rgba(52, 199, 89, 0.38)',      ink: 'var(--text-main)',  label: '26–50%' },
+              // Niveles 3 y 4: el verde ya es lo bastante saturado en claro y oscuro
+              // como para que el texto oscuro pierda contraste sobre fondo oscuro (bg-main).
+              // Blanco funciona en ambos temas para estos dos escalones.
+              { max: 0.75, bg: 'rgba(52, 199, 89, 0.62)',      ink: '#ffffff',           label: '51–75%' },
+              { max: 1,    bg: 'rgba(52, 199, 89, 0.9)',       ink: '#ffffff',           label: 'Más de 75%' },
+            ];
+            const levelFor = (count) => {
+              const ratio = totalActive ? count / totalActive : 0;
+              if (ratio === 0) return HEATMAP_LEVELS[0];
+              return HEATMAP_LEVELS.find(l => ratio <= l.max) || HEATMAP_LEVELS[HEATMAP_LEVELS.length - 1];
+            };
 
-                <div className="table-responsive-wrapper">
-                  <table className="heatmap-table">
-                    <thead>
-                      <tr>
-                        <th className="heatmap-th" style={{ width: '60px' }}>Hora</th>
-                        {DIAS.map(d => (
-                          <th className="heatmap-th" key={d}>{d.substring(0, 3)}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Array.from({ length: 24 }).map((_, h) => (
-                        <tr key={h}>
-                          <td className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</td>
-                          {Array.from({ length: 7 }).map((_, d) => {
-                            const cellData = heatmap[d]?.[h] || { count: 0, names: '' };
-                            const totalActive = members.filter(m => m.active).length;
-                            const opacity = totalActive ? (cellData.count / totalActive) : 0;
-                            
-                            return (
-                              <td
-                                key={d}
-                                className="heatmap-cell"
-                                style={{
-                                  backgroundColor: cellData.count > 0 ? `rgba(52, 199, 89, ${0.1 + opacity * 0.9})` : 'transparent',
-                                  borderRight: '1px solid var(--border-color)'
-                                }}
-                                title={cellData.count > 0 ? `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}` : 'Nadie disponible'}
-                              ></td>
-                            );
-                          })}
+            return (
+              <div className="section-card glass" style={{ maxWidth: '100%' }}>
+                <div className="heatmap-container">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                    <h3 style={{ margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Flame size={17} className="section-title-icon" /> Mapa de Calor Colectivo
+                    </h3>
+                    <span className="tz-chip">
+                      <Globe size={12} /> Hora local de {currentUser?.name?.split(' ')[0] || ''} ({tzCity(currentUser?.tz)})
+                    </span>
+                  </div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
+                    Cada celda muestra cuántas personas están disponibles. Hacé click (o Enter con teclado) en un bloque para ver quiénes son.
+                  </p>
+
+                  {/* SCALE LEGEND: la única forma antes era el tooltip, ahora la escala es siempre visible */}
+                  <div className="heatmap-legend" role="img" aria-label="Escala de disponibilidad: de nadie a más del 75% del equipo">
+                    {HEATMAP_LEVELS.map(l => (
+                      <div className="heatmap-legend-item" key={l.label}>
+                        <span className="heatmap-legend-swatch" style={{ backgroundColor: l.bg === 'transparent' ? 'var(--bg-card-hover)' : l.bg }}></span>
+                        <span className="heatmap-legend-text">{l.label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="table-responsive-wrapper">
+                    <table className="heatmap-table">
+                      <thead>
+                        <tr>
+                          <th className="heatmap-th" style={{ width: '60px' }}>Hora</th>
+                          {DIAS.map(d => (
+                            <th className="heatmap-th" key={d}>{d.substring(0, 3)}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: 24 }).map((_, h) => (
+                          <tr key={h}>
+                            <td className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</td>
+                            {Array.from({ length: 7 }).map((_, d) => {
+                              const cellData = heatmap[d]?.[h] || { count: 0, names: '' };
+                              const level = levelFor(cellData.count);
+                              const isSelected = selectedHeatmapCell?.day === d && selectedHeatmapCell?.hour === h;
+
+                              return (
+                                <td key={d} className="heatmap-cell-wrap">
+                                  <button
+                                    type="button"
+                                    className={`heatmap-cell-btn ${isSelected ? 'selected' : ''}`}
+                                    style={{ backgroundColor: level.bg, color: level.ink }}
+                                    onClick={() => setSelectedHeatmapCell({ day: d, hour: h, count: cellData.count, names: cellData.names })}
+                                    aria-label={`${DIAS[d]} ${String(h).padStart(2, '0')}:00 — ${cellData.count === 0 ? 'nadie disponible' : `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}`}`}
+                                  >
+                                    {cellData.count > 0 ? cellData.count : ''}
+                                  </button>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* DETALLE ACCESIBLE: reemplaza al tooltip como fuente de la lista de nombres.
+                      Funciona con click, teclado (Enter/Espacio en el botón) y touch (tap). */}
+                  <div className="heatmap-detail-panel" aria-live="polite">
+                    {selectedHeatmapCell ? (
+                      selectedHeatmapCell.count > 0 ? (
+                        <>
+                          <div className="heatmap-detail-title">
+                            <Clock size={13} /> {DIAS[selectedHeatmapCell.day]} {String(selectedHeatmapCell.hour).padStart(2, '0')}:00 · {selectedHeatmapCell.count} {selectedHeatmapCell.count === 1 ? 'persona disponible' : 'personas disponibles'}
+                          </div>
+                          <div className="heatmap-detail-names">{selectedHeatmapCell.names}</div>
+                        </>
+                      ) : (
+                        <div className="heatmap-detail-title heatmap-detail-empty">
+                          <Clock size={13} /> {DIAS[selectedHeatmapCell.day]} {String(selectedHeatmapCell.hour).padStart(2, '0')}:00 · Nadie disponible en ese bloque
+                        </div>
+                      )
+                    ) : (
+                      <div className="heatmap-detail-placeholder">Elegí un bloque de la grilla para ver quiénes están disponibles.</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* VIEW: AFFINITY */}
           {activeTab === 'affinity' && (
