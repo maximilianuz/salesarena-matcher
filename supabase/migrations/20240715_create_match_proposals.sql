@@ -53,9 +53,7 @@ ALTER TABLE match_proposals ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own proposals"
   ON match_proposals FOR SELECT
-  USING (auth.jwt() ->> 'email' IN (member_a_email, member_b_email) OR auth.jwt() ->> 'email' = ANY(
-    SELECT email FROM members WHERE room_id = match_proposals.room_id AND role = 'founder'
-  ));
+  USING (auth.jwt() ->> 'email' IN (member_a_email, member_b_email));
 
 CREATE POLICY "Users can update their own proposal status"
   ON match_proposals FOR UPDATE
