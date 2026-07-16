@@ -2,7 +2,8 @@
 //
 // Emparejador 1:1 de Sales-Arena Matcher. Idempotente: puede correr por cron
 // cada hora. En cada corrida, por sala:
-//   1. Expira propuestas 'propuesto' cuyo respond_by ya pasó.
+//   1. Expira propuestas 'propuesto' cuyo respond_by ya pasó (nadie confirmó
+//      con 24hs de antelación) → esos miembros vuelven al pool para REASIGNAR.
 //   2. Excluye del pool a los miembros BLOQUEADOS: 3+ faltas (no-show +
 //      cancelación tardía) dentro del mes calendario, hasta el 1ero del mes
 //      siguiente.
@@ -11,8 +12,12 @@
 //      juntaron (rotación "todos con todos"), luego mayor confiabilidad y luego
 //      mayor solapamiento. El historial de rotación cuenta solo reuniones
 //      CONCRETADAS (llegaron a su horario sin cancelarse; el no-show cuenta).
-//   4. Asigna el horario común que ocurre ANTES desde ahora (no el lunes por
-//      defecto) e inserta las propuestas con respond_by = ahora + RESPOND_HOURS.
+//      Las duplas RECHAZADAS esta semana se excluyen; las EXPIRADAS se evitan
+//      si hay otro compañero disponible (reasignación por mapa de calor) y solo
+//      se re-ofrecen si son la única coincidencia.
+//   4. Asigna el horario común más PRÓXIMO que esté a >= 24hs (para que haya
+//      ventana de confirmación) e inserta/reactiva la propuesta con
+//      respond_by = reunión - 24hs (confirmación mínima con 24hs de antelación).
 //
 // Score de confiabilidad (60 días) ponderado por puntualidad: asistió a tiempo
 // = 1, asistió tarde (>10 min) = 0.5, no-show / cancelación tardía = 0.
@@ -22,11 +27,16 @@
 //
 // Deploy:   supabase functions deploy weekly-matcher --no-verify-jwt
 // Secrets:  usa SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (inyectados por defecto)
-// Config:   RESPOND_HOURS (opcional, default 24)
+// Config:   LEAD_HOURS (opcional, default 24) — antelación mínima y plazo de
+//           confirmación previo a la reunión.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const RESPOND_HOURS = Number(Deno.env.get('RESPOND_HOURS') || '24');
+// Antelación mínima entre la confirmación y la reunión. La confirmación debe
+// hacerse al menos 24hs antes; por eso no se propone un slot dentro de las
+// próximas 24hs (respond_by = reunión - 24hs quedaría en el pasado).
+const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '24');
+const MIN_LEAD_MS = LEAD_HOURS * 3600e3;
 const BASELINE_SCORE = 50;
 
 const supabase = createClient(
@@ -65,27 +75,29 @@ const currentWeekStartISO = (now = new Date()): string => {
 type Member = { email: string; name: string; tz: string };
 type Pair = { a: Member; b: Member; slot: number };
 
-// De una lista de slots UTC de la semana (0..167), devuelve el que ocurre
-// ANTES a partir de `now`. Debe coincidir con soonestSlot en src/matcher.js y
-// con getNextMatchDateUtc en src/App.jsx: evita elegir siempre el lunes
-// (índice 0) cuando hoy es jueves y la dupla también coincide más pronto.
-const soonestSlot = (slots: number[], now: Date): number => {
-  const nextOccurrenceMs = (slot: number): number => {
-    const dayIdx = Math.floor(slot / 24);
-    const hourUtc = slot % 24;
-    const d = new Date(Date.UTC(
-      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
-    ));
-    const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
-    let delta = (dayIdx - todayIdx + 7) % 7;
-    if (delta === 0 && d <= now) delta = 7; // ya pasó hoy → semana próxima
-    d.setUTCDate(d.getUTCDate() + delta);
-    return d.getTime();
-  };
-  return slots.reduce((best, s) =>
-    nextOccurrenceMs(s) < nextOccurrenceMs(best) ? s : best
-  );
+// Epoch (ms) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
+// >= now + minLeadMs. Si la de esta semana cae antes del piso, rueda a la
+// siguiente. Debe coincidir con nextSlotOccurrenceMs en src/matcher.js.
+const nextSlotOccurrenceMs = (slot: number, now: Date, minLeadMs = 0): number => {
+  const dayIdx = Math.floor(slot / 24);
+  const hourUtc = slot % 24;
+  const d = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
+  ));
+  const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
+  const delta = (dayIdx - todayIdx + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + delta);
+  const floor = now.getTime() + minLeadMs;
+  while (d.getTime() < floor) d.setUTCDate(d.getUTCDate() + 7);
+  return d.getTime();
 };
+
+// Slot que ocurre ANTES a partir de `now` (respetando minLeadMs). Evita elegir
+// siempre el lunes cuando hoy es jueves y la dupla coincide, p.ej., el viernes.
+const soonestSlot = (slots: number[], now: Date, minLeadMs = 0): number =>
+  slots.reduce((best, s) =>
+    nextSlotOccurrenceMs(s, now, minLeadMs) < nextSlotOccurrenceMs(best, now, minLeadMs) ? s : best
+  );
 
 const buildWeeklyPairs = (
   members: Member[],
@@ -93,7 +105,9 @@ const buildWeeklyPairs = (
   scores: Map<string, number | null>,
   excludedPairs: Set<string>,
   pairCounts: Map<string, number>,
-  now: Date
+  now: Date,
+  softExcludedPairs: Set<string> = new Set(),
+  minLeadMs = 0
 ): { pairs: Pair[] } => {
   const scoreOf = (email: string) => scores.get(email) ?? BASELINE_SCORE;
   const pairKey = (e1: string, e2: string) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
@@ -107,7 +121,7 @@ const buildWeeklyPairs = (
     const mySlots = slotSets.get(m.email);
     if (!mySlots || mySlots.size === 0) continue;
 
-    let best: { cand: Member; count: number; score: number; common: number[] } | null = null;
+    let best: { cand: Member; count: number; score: number; common: number[]; isSoft: boolean } | null = null;
     for (const cand of ranked) {
       if (cand.email === m.email || assigned.has(cand.email)) continue;
       if (excludedPairs.has(pairKey(m.email, cand.email))) continue;
@@ -115,25 +129,30 @@ const buildWeeklyPairs = (
       if (!candSlots || candSlots.size === 0) continue;
       const common = [...mySlots].filter(s => candSlots.has(s));
       if (common.length === 0) continue;
+      const isSoft = softExcludedPairs.has(pairKey(m.email, cand.email));
       const count = timesPaired(m.email, cand.email);
       const candScore = scoreOf(cand.email) ?? BASELINE_SCORE;
       // Prioridad de selección del compañero (anti-amiguismo):
+      //   0º evitar duplas soft-excluidas (expiradas) si hay alternativa
       //   1º menos veces emparejados históricamente → fuerza "todos con todos"
       //   2º mayor confiabilidad (premia compromiso)
       //   3º mayor solapamiento horario
       if (
         !best ||
-        count < best.count ||
-        (count === best.count && candScore > best.score) ||
-        (count === best.count && candScore === best.score && common.length > best.common.length)
+        (best.isSoft && !isSoft) ||
+        (best.isSoft === isSoft && (
+          count < best.count ||
+          (count === best.count && candScore > best.score) ||
+          (count === best.count && candScore === best.score && common.length > best.common.length)
+        ))
       ) {
-        best = { cand, count, score: candScore, common };
+        best = { cand, count, score: candScore, common, isSoft };
       }
     }
     if (best) {
       assigned.add(m.email);
       assigned.add(best.cand.email);
-      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now) });
+      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now, minLeadMs) });
     }
   }
   return { pairs };
@@ -143,11 +162,12 @@ const buildWeeklyPairs = (
 
 Deno.serve(async (req) => {
   try {
+    const now = new Date();
     const week = currentWeekStartISO();
-    const nowIso = new Date().toISOString();
-    const respondBy = new Date(Date.now() + RESPOND_HOURS * 3600e3).toISOString();
+    const nowIso = now.toISOString();
 
-    // 1. Expirar propuestas vencidas (todas las salas)
+    // 1. Expirar propuestas vencidas (todas las salas). respond_by = reunión -
+    //    24hs, así que "vencida" = no confirmada con 24hs de antelación.
     await supabase
       .from('match_proposals')
       .update({ status: 'expirado' })
@@ -236,20 +256,23 @@ Deno.serve(async (req) => {
           .filter(p => p.status === 'propuesto' || p.status === 'confirmado')
           .flatMap(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()])
       );
-      // Parejas RECHAZADAS esta semana: no repetir (respeta el "no" explícito).
-      // Las EXPIRADAS (venció el plazo sin respuesta) NO se excluyen: se vuelven
-      // a ofrecer REACTIVANDO la propuesta vencida. Así, si una dupla es la única
-      // coincidencia horaria de la sala, no queda sin match el resto de la semana
-      // (y se evita violar el UNIQUE por sala/semana/dupla al reinsertar).
+      // Parejas RECHAZADAS esta semana: exclusión DURA (se respeta el "no").
       const excluded = new Set<string>(
         (weekProposals || [])
           .filter(p => p.status === 'rechazado')
           .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
+      // Parejas EXPIRADAS (nadie confirmó con 24hs de antelación): exclusión
+      // BLANDA. Se prefiere REASIGNAR a otro compañero disponible del mapa de
+      // calor; solo si no hay alternativa se re-ofrece la misma dupla,
+      // REACTIVANDO la fila vencida (evita violar el UNIQUE por sala/semana/dupla).
+      const softExcluded = new Set<string>();
       const expiredByPair = new Map<string, number>();
       for (const p of weekProposals || []) {
         if (p.status === 'expirado') {
-          expiredByPair.set(pairKeyOf(p.member_a_email, p.member_b_email), p.id);
+          const k = pairKeyOf(p.member_a_email, p.member_b_email);
+          softExcluded.add(k);
+          expiredByPair.set(k, p.id);
         }
       }
 
@@ -307,13 +330,19 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar. Por cada dupla: si ya existe una propuesta VENCIDA esta semana
-      // se REACTIVA (nuevo horario/plazo, sin violar el UNIQUE); si no, se INSERTA.
-      const { pairs } = buildWeeklyPairs(pool, slotSets, scores, excluded, pairCounts, new Date());
+      // Emparejar. El slot elegido siempre está a >= 24hs (MIN_LEAD_MS), y el
+      // plazo de confirmación es 24hs antes de la reunión. Por cada dupla: si ya
+      // existe una propuesta VENCIDA se REACTIVA (sin violar el UNIQUE); si no,
+      // se INSERTA.
+      const { pairs } = buildWeeklyPairs(
+        pool, slotSets, scores, excluded, pairCounts, now, softExcluded, MIN_LEAD_MS
+      );
       if (pairs.length === 0) continue;
 
       const toInsert: Record<string, unknown>[] = [];
       for (const p of pairs) {
+        const meetingMs = nextSlotOccurrenceMs(p.slot, now, MIN_LEAD_MS);
+        const respondBy = new Date(meetingMs - MIN_LEAD_MS).toISOString();
         const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
         if (revivedId !== undefined) {
           await supabase.from('match_proposals').update({
