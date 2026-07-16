@@ -2873,7 +2873,15 @@ export default function App() {
           })()}
 
           {/* VIEW: AFFINITY */}
-          {activeTab === 'affinity' && (
+          {activeTab === 'affinity' && (() => {
+            const AFFINITY_LEVELS = [
+              { label: 'Baja o sin coincidencia aún', min: 0, max: 39, bg: 'rgba(120, 120, 120, 0.1)', text: 'var(--text-muted)' },
+              { label: 'Moderada (40-69%)', min: 40, max: 69, bg: 'rgba(255, 159, 10, 0.12)', text: 'var(--color-warning)' },
+              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(52, 199, 89, 0.15)', text: '#34c759' }
+            ];
+            const levelForAffinity = (pct) => AFFINITY_LEVELS.find(l => pct >= l.min && pct <= l.max) || AFFINITY_LEVELS[0];
+
+            return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div className="section-card glass">
                 <h4 className="section-title">
@@ -2881,8 +2889,17 @@ export default function App() {
                   Tu Solapamiento Horario con el Equipo
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Verde = excelente afinidad horaria. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
+                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
                 </p>
+
+                <div className="heatmap-legend" role="img" aria-label="Escala de afinidad horaria: de baja o sin coincidencia a alta">
+                  {AFFINITY_LEVELS.map(l => (
+                    <div className="heatmap-legend-item" key={l.label}>
+                      <span className="heatmap-legend-swatch" style={{ backgroundColor: l.bg }}></span>
+                      <span className="heatmap-legend-text">{l.label}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="table-responsive-wrapper">
                   <table className="affinity-table">
                     <thead>
@@ -2899,18 +2916,12 @@ export default function App() {
                           <td className="affinity-td-label">{row.name}</td>
                           {row.stats.map((col, j) => {
                             const pct = col.pct;
-                            let bg = 'transparent';
-                            let text = 'var(--text-muted)';
-                            if (pct !== null) {
-                              if (pct >= 70) { bg = 'rgba(52, 199, 89, 0.15)'; text = '#34c759'; }
-                              else if (pct >= 40) { bg = 'rgba(255, 149, 0, 0.12)'; text = '#ff9500'; }
-                              else { bg = 'rgba(255, 59, 48, 0.08)'; text = '#ff3b30'; }
-                            }
+                            const level = pct !== null ? levelForAffinity(pct) : null;
                             return (
                               <td
                                 key={j}
                                 className="affinity-cell"
-                                style={{ backgroundColor: bg, color: text }}
+                                style={{ backgroundColor: level ? level.bg : 'transparent', color: level ? level.text : 'var(--text-muted)' }}
                               >
                                 {pct !== null ? `${pct}%` : '—'}
                               </td>
@@ -2933,29 +2944,55 @@ export default function App() {
                   {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => {
                     const sortedStats = [...row.stats]
                       .filter(s => s.pct !== null)
-                      .sort((a, b) => b.pct - a.pct)
-                      .slice(0, 2);
+                      .sort((a, b) => b.pct - a.pct);
+                    const topStats = sortedStats.filter(s => s.pct > 0).slice(0, 2);
+
+                    if (sortedStats.length === 0) {
+                      return (
+                        <div className="empty-state" key={i}>
+                          <Users size={30} />
+                          <span className="empty-state-title">Todavía no hay compañeros activos</span>
+                          <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
+                        </div>
+                      );
+                    }
+
+                    if (topStats.length === 0) {
+                      return (
+                        <div className="empty-state" key={i}>
+                          <AlertCircle size={30} />
+                          <span className="empty-state-title">Aún sin coincidencias horarias</span>
+                          <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
+                        </div>
+                      );
+                    }
 
                     return (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '4px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(row.name) }}>
-                            {getInitials(row.name)}
-                          </span>
-                          {row.name}
-                        </span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12.5px' }}>
-                          {sortedStats.length > 0
-                            ? sortedStats.map(s => `${s.name.split(' ')[0]} (${s.pct}%)`).join('   ·   ')
-                            : 'Cargando disponibilidad...'}
-                        </span>
-                      </div>
+                      <React.Fragment key={i}>
+                        {topStats.map(s => {
+                          const level = levelForAffinity(s.pct);
+                          return (
+                            <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(s.name) }}>
+                                  {getInitials(s.name)}
+                                </span>
+                                {s.name}
+                              </span>
+                              <span className="affinity-pct-badge" style={{ backgroundColor: level.bg, color: level.text }}>
+                                {s.pct}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
                     );
                   })}
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* VIEW: MEMBERS */}
           {activeTab === 'members' && (

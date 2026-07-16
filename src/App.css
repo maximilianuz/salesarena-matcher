@@ -654,6 +654,14 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+.affinity-pct-badge {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 /* Members Manager Rows */
 .members-list-card {
   display: flex;
