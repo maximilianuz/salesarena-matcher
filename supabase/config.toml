@@ -1,0 +1,24 @@
+# Supabase configuration
+project_id = "your_project_id_here"
+
+[api]
+enabled = true
+max_body_size = "20 MiB"
+default_query_only = false
+
+[db]
+major_version = 15
+
+[realtime]
+enabled = true
+max_message_size = 200000
+expiry_period = 3600
+
+[auth]
+enable_signup = true
+enable_anonymous_signups = false
+jwt_expiry = 3600
+refresh_token_expiry = 604800
+
+[edge_functions]
+main = "functions"
