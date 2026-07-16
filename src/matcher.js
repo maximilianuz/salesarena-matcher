@@ -5,9 +5,9 @@
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
 // Antelación mínima entre "ahora" y la reunión propuesta. La confirmación debe
-// poder hacerse al menos 24hs antes; por eso nunca se propone un slot que ocurra
-// dentro de las próximas 24hs (respond_by = reunión - 24hs quedaría en el pasado).
-export const MIN_LEAD_MS = 24 * 3600e3;
+// poder hacerse al menos 4hs antes; por eso nunca se propone un slot que ocurra
+// dentro de las próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
+export const MIN_LEAD_MS = 4 * 3600e3;
 
 // Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
 // >= ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la

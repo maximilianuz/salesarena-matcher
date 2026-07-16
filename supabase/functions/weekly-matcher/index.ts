@@ -3,7 +3,7 @@
 // Emparejador 1:1 de Sales-Arena Matcher. Idempotente: puede correr por cron
 // cada hora. En cada corrida, por sala:
 //   1. Expira propuestas 'propuesto' cuyo respond_by ya pasó (nadie confirmó
-//      con 24hs de antelación) → esos miembros vuelven al pool para REASIGNAR.
+//      con 4hs de antelación) → esos miembros vuelven al pool para REASIGNAR.
 //   2. Excluye del pool a los miembros BLOQUEADOS: 3+ faltas (no-show +
 //      cancelación tardía) dentro del mes calendario, hasta el 1ero del mes
 //      siguiente.
@@ -15,9 +15,9 @@
 //      Las duplas RECHAZADAS esta semana se excluyen; las EXPIRADAS se evitan
 //      si hay otro compañero disponible (reasignación por mapa de calor) y solo
 //      se re-ofrecen si son la única coincidencia.
-//   4. Asigna el horario común más PRÓXIMO que esté a >= 24hs (para que haya
+//   4. Asigna el horario común más PRÓXIMO que esté a >= 4hs (para que haya
 //      ventana de confirmación) e inserta/reactiva la propuesta con
-//      respond_by = reunión - 24hs (confirmación mínima con 24hs de antelación).
+//      respond_by = reunión - 4hs (confirmación mínima con 4hs de antelación).
 //
 // Score de confiabilidad (60 días) ponderado por puntualidad: asistió a tiempo
 // = 1, asistió tarde (>10 min) = 0.5, no-show / cancelación tardía = 0.
@@ -27,15 +27,15 @@
 //
 // Deploy:   supabase functions deploy weekly-matcher --no-verify-jwt
 // Secrets:  usa SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (inyectados por defecto)
-// Config:   LEAD_HOURS (opcional, default 24) — antelación mínima y plazo de
+// Config:   LEAD_HOURS (opcional, default 4) — antelación mínima y plazo de
 //           confirmación previo a la reunión.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 // Antelación mínima entre la confirmación y la reunión. La confirmación debe
-// hacerse al menos 24hs antes; por eso no se propone un slot dentro de las
-// próximas 24hs (respond_by = reunión - 24hs quedaría en el pasado).
-const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '24');
+// hacerse al menos 4hs antes; por eso no se propone un slot dentro de las
+// próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
+const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '4');
 const MIN_LEAD_MS = LEAD_HOURS * 3600e3;
 const BASELINE_SCORE = 50;
 
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
     const nowIso = now.toISOString();
 
     // 1. Expirar propuestas vencidas (todas las salas). respond_by = reunión -
-    //    24hs, así que "vencida" = no confirmada con 24hs de antelación.
+    //    4hs, así que "vencida" = no confirmada con 4hs de antelación.
     await supabase
       .from('match_proposals')
       .update({ status: 'expirado' })
@@ -262,7 +262,7 @@ Deno.serve(async (req) => {
           .filter(p => p.status === 'rechazado')
           .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
-      // Parejas EXPIRADAS (nadie confirmó con 24hs de antelación): exclusión
+      // Parejas EXPIRADAS (nadie confirmó con 4hs de antelación): exclusión
       // BLANDA. Se prefiere REASIGNAR a otro compañero disponible del mapa de
       // calor; solo si no hay alternativa se re-ofrece la misma dupla,
       // REACTIVANDO la fila vencida (evita violar el UNIQUE por sala/semana/dupla).
@@ -330,8 +330,8 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar. El slot elegido siempre está a >= 24hs (MIN_LEAD_MS), y el
-      // plazo de confirmación es 24hs antes de la reunión. Por cada dupla: si ya
+      // Emparejar. El slot elegido siempre está a >= 4hs (MIN_LEAD_MS), y el
+      // plazo de confirmación es 4hs antes de la reunión. Por cada dupla: si ya
       // existe una propuesta VENCIDA se REACTIVA (sin violar el UNIQUE); si no,
       // se INSERTA.
       const { pairs } = buildWeeklyPairs(

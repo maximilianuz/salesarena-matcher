@@ -589,7 +589,7 @@ export default function App() {
       statusA: 'pendiente',
       statusB: 'pendiente',
       status: 'propuesto',
-      // Plazo = 24hs antes de la reunión (no 24h desde ahora)
+      // Plazo de confirmación = MIN_LEAD_MS antes de la reunión (no desde ahora)
       respondBy: new Date(getNextMatchDateUtc({ startSlot: p.slot }).getTime() - MIN_LEAD_MS).toISOString(),
       meetingId: null
     }))]);
@@ -3529,22 +3529,32 @@ export default function App() {
           {
             icon: <ChessKnightIcon size={44} />,
             title: `¡Bienvenido, ${currentUser.name.split(' ')[0]}!`,
-            desc: 'Sales-Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad horaria de todos, sin importar en qué país estén. Esta mini guía te muestra cómo funciona en 3 pasos.'
+            desc: 'Sales-Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad de todos, sin importar el país. Cargás tu horario una vez y el sistema se encarga del resto: lo único que tenés que hacer es confirmar. Esta guía te muestra cómo funciona.'
           },
           {
             icon: <CalendarRange size={34} />,
-            title: '1 · Carga tu disponibilidad',
-            desc: 'Entra a "Cargar Disponibilidad" y marca en el calendario los horarios en los que podés hacer un role-play esta semana (en tu hora local). Puedes usar presets rápidos o guardar tu horario como plantilla para reutilizarlo cada semana.'
+            title: '1 · Cargá tu disponibilidad',
+            desc: 'Entrá a "Cargar Disponibilidad" y marcá en el calendario los horarios en los que podés hacer un role-play (en tu hora local). Podés guardar tu horario como plantilla para reutilizarlo cada semana. Una vez cargado, te olvidás: el emparejador trabaja solo.'
           },
           {
-            icon: <Sparkles size={34} />,
-            title: '2 · Descubre las coincidencias',
-            desc: 'El motor cruza automáticamente los horarios de todo el equipo. En el Panel de Control verás los mejores horarios en común, con el % de match y la etiqueta "Coincides" cuando tú estás incluido.'
+            icon: <RefreshCw size={34} />,
+            title: '2 · Emparejamiento automático',
+            desc: 'Cada semana el sistema te asigna un compañero 1:1 y el horario en común más próximo posible. Rota "todos con todos" para que no siempre te toque la misma persona, y prioriza a quienes muestran más compromiso y puntualidad. No tenés que buscar ni coordinar nada.'
           },
           {
-            icon: <Video size={34} />,
-            title: '3 · Agenda y comparte',
-            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet. Ese link queda visible para toda la sala en el Panel de Control: cualquier compañero puede sumarse a mirar o participar, no solo la dupla emparejada.'
+            icon: <Check size={34} />,
+            title: '3 · Confirmá (tu compromiso)',
+            desc: 'Cuando te asignan una dupla, confirmá que vas a asistir. El link de Google Meet se genera recién cuando AMBOS confirman: así la confirmación es una señal real de compromiso. Podés confirmar en cualquier momento… pero al menos 4 horas antes de la reunión.'
+          },
+          {
+            icon: <RefreshCw size={34} />,
+            title: '4 · Si no confirmás, se reasigna',
+            desc: 'Si a menos de 4 horas del horario todavía no confirmaste, la propuesta se cancela sola y el sistema busca reasignarte otro compañero que esté libre y sin otra reunión ya aceptada. La idea: que nadie quede esperando a alguien que no iba a venir.'
+          },
+          {
+            icon: <Handshake size={34} />,
+            title: '5 · Cancelaciones y respeto mutuo',
+            desc: 'Todo esto es por respeto mutuo del tiempo y la predisposición de tus compañeros. Si no podés asistir, cancelá con +24 h de antelación: no pasa nada. Cancelar con menos de 24 h (o no presentarte) requiere un motivo y cuenta como falta. Con 3 faltas en el mes quedás bloqueado hasta el 1° del mes siguiente. Llegar puntual (tolerancia 10 min) suma a tu confiabilidad y te da prioridad en los próximos emparejamientos.'
           }
         ];
         const step = steps[onboardingStep];
