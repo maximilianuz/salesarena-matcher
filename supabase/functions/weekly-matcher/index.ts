@@ -173,16 +173,20 @@ Deno.serve(async (req) => {
       ]);
       if (!members || members.length < 2) continue;
 
-      // Reuniones y asistencias de la sala: base para rotación, faltas y score
-      const [{ data: meetingsRows }, { data: attRows }] = await Promise.all([
-        supabase.from('meetings').select('id, starts_at').eq('room_id', roomId),
-        supabase.from('meeting_attendees')
-          .select('meeting_id, member_email, status, punctuality')
-          .eq('room_id', roomId)
-      ]);
+      // Reuniones de la sala (base para rotación, faltas y score). La tabla
+      // meeting_attendees NO tiene columna room_id: sus filas se filtran por los
+      // IDs de las reuniones de esta sala.
+      const { data: meetingsRows } = await supabase
+        .from('meetings').select('id, starts_at').eq('room_id', roomId);
+      const meetingIds = (meetingsRows || []).map(mt => mt.id);
+      const { data: attRows } = meetingIds.length
+        ? await supabase.from('meeting_attendees')
+            .select('meeting_id, member_email, status, punctuality')
+            .in('meeting_id', meetingIds)
+        : { data: [] as Array<{ meeting_id: string; member_email: string; status: string; punctuality: string | null }> };
 
       const nowMs = Date.now();
-      const meetingStartMs = new Map<number, number>();
+      const meetingStartMs = new Map<string, number>();
       for (const mt of meetingsRows || []) {
         const t = mt.starts_at ? Date.parse(mt.starts_at) : NaN;
         if (!Number.isNaN(t)) meetingStartMs.set(mt.id, t);
@@ -193,7 +197,7 @@ Deno.serve(async (req) => {
 
       // ROTACIÓN: reuniones CONCRETADAS por dupla (llegaron a su horario sin
       // cancelarse; el no-show sí cuenta como concretada). Ventana 120 días.
-      const byMeeting = new Map<number, { email: string; status: string }[]>();
+      const byMeeting = new Map<string, { email: string; status: string }[]>();
       for (const r of attRows || []) {
         if (!byMeeting.has(r.meeting_id)) byMeeting.set(r.meeting_id, []);
         byMeeting.get(r.meeting_id)!.push({ email: r.member_email, status: r.status });
@@ -232,12 +236,22 @@ Deno.serve(async (req) => {
           .filter(p => p.status === 'propuesto' || p.status === 'confirmado')
           .flatMap(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()])
       );
-      // Parejas ya rechazadas/expiradas esta semana: no repetir dentro de la semana
+      // Parejas RECHAZADAS esta semana: no repetir (respeta el "no" explícito).
+      // Las EXPIRADAS (venció el plazo sin respuesta) NO se excluyen: se vuelven
+      // a ofrecer REACTIVANDO la propuesta vencida. Así, si una dupla es la única
+      // coincidencia horaria de la sala, no queda sin match el resto de la semana
+      // (y se evita violar el UNIQUE por sala/semana/dupla al reinsertar).
       const excluded = new Set<string>(
         (weekProposals || [])
-          .filter(p => p.status === 'rechazado' || p.status === 'expirado')
-          .map(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()].sort().join('|'))
+          .filter(p => p.status === 'rechazado')
+          .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
+      const expiredByPair = new Map<string, number>();
+      for (const p of weekProposals || []) {
+        if (p.status === 'expirado') {
+          expiredByPair.set(pairKeyOf(p.member_a_email, p.member_b_email), p.id);
+        }
+      }
 
       const pool: Member[] = members
         .filter(m => !busy.has(m.email.toLowerCase()) && !blocked.has(m.email.toLowerCase()))
@@ -293,21 +307,41 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar e insertar propuestas
+      // Emparejar. Por cada dupla: si ya existe una propuesta VENCIDA esta semana
+      // se REACTIVA (nuevo horario/plazo, sin violar el UNIQUE); si no, se INSERTA.
       const { pairs } = buildWeeklyPairs(pool, slotSets, scores, excluded, pairCounts, new Date());
       if (pairs.length === 0) continue;
 
-      const { error } = await supabase.from('match_proposals').insert(pairs.map(p => ({
-        room_id: roomId,
-        week_start: week,
-        member_a_email: p.a.email,
-        member_a_name: p.a.name,
-        member_b_email: p.b.email,
-        member_b_name: p.b.name,
-        slot_start: p.slot,
-        respond_by: respondBy
-      })));
-      if (!error) summary[roomId] = pairs.length;
+      const toInsert: Record<string, unknown>[] = [];
+      for (const p of pairs) {
+        const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
+        if (revivedId !== undefined) {
+          await supabase.from('match_proposals').update({
+            status: 'propuesto',
+            status_a: null,
+            status_b: null,
+            slot_start: p.slot,
+            respond_by: respondBy,
+            meeting_id: null
+          }).eq('id', revivedId);
+        } else {
+          toInsert.push({
+            room_id: roomId,
+            week_start: week,
+            member_a_email: p.a.email,
+            member_a_name: p.a.name,
+            member_b_email: p.b.email,
+            member_b_name: p.b.name,
+            slot_start: p.slot,
+            respond_by: respondBy
+          });
+        }
+      }
+      if (toInsert.length) {
+        const { error } = await supabase.from('match_proposals').insert(toInsert);
+        if (error) continue;
+      }
+      summary[roomId] = pairs.length;
     }
 
     return new Response(JSON.stringify({ ok: true, week, created: summary }), {

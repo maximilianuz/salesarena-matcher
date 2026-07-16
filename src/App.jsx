@@ -554,9 +554,11 @@ export default function App() {
         .filter(p => p.weekStart === week && (p.status === 'propuesto' || p.status === 'confirmado'))
         .flatMap(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()])
     );
+    // Solo se excluyen parejas RECHAZADAS (no las expiradas): igual que la
+    // Edge Function, una dupla sin respuesta se vuelve a ofrecer.
     const rejectedPairs = new Set(
       proposals
-        .filter(p => p.weekStart === week && (p.status === 'rechazado' || p.status === 'expirado'))
+        .filter(p => p.weekStart === week && p.status === 'rechazado')
         .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
     );
     const pool = members.filter(m => m.active && !takenOrRejected.has(m.email.toLowerCase()));
