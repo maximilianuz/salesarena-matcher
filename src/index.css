@@ -67,6 +67,119 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* ==========================================================================
+   ACCESSIBILITY: focus visibility, reduced motion, touch targets
+   ========================================================================== */
+
+/* Visible focus ring for keyboard users on every interactive element.
+   Mouse/touch clicks don't trigger :focus-visible, so this never shows
+   as an unwanted ring on a click — only on real keyboard/AT navigation. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Respect the user's OS-level motion preference: kill all animation
+   and transition duration instead of hiding it behind JS checks. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Skip link: hidden until focused, lets keyboard users bypass the sidebar nav. */
+.skip-to-content {
+  position: absolute;
+  top: -48px;
+  left: 8px;
+  z-index: 1000;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  text-decoration: none;
+  transition: top 0.2s ease;
+}
+
+.skip-to-content:focus {
+  top: 8px;
+}
+
+/* Minimum touch target size on coarse-pointer (touch) devices, per WCAG 2.5.5. */
+@media (pointer: coarse) {
+  button,
+  a,
+  .nav-link,
+  [role="button"] {
+    min-height: 44px;
+  }
+
+  /* Small icon-only controls: keep the visual size intact but expand the
+     tappable area to 44x44 via an invisible pseudo-element overlay, so
+     they stay compact in dense rows (toast, member list) without becoming
+     hard to tap accurately. */
+  .btn-danger-icon,
+  .toast-close,
+  .onboarding-close,
+  .onboarding-dot {
+    position: relative;
+  }
+
+  .btn-danger-icon::before,
+  .toast-close::before,
+  .onboarding-close::before,
+  .onboarding-dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Loading skeleton utility, reusable anywhere a card/row is fetching data. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(120, 120, 120, 0.12);
+  border-radius: 8px;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(120, 120, 120, 0.18), transparent);
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* Glassmorphism */
 .glass {
   background: var(--bg-card);
@@ -217,6 +330,12 @@ html.dark .chess-knight-svg .knight-bg {
   font-size: 13.5px;
   cursor: pointer;
   transition: all 0.2s ease;
+  /* reset native <button> chrome — nav-link is now a real button for keyboard access */
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
 }
 
 .nav-link:hover {

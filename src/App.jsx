@@ -1878,8 +1878,9 @@ export default function App() {
               </div>
 
               <div className="form-group" style={{ textAlign: 'left' }}>
-                <label style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Email de Registro (Gmail)</label>
+                <label htmlFor="reg-email-readonly" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Email de Registro (Gmail)</label>
                 <input
+                  id="reg-email-readonly"
                   type="email"
                   className="form-input"
                   value={loginEmail}
@@ -2022,15 +2023,18 @@ export default function App() {
   return (
     <div className="layout-container">
 
+      {/* SKIP LINK: keyboard users can bypass the sidebar nav and jump straight to content */}
+      <a href="#main-content" className="skip-to-content">Saltar al contenido principal</a>
+
       {/* TOAST NOTIFICATION SYSTEM */}
-      <div className="toast-container" aria-live="polite">
+      <div className="toast-container" aria-live="polite" role="status">
         {toasts.map(t => (
           <div key={t.id} className={`toast-item toast-${t.type}`}>
-            <span className="toast-icon">
+            <span className="toast-icon" aria-hidden="true">
               {t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : 'i'}
             </span>
             <span className="toast-msg">{t.msg}</span>
-            <button className="toast-close" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>✕</button>
+            <button className="toast-close" aria-label="Cerrar notificación" onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}>✕</button>
           </div>
         ))}
       </div>
@@ -2051,8 +2055,13 @@ export default function App() {
 
       {/* MOBILE HEADER BAR */}
       <div className="mobile-header-bar">
-        <button className="menu-toggle-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
-          {isSidebarOpen ? <X size={22} /> : <Menu size={22} />}
+        <button
+          className="menu-toggle-btn"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          aria-label={isSidebarOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+          aria-expanded={isSidebarOpen}
+        >
+          {isSidebarOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
         </button>
         <a href="https://sales-arena.netlify.app/" target="_blank" rel="noopener noreferrer" title="Ir a la web principal de Sales Arena" className="brand-logo-interactive" style={{ margin: 0 }}>
           <div className="brand-logo-container horse-glow-pulse">
@@ -2095,34 +2104,34 @@ export default function App() {
           </a>
         </div>
 
-        <div className="nav-links">
-          <div className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} onClick={() => handleTabClick('dashboard')}>
+        <div className="nav-links" role="navigation" aria-label="Navegación principal">
+          <button type="button" className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} aria-current={activeTab === 'dashboard' ? 'page' : undefined} onClick={() => handleTabClick('dashboard')}>
             <LayoutDashboard size={17} /> Panel de Control
-          </div>
-          <div className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
             <CalendarRange size={17} /> Cargar Disponibilidad
-          </div>
-          <div className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} onClick={() => handleTabClick('heatmap')}>
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} aria-current={activeTab === 'heatmap' ? 'page' : undefined} onClick={() => handleTabClick('heatmap')}>
             <Flame size={17} /> Mapa de Calor
-          </div>
-          <div className={`nav-link ${activeTab === 'affinity' ? 'active' : ''}`} onClick={() => handleTabClick('affinity')}>
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'affinity' ? 'active' : ''}`} aria-current={activeTab === 'affinity' ? 'page' : undefined} onClick={() => handleTabClick('affinity')}>
             <Users size={17} /> Afinidad Horaria
-          </div>
-          <div className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} onClick={() => handleTabClick('members')}>
+          </button>
+          <button type="button" className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} aria-current={activeTab === 'members' ? 'page' : undefined} onClick={() => handleTabClick('members')}>
             <UserCheck size={17} /> Gestionar Equipo
-          </div>
+          </button>
         </div>
 
         {/* THEME SELECTOR WIDGET */}
-        <div className="theme-selector">
-          <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro">
-            <Sun size={12} /> Claro
+        <div className="theme-selector" role="group" aria-label="Selector de tema">
+          <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro" aria-pressed={theme === 'light'}>
+            <Sun size={12} aria-hidden="true" /> Claro
           </button>
-          <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro">
-            <Moon size={12} /> Oscuro
+          <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro" aria-pressed={theme === 'dark'}>
+            <Moon size={12} aria-hidden="true" /> Oscuro
           </button>
-          <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema">
-            <Monitor size={12} /> Auto
+          <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema" aria-pressed={theme === 'system'}>
+            <Monitor size={12} aria-hidden="true" /> Auto
           </button>
         </div>
 
@@ -2176,21 +2185,22 @@ export default function App() {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
+            <button
+              type="button"
               onClick={() => setIsRoomModalOpen(true)}
               className="glass room-chip"
               title="Gestionar salas"
             >
-              <span className="room-indicator-dot"></span>
+              <span className="room-indicator-dot" aria-hidden="true"></span>
               <span>Sala Activa: <strong>{roomName}</strong></span>
-              <Settings size={13} style={{ opacity: 0.75 }} />
-            </div>
+              <Settings size={13} style={{ opacity: 0.75 }} aria-hidden="true" />
+            </button>
           </div>
         </header>
 
         {/* CONTAINER CONTENT */}
-        <div className="view-content">
-          
+        <div className="view-content" id="main-content" tabIndex={-1}>
+
           {/* VIEW: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div>
@@ -2858,8 +2868,9 @@ export default function App() {
                                 type="checkbox"
                                 checked={m.active}
                                 onChange={toggleCurrentUserActive}
+                                aria-label="Activa o desactiva tu participación esta semana"
                               />
-                              <span className="switch-slider"></span>
+                              <span className="switch-slider" aria-hidden="true"></span>
                             </label>
                           </div>
                         ) : (
@@ -2873,8 +2884,9 @@ export default function App() {
                             className="btn-danger-icon"
                             onClick={() => deleteMember(m.email)}
                             title="Eliminar de la sala"
+                            aria-label={`Eliminar a ${m.name} de la sala`}
                           >
-                            <Trash2 size={15} />
+                            <Trash2 size={15} aria-hidden="true" />
                           </button>
                         )}
                       </div>
@@ -3206,8 +3218,8 @@ export default function App() {
         return (
           <div className="onboarding-overlay" role="dialog" aria-modal="true">
             <div className="onboarding-card glass">
-              <button className="onboarding-close" onClick={closeOnboarding} title="Cerrar guía">
-                <X size={16} />
+              <button className="onboarding-close" onClick={closeOnboarding} title="Cerrar guía" aria-label="Cerrar guía de bienvenida">
+                <X size={16} aria-hidden="true" />
               </button>
 
               <div className={`onboarding-icon ${onboardingStep === 0 ? 'brand' : ''}`}>

@@ -1447,6 +1447,9 @@ input:checked + .switch-slider:before {
   cursor: pointer;
   user-select: none;
   transition: opacity 0.2s;
+  /* reset native <button> chrome */
+  border: none;
+  font-family: inherit;
 }
 
 .room-chip:hover {
