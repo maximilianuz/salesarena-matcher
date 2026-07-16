@@ -522,6 +522,17 @@ export default function App() {
     return `${day} ${String(hour).padStart(2, '0')}:00`;
   };
 
+  // Plazo de respuesta en formato relativo y breve ("en 3 h", "en 2 días")
+  const formatRespondByRelative = (iso) => {
+    const diffMs = new Date(iso).getTime() - Date.now();
+    if (diffMs <= 0) return 'está por vencer';
+    const diffH = Math.round(diffMs / 3600000);
+    if (diffH < 1) return 'en menos de 1 h';
+    if (diffH < 24) return `en ${diffH} h`;
+    const diffD = Math.round(diffH / 24);
+    return `en ${diffD} día${diffD === 1 ? '' : 's'}`;
+  };
+
   // Propuesta activa del usuario esta semana (y la última, para mensajes de estado)
   const myEmailLower = currentUser?.email?.toLowerCase();
   const myWeekProposals = !currentUser ? [] : proposals.filter(p =>
@@ -2382,7 +2393,7 @@ export default function App() {
                   </h4>
                   {isRoomDataLoading ? (
                     <div className="match-card-skeleton" aria-busy="true" aria-label="Cargando tu propuesta de la semana">
-                      <div className="skeleton" style={{ width: '34px', height: '34px', borderRadius: '10px' }}></div>
+                      <div className="skeleton" style={{ width: '40px', height: '40px', borderRadius: '50%' }}></div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div className="skeleton" style={{ width: '55%', height: '14px' }}></div>
                         <div className="skeleton" style={{ width: '80%', height: '11px' }}></div>
@@ -2412,42 +2423,47 @@ export default function App() {
                     return (
                       <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(partnerName), width: '34px', height: '34px', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
                               {getInitials(partnerName)}
                             </span>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
                                 {partnerName}
-                                {partnerMember && <span className="participant-flag">{getCountryFlag(partnerMember.country)}</span>}
+                              </div>
+                              <div className="match-card-subline">
+                                {partnerMember && <span>{getCountryFlag(partnerMember.country)} {partnerMember.country}</span>}
                                 <ReliabilityBadge pct={getReliability(partnerEmail)} />
                               </div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tu compañero propuesto para esta semana</div>
                             </div>
                           </div>
                           <span className={`proposal-status-pill ${isConfirmed ? 'confirmed' : 'pending'}`}>
+                            <span className="status-dot" aria-hidden="true"></span>
                             {isConfirmed ? 'Confirmado' : 'Propuesto'}
                           </span>
                         </div>
 
                         <div className="match-card-body">
                           <div className="match-section-label"><Clock size={11} /> Horario de la sesión (hora local de cada uno)</div>
-                          <div className="match-times-grid">
-                            <div className="match-time-pill">
-                              <span className="match-time-name">Tú</span>
-                              <span className="match-time-range">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                          <div className="match-time-compare">
+                            <div className="match-time-side">
+                              <span className="match-time-side-label">Tú</span>
+                              <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                            </div>
+                            <div className="match-time-divider" aria-hidden="true">
+                              <Clock size={12} />
                             </div>
                             {partnerMember && (
-                              <div className="match-time-pill">
-                                <span className="match-time-name">{partnerName.split(' ')[0]}</span>
-                                <span className="match-time-range">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
+                              <div className="match-time-side match-time-side-right">
+                                <span className="match-time-side-label">{partnerName.split(' ')[0]}</span>
+                                <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
                               </div>
                             )}
                           </div>
                           {!isConfirmed && myProposal.respondBy && (
-                            <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <div className="match-deadline-chip" title={`Vence el ${new Date(myProposal.respondBy).toLocaleString()}`}>
                               <AlertCircle size={12} />
-                              Responde antes del {new Date(myProposal.respondBy).toLocaleString()} o el cupo se reasigna.
+                              Respondé {formatRespondByRelative(myProposal.respondBy)} o el cupo se reasigna
                             </div>
                           )}
                         </div>
