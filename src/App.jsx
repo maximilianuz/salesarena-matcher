@@ -948,6 +948,35 @@ export default function App() {
     }, 1000);
   };
 
+  // Dispara el weekly-matcher al instante cuando hay un cambio de disponibilidad
+  const triggerWeeklyMatcher = async () => {
+    try {
+      const url = import.meta.env.VITE_SUPABASE_URL;
+      if (!url || url.includes('placeholder')) {
+        console.log('Mock DB: skipping weekly-matcher trigger');
+        return;
+      }
+
+      const response = await fetch(`${url}/functions/v1/weekly-matcher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Weekly-matcher triggered:', data);
+        if (data.created && Object.values(data.created).some(v => v > 0)) {
+          showNotification('✨ ¡Se generaron nuevas propuestas de emparejamiento!');
+        }
+      } else {
+        console.error('Weekly-matcher error:', response.statusText);
+      }
+    } catch (err) {
+      console.error('Failed to trigger weekly-matcher:', err);
+    }
+  };
+
   const handleUseTemplate = () => {
     setWizardStatus({ type: 'loading', msg: 'Aplicando horarios base de tu plantilla...' });
     setTimeout(() => {
@@ -957,6 +986,10 @@ export default function App() {
       setAvailabilities([...cleanAvail, ...userTemplateRules]);
 
       setWizardStatus({ type: 'success', msg: '¡Horario base cargado con éxito para esta semana!' });
+
+      // Disparar weekly-matcher al instante para generar propuestas
+      triggerWeeklyMatcher();
+
       setTimeout(() => {
         setActiveTab('dashboard');
         setWizardStep(1);
@@ -1039,6 +1072,10 @@ export default function App() {
     }
 
     setWizardStatus({ type: 'success', msg: '¡Disponibilidad guardada correctamente!' });
+
+    // 5. Disparar weekly-matcher al instante para generar propuestas
+    triggerWeeklyMatcher();
+
     setTimeout(() => {
       setActiveTab('dashboard');
       setWizardStep(1);
@@ -1433,6 +1470,9 @@ export default function App() {
       
       setAvailabilities(prev => [...prev, ...userTemplateRules]);
       showNotification('¡Participación activada! Hemos cargado tus horarios semanales desde tu plantilla base.');
+
+      // Disparar weekly-matcher al instante para generar propuestas
+      triggerWeeklyMatcher();
     }
   };
 
