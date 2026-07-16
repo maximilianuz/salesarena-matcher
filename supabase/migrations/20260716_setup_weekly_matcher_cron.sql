@@ -15,7 +15,7 @@ SELECT cron.schedule(
   '0 * * * *',  -- Every hour at minute 0 UTC
   $$
   SELECT net.http_post(
-    url:='https://' || current_setting('app.settings.supabase_project_id', 'true') || '.supabase.co/functions/v1/weekly-matcher',
+    url:='https://gxqkfqxgmmn1eqdmssva.supabase.co/functions/v1/weekly-matcher',
     body:='{}'::jsonb,
     headers:='{"Content-Type":"application/json"}'::jsonb
   ) AS request_id;
@@ -24,13 +24,10 @@ SELECT cron.schedule(
 
 -- NOTE: This migration enables pg_cron to periodically trigger the weekly-matcher Edge Function.
 -- The function is idempotent, so it's safe to run every hour.
+-- Project ID: gxqkfqxgmmn1eqdmssva
 --
--- VERIFICATION STEPS:
--- 1. After deployment, check cron jobs with: SELECT * FROM cron.job;
--- 2. Verify job execution: SELECT * FROM cron.job_run_details ORDER BY end_time DESC LIMIT 10;
--- 3. Check Edge Function logs in Supabase Dashboard > Logs > Edge Functions
---
--- If the cron job fails with "current_setting('app.settings.supabase_project_id')" error:
--- Replace the above URL line with:
---   url:='https://YOUR_ACTUAL_PROJECT_ID.supabase.co/functions/v1/weekly-matcher',
--- where YOUR_ACTUAL_PROJECT_ID is from Supabase Dashboard > Settings > General > Project ID
+-- VERIFICATION STEPS (after deployment):
+-- 1. Check cron jobs: SELECT * FROM cron.job WHERE jobname = 'weekly-matcher-hourly';
+-- 2. Verify execution: SELECT * FROM cron.job_run_details ORDER BY end_time DESC LIMIT 10;
+-- 3. Check Edge Function logs: Supabase Dashboard > Logs > Edge Functions
+-- 4. Manually trigger: curl -X POST https://gxqkfqxgmmn1eqdmssva.supabase.co/functions/v1/weekly-matcher
