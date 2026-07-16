@@ -347,17 +347,105 @@
   border-bottom: 1px solid var(--border-color);
 }
 
-.heatmap-cell {
-  border-right: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: transform 0.1s, background-color 0.2s;
+/* Scale legend: always-visible key for the heatmap color steps (was previously
+   only reachable via hover tooltip, which fails on touch and keyboard). */
+.heatmap-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 2px;
 }
 
-.heatmap-cell:hover {
-  transform: scale(1.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+.heatmap-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heatmap-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.heatmap-legend-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.heatmap-cell-wrap {
+  padding: 0;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.heatmap-cell-btn {
+  width: 100%;
+  height: 32px;
+  min-width: 32px;
+  border: none;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: inherit;
+  display: block;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+
+.heatmap-cell-btn:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   z-index: 10;
+  position: relative;
+}
+
+.heatmap-cell-btn.selected {
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+  position: relative;
+  z-index: 5;
+}
+
+/* Detail panel: click/tap/keyboard-reachable equivalent of the old hover-only
+   tooltip. Announced via aria-live so screen reader users get it too. */
+.heatmap-detail-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background-color: var(--bg-card-hover);
+  padding: 12px 16px;
+  min-height: 20px;
+}
+
+.heatmap-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.heatmap-detail-empty {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.heatmap-detail-names {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.heatmap-detail-placeholder {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 /* Custom Grid Editor */
