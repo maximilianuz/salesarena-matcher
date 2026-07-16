@@ -4,6 +4,29 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
+// De una lista de slots UTC de la semana (0..167), devuelve el que ocurre
+// ANTES a partir de `now`. Un slot codifica día (0=lunes) y hora UTC; su
+// "próxima ocurrencia" se calcula igual que getNextMatchDateUtc en App.jsx.
+// Esto evita que se elija siempre el lunes (índice 0) cuando hoy es jueves y
+// la dupla también coincide, por ejemplo, mañana viernes (mucho más pronto).
+const soonestSlot = (slots, now = new Date()) => {
+  const nextOccurrenceMs = (slot) => {
+    const dayIdx = Math.floor(slot / 24);
+    const hourUtc = slot % 24;
+    const d = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
+    ));
+    const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
+    let delta = (dayIdx - todayIdx + 7) % 7;
+    if (delta === 0 && d <= now) delta = 7; // ya pasó hoy → semana próxima
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.getTime();
+  };
+  return slots.reduce((best, s) =>
+    nextOccurrenceMs(s) < nextOccurrenceMs(best) ? s : best
+  );
+};
+
 // Empareja 1:1 a los miembros priorizando por score de confiabilidad:
 // mayor score elige primero y obtiene el mejor compañero disponible.
 //
@@ -14,8 +37,9 @@ export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 //     (ej. propuestas ya rechazadas esta semana)
 //
 // Devuelve { pairs: [{ a, b, slot }], unmatched: [email] } donde slot es el
-// primer horario común de la semana para la dupla.
-export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new Set()) => {
+// horario común de la dupla que ocurre ANTES a partir de `now` (no el de
+// menor índice de la semana).
+export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new Set(), now = new Date()) => {
   const scoreOf = (email) => {
     const s = scores.get(email);
     return s === null || s === undefined ? BASELINE_SCORE : s;
@@ -54,7 +78,7 @@ export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new 
     if (best) {
       assigned.add(m.email);
       assigned.add(best.cand.email);
-      pairs.push({ a: m, b: best.cand, slot: Math.min(...best.common) });
+      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now) });
     }
   }
 

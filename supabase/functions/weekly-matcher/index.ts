@@ -57,11 +57,34 @@ const currentWeekStartISO = (now = new Date()): string => {
 type Member = { email: string; name: string; tz: string };
 type Pair = { a: Member; b: Member; slot: number };
 
+// De una lista de slots UTC de la semana (0..167), devuelve el que ocurre
+// ANTES a partir de `now`. Debe coincidir con soonestSlot en src/matcher.js y
+// con getNextMatchDateUtc en src/App.jsx: evita elegir siempre el lunes
+// (índice 0) cuando hoy es jueves y la dupla también coincide más pronto.
+const soonestSlot = (slots: number[], now: Date): number => {
+  const nextOccurrenceMs = (slot: number): number => {
+    const dayIdx = Math.floor(slot / 24);
+    const hourUtc = slot % 24;
+    const d = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
+    ));
+    const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
+    let delta = (dayIdx - todayIdx + 7) % 7;
+    if (delta === 0 && d <= now) delta = 7; // ya pasó hoy → semana próxima
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.getTime();
+  };
+  return slots.reduce((best, s) =>
+    nextOccurrenceMs(s) < nextOccurrenceMs(best) ? s : best
+  );
+};
+
 const buildWeeklyPairs = (
   members: Member[],
   slotSets: Map<string, Set<number>>,
   scores: Map<string, number | null>,
-  excludedPairs: Set<string>
+  excludedPairs: Set<string>,
+  now: Date
 ): { pairs: Pair[] } => {
   const scoreOf = (email: string) => scores.get(email) ?? BASELINE_SCORE;
   const pairKey = (e1: string, e2: string) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
@@ -90,7 +113,7 @@ const buildWeeklyPairs = (
     if (best) {
       assigned.add(m.email);
       assigned.add(best.cand.email);
-      pairs.push({ a: m, b: best.cand, slot: Math.min(...best.common) });
+      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now) });
     }
   }
   return { pairs };
@@ -191,7 +214,7 @@ Deno.serve(async (req) => {
       }
 
       // Emparejar e insertar propuestas
-      const { pairs } = buildWeeklyPairs(pool, slotSets, scores, excluded);
+      const { pairs } = buildWeeklyPairs(pool, slotSets, scores, excluded, new Date());
       if (pairs.length === 0) continue;
 
       const { error } = await supabase.from('match_proposals').insert(pairs.map(p => ({
