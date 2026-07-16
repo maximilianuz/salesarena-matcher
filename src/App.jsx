@@ -310,6 +310,10 @@ export default function App() {
   // {id, weekStart, aEmail, aName, bEmail, bName, slot, statusA, statusB, status, respondBy, meetingId}
   const [proposals, setProposals] = useState([]);
 
+  // true mientras se hace el fetch inicial a Supabase (members/proposals/meetings) de la sala.
+  // Evita mostrar "Aún sin compañero asignado" como si fuera un hecho antes de que llegue el dato real.
+  const [isRoomDataLoading, setIsRoomDataLoading] = useState(!useMockDb);
+
   // Tick por minuto: hace aparecer el prompt de asistencia cuando una sesión
   // termina con la página abierta, sin necesidad de recargar
   const [, setMinuteTick] = useState(0);
@@ -611,6 +615,7 @@ export default function App() {
     if (useMockDb) return;
 
     const loadSupabaseData = async () => {
+      setIsRoomDataLoading(true);
       // 1. Fetch Room (or create it if it doesn't exist)
       let { data: roomData, error: roomError } = await supabase
         .from('rooms')
@@ -708,6 +713,8 @@ export default function App() {
           reportedAt: d.reported_at
         })));
       }
+
+      setIsRoomDataLoading(false);
     };
 
     loadSupabaseData();
@@ -2361,7 +2368,15 @@ export default function App() {
                     <Sparkles size={15} className="section-title-icon" />
                     Mi Role-Play de la Semana
                   </h4>
-                  {!myProposal ? (
+                  {isRoomDataLoading ? (
+                    <div className="match-card-skeleton" aria-busy="true" aria-label="Cargando tu propuesta de la semana">
+                      <div className="skeleton" style={{ width: '34px', height: '34px', borderRadius: '10px' }}></div>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div className="skeleton" style={{ width: '55%', height: '14px' }}></div>
+                        <div className="skeleton" style={{ width: '80%', height: '11px' }}></div>
+                      </div>
+                    </div>
+                  ) : !myProposal ? (
                     <div className="empty-state">
                       <AlertCircle size={30} />
                       <span className="empty-state-title">
@@ -2464,7 +2479,12 @@ export default function App() {
                     Próximos Role-Plays Agendados
                   </h4>
                   <div className="meetings-list">
-                    {meetings.length === 0 ? (
+                    {isRoomDataLoading ? (
+                      <div aria-busy="true" aria-label="Cargando reuniones agendadas" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
+                        <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
+                      </div>
+                    ) : meetings.length === 0 ? (
                       <div className="empty-state">
                         <CalendarDays size={30} />
                         <span className="empty-state-title">Sin reuniones agendadas</span>

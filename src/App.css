@@ -1361,6 +1361,13 @@ input:checked + .switch-slider:before {
   max-width: 300px;
 }
 
+.match-card-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 4px;
+}
+
 /* =========================================
    MATCH CARDS: VISIBILIDAD DE COINCIDENCIA
    ========================================= */
