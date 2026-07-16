@@ -2690,7 +2690,12 @@ export default function App() {
                         const meetRows = attendances.filter(a => a.meetingId === meet.id);
                         const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
                         const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
-                        const statusRows = meetRows.filter(a => a.status !== 'confirmado');
+                        // ANÓNIMO: el voto de puntualidad/asistencia (asistió a tiempo, tarde,
+                        // no_show) NO se muestra atribuido en la sala; solo alimenta el % de
+                        // confiabilidad agregado. Sí se muestran las CANCELACIONES, que son una
+                        // acción propia y transparente que el equipo debe ver.
+                        const statusRows = meetRows.filter(a =>
+                          a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde');
                         const isLive = meetingHasStarted(meet) && !meetingHasEnded(meet);
 
                         return (
@@ -2721,15 +2726,9 @@ export default function App() {
                                 <div className="attendance-chips">
                                   {statusRows.map(a => (
                                     <span key={a.id} className={`attendance-chip attendance-chip-${a.status}`} title={a.cancelReason || undefined}>
-                                      {a.status === 'asistio' && <Check size={9} />}
-                                      {a.status === 'no_show' && <X size={9} />}
-                                      {(a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde') && <AlertCircle size={9} />}
+                                      <AlertCircle size={9} />
                                       {a.memberName.split(' ')[0]}
-                                      {a.status === 'asistio'
-                                        ? (a.punctuality === 'tarde' ? ' llegó tarde' : ' asistió a tiempo')
-                                        : a.status === 'no_show' ? ' no asistió'
-                                        : a.status === 'cancelado_tarde' ? ' canceló tarde'
-                                        : ' canceló con aviso'}
+                                      {a.status === 'cancelado_tarde' ? ' canceló tarde' : ' canceló con aviso'}
                                     </span>
                                   ))}
                                 </div>
