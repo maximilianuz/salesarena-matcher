@@ -499,8 +499,12 @@ export default function App() {
         .forEach(rule => {
           const startUtcMin = rule.dayIdx * 1440 + rule.startHour * 60 - offset;
           const endUtcMin = rule.dayIdx * 1440 + rule.endHour * 60 - offset;
+          // Solapamiento (no contención total): con offsets no múltiplos de 60
+          // (ej. India UTC+5:30) un bloque local de 1h nunca cae completamente
+          // dentro de un slot UTC de 1h, y con "contención total" ese miembro
+          // quedaría con 0 slots para siempre, sin ningún aviso.
           for (let s = 0; s < 168; s++) {
-            if (s * 60 >= startUtcMin && (s + 1) * 60 <= endUtcMin) set.add(s);
+            if (s * 60 < endUtcMin && (s + 1) * 60 > startUtcMin) set.add(s);
           }
         });
       map.set(member.email, set);
@@ -833,8 +837,10 @@ export default function App() {
           const slotStartMin = s * 60;
           const slotEndMin = (s + 1) * 60;
 
-          // Si el slot cae dentro del intervalo disponible
-          if (slotStartMin >= startUtcMin && slotEndMin <= endUtcMin) {
+          // Solapamiento (no contención total): ver computeSlotSets más arriba
+          // para el motivo — evita que offsets no múltiplos de 60 (India, etc.)
+          // dejen a un miembro con 0 slots libres sin ningún aviso.
+          if (slotStartMin < endUtcMin && slotEndMin > startUtcMin) {
             presence[s].push(memberIdx);
             freeSlotsCount[memberIdx]++;
           }

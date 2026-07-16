@@ -158,8 +158,13 @@ Deno.serve(async (req) => {
           .forEach(rule => {
             const startUtcMin = rule.day_idx * 1440 + rule.start_hour * 60 - offset;
             const endUtcMin = rule.day_idx * 1440 + rule.end_hour * 60 - offset;
+            // Solapamiento (no contención total): con offsets no múltiplos de 60
+            // (ej. India UTC+5:30) un bloque local de 1h nunca cae completamente
+            // dentro de un slot UTC de 1h, y con "contención total" ese miembro
+            // quedaría con 0 slots para siempre, sin ningún aviso. Debe coincidir
+            // con src/App.jsx (computeSlotSets / calculateEngine).
             for (let s = 0; s < 168; s++) {
-              if (s * 60 >= startUtcMin && (s + 1) * 60 <= endUtcMin) set.add(s);
+              if (s * 60 < endUtcMin && (s + 1) * 60 > startUtcMin) set.add(s);
             }
           });
         slotSets.set(m.email, set);
