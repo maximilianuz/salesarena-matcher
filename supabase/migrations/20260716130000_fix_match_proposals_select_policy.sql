@@ -12,6 +12,7 @@
 -- en su forma simple y correcta: cada usuario ve las propuestas donde su email
 -- participa como member_a o member_b.
 
+DROP POLICY IF EXISTS "Users can only see match proposals they're in" ON match_proposals;
 DROP POLICY IF EXISTS "Users can view their own proposals" ON match_proposals;
 
 CREATE POLICY "Users can view their own proposals"
