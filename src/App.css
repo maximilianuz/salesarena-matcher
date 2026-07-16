@@ -1361,6 +1361,13 @@ input:checked + .switch-slider:before {
   max-width: 300px;
 }
 
+.match-card-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 4px;
+}
+
 /* =========================================
    MATCH CARDS: VISIBILIDAD DE COINCIDENCIA
    ========================================= */
@@ -1447,6 +1454,9 @@ input:checked + .switch-slider:before {
   cursor: pointer;
   user-select: none;
   transition: opacity 0.2s;
+  /* reset native <button> chrome */
+  border: none;
+  font-family: inherit;
 }
 
 .room-chip:hover {
