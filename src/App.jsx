@@ -43,7 +43,8 @@ import {
   Sunset,
   Lock,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  MicOff
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -519,6 +520,17 @@ export default function App() {
     const day = DIAS[Math.floor(norm / 1440)];
     const hour = Math.floor((norm % 1440) / 60);
     return `${day} ${String(hour).padStart(2, '0')}:00`;
+  };
+
+  // Plazo de respuesta en formato relativo y breve ("en 3 h", "en 2 días")
+  const formatRespondByRelative = (iso) => {
+    const diffMs = new Date(iso).getTime() - Date.now();
+    if (diffMs <= 0) return 'está por vencer';
+    const diffH = Math.round(diffMs / 3600000);
+    if (diffH < 1) return 'en menos de 1 h';
+    if (diffH < 24) return `en ${diffH} h`;
+    const diffD = Math.round(diffH / 24);
+    return `en ${diffD} día${diffD === 1 ? '' : 's'}`;
   };
 
   // Propuesta activa del usuario esta semana (y la última, para mensajes de estado)
@@ -2381,7 +2393,7 @@ export default function App() {
                   </h4>
                   {isRoomDataLoading ? (
                     <div className="match-card-skeleton" aria-busy="true" aria-label="Cargando tu propuesta de la semana">
-                      <div className="skeleton" style={{ width: '34px', height: '34px', borderRadius: '10px' }}></div>
+                      <div className="skeleton" style={{ width: '40px', height: '40px', borderRadius: '50%' }}></div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div className="skeleton" style={{ width: '55%', height: '14px' }}></div>
                         <div className="skeleton" style={{ width: '80%', height: '11px' }}></div>
@@ -2411,42 +2423,47 @@ export default function App() {
                     return (
                       <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(partnerName), width: '34px', height: '34px', fontSize: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                            <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
                               {getInitials(partnerName)}
                             </span>
-                            <div>
-                              <div style={{ fontWeight: 700, fontSize: '14.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
                                 {partnerName}
-                                {partnerMember && <span className="participant-flag">{getCountryFlag(partnerMember.country)}</span>}
+                              </div>
+                              <div className="match-card-subline">
+                                {partnerMember && <span>{getCountryFlag(partnerMember.country)} {partnerMember.country}</span>}
                                 <ReliabilityBadge pct={getReliability(partnerEmail)} />
                               </div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tu compañero propuesto para esta semana</div>
                             </div>
                           </div>
                           <span className={`proposal-status-pill ${isConfirmed ? 'confirmed' : 'pending'}`}>
+                            <span className="status-dot" aria-hidden="true"></span>
                             {isConfirmed ? 'Confirmado' : 'Propuesto'}
                           </span>
                         </div>
 
                         <div className="match-card-body">
                           <div className="match-section-label"><Clock size={11} /> Horario de la sesión (hora local de cada uno)</div>
-                          <div className="match-times-grid">
-                            <div className="match-time-pill">
-                              <span className="match-time-name">Tú</span>
-                              <span className="match-time-range">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                          <div className="match-time-compare">
+                            <div className="match-time-side">
+                              <span className="match-time-side-label">Tú</span>
+                              <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                            </div>
+                            <div className="match-time-divider" aria-hidden="true">
+                              <Clock size={12} />
                             </div>
                             {partnerMember && (
-                              <div className="match-time-pill">
-                                <span className="match-time-name">{partnerName.split(' ')[0]}</span>
-                                <span className="match-time-range">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
+                              <div className="match-time-side match-time-side-right">
+                                <span className="match-time-side-label">{partnerName.split(' ')[0]}</span>
+                                <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
                               </div>
                             )}
                           </div>
                           {!isConfirmed && myProposal.respondBy && (
-                            <div style={{ fontSize: '11px', color: 'var(--color-warning)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <div className="match-deadline-chip" title={`Vence el ${new Date(myProposal.respondBy).toLocaleString()}`}>
                               <AlertCircle size={12} />
-                              Responde antes del {new Date(myProposal.respondBy).toLocaleString()} o el cupo se reasigna.
+                              Respondé {formatRespondByRelative(myProposal.respondBy)} o el cupo se reasigna
                             </div>
                           )}
                         </div>
@@ -2489,6 +2506,9 @@ export default function App() {
                     <CalendarCheck size={15} className="section-title-icon" />
                     Próximos Role-Plays Agendados
                   </h4>
+                  <p className="section-subtitle">
+                    Estos links son visibles para toda la sala: si querés mirar o sumarte como observador a un role-play de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
+                  </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
                       <div aria-busy="true" aria-label="Cargando reuniones agendadas" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -2499,7 +2519,7 @@ export default function App() {
                       <div className="empty-state">
                         <CalendarDays size={30} />
                         <span className="empty-state-title">Sin reuniones agendadas</span>
-                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet.</span>
+                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet, visible para toda la sala.</span>
                       </div>
                     ) : (
                       meetings.map((meet, idx) => {
@@ -2507,6 +2527,7 @@ export default function App() {
                         const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
                         const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
                         const statusRows = meetRows.filter(a => a.status !== 'confirmado');
+                        const isLive = meetingHasStarted(meet) && !meetingHasEnded(meet);
 
                         return (
                           <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
@@ -2516,6 +2537,22 @@ export default function App() {
                               <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Users size={10} /> {meet.participants}
                               </span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {isLive && (
+                                  <span className="meeting-live-badge" role="status">
+                                    <span className="meeting-live-dot" aria-hidden="true"></span>
+                                    En vivo ahora
+                                  </span>
+                                )}
+                                <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador, con el micrófono apagado">
+                                  <Globe size={10} /> Abierto a la sala
+                                </span>
+                              </div>
+                              {isLive && (
+                                <span className="meeting-mic-note">
+                                  <MicOff size={10} /> Si entrás como observador, hacelo con el micrófono apagado para no interrumpir
+                                </span>
+                              )}
                               {statusRows.length > 0 && (
                                 <div className="attendance-chips">
                                   {statusRows.map(a => (
@@ -2531,7 +2568,14 @@ export default function App() {
                               )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                              <a href={meet.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}>
+                              <a
+                                href={meet.meetLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-indigo"
+                                style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
+                                aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
+                              >
                                 <Video size={12} /> Meet
                               </a>
                               {canCancel && (
@@ -2829,7 +2873,15 @@ export default function App() {
           })()}
 
           {/* VIEW: AFFINITY */}
-          {activeTab === 'affinity' && (
+          {activeTab === 'affinity' && (() => {
+            const AFFINITY_LEVELS = [
+              { label: 'Baja o sin coincidencia aún', min: 0, max: 39, bg: 'rgba(120, 120, 120, 0.1)', text: 'var(--text-muted)' },
+              { label: 'Moderada (40-69%)', min: 40, max: 69, bg: 'rgba(255, 159, 10, 0.12)', text: 'var(--color-warning)' },
+              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(52, 199, 89, 0.15)', text: '#34c759' }
+            ];
+            const levelForAffinity = (pct) => AFFINITY_LEVELS.find(l => pct >= l.min && pct <= l.max) || AFFINITY_LEVELS[0];
+
+            return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               <div className="section-card glass">
                 <h4 className="section-title">
@@ -2837,8 +2889,17 @@ export default function App() {
                   Tu Solapamiento Horario con el Equipo
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Verde = excelente afinidad horaria. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
+                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
                 </p>
+
+                <div className="heatmap-legend" role="img" aria-label="Escala de afinidad horaria: de baja o sin coincidencia a alta">
+                  {AFFINITY_LEVELS.map(l => (
+                    <div className="heatmap-legend-item" key={l.label}>
+                      <span className="heatmap-legend-swatch" style={{ backgroundColor: l.bg }}></span>
+                      <span className="heatmap-legend-text">{l.label}</span>
+                    </div>
+                  ))}
+                </div>
                 <div className="table-responsive-wrapper">
                   <table className="affinity-table">
                     <thead>
@@ -2855,18 +2916,12 @@ export default function App() {
                           <td className="affinity-td-label">{row.name}</td>
                           {row.stats.map((col, j) => {
                             const pct = col.pct;
-                            let bg = 'transparent';
-                            let text = 'var(--text-muted)';
-                            if (pct !== null) {
-                              if (pct >= 70) { bg = 'rgba(52, 199, 89, 0.15)'; text = '#34c759'; }
-                              else if (pct >= 40) { bg = 'rgba(255, 149, 0, 0.12)'; text = '#ff9500'; }
-                              else { bg = 'rgba(255, 59, 48, 0.08)'; text = '#ff3b30'; }
-                            }
+                            const level = pct !== null ? levelForAffinity(pct) : null;
                             return (
                               <td
                                 key={j}
                                 className="affinity-cell"
-                                style={{ backgroundColor: bg, color: text }}
+                                style={{ backgroundColor: level ? level.bg : 'transparent', color: level ? level.text : 'var(--text-muted)' }}
                               >
                                 {pct !== null ? `${pct}%` : '—'}
                               </td>
@@ -2889,29 +2944,55 @@ export default function App() {
                   {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => {
                     const sortedStats = [...row.stats]
                       .filter(s => s.pct !== null)
-                      .sort((a, b) => b.pct - a.pct)
-                      .slice(0, 2);
+                      .sort((a, b) => b.pct - a.pct);
+                    const topStats = sortedStats.filter(s => s.pct > 0).slice(0, 2);
+
+                    if (sortedStats.length === 0) {
+                      return (
+                        <div className="empty-state" key={i}>
+                          <Users size={30} />
+                          <span className="empty-state-title">Todavía no hay compañeros activos</span>
+                          <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
+                        </div>
+                      );
+                    }
+
+                    if (topStats.length === 0) {
+                      return (
+                        <div className="empty-state" key={i}>
+                          <AlertCircle size={30} />
+                          <span className="empty-state-title">Aún sin coincidencias horarias</span>
+                          <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
+                        </div>
+                      );
+                    }
 
                     return (
-                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '4px' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(row.name) }}>
-                            {getInitials(row.name)}
-                          </span>
-                          {row.name}
-                        </span>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12.5px' }}>
-                          {sortedStats.length > 0
-                            ? sortedStats.map(s => `${s.name.split(' ')[0]} (${s.pct}%)`).join('   ·   ')
-                            : 'Cargando disponibilidad...'}
-                        </span>
-                      </div>
+                      <React.Fragment key={i}>
+                        {topStats.map(s => {
+                          const level = levelForAffinity(s.pct);
+                          return (
+                            <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(s.name) }}>
+                                  {getInitials(s.name)}
+                                </span>
+                                {s.name}
+                              </span>
+                              <span className="affinity-pct-badge" style={{ backgroundColor: level.bg, color: level.text }}>
+                                {s.pct}%
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
                     );
                   })}
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* VIEW: MEMBERS */}
           {activeTab === 'members' && (
@@ -3295,7 +3376,7 @@ export default function App() {
           {
             icon: <Video size={34} />,
             title: '3 · Agenda y comparte',
-            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet para todos. Invita a más compañeros compartiendo el link de tu sala desde el Panel de Control.'
+            desc: 'Con un clic agendas el role-play en Google Calendar con link de Meet. Ese link queda visible para toda la sala en el Panel de Control: cualquier compañero puede sumarse a mirar o participar, no solo la dupla emparejada.'
           }
         ];
         const step = steps[onboardingStep];
