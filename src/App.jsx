@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import './supabaseProxy'; // Load proxy handler for DNS blocking resilience
 import { buildWeeklyPairs, currentWeekStartISO } from './matcher';
 import {
   LayoutDashboard,
