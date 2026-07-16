@@ -2621,7 +2621,7 @@ export default function App() {
                 <div className="editor-grid-container">
                   <h3 className="wizard-title">Marca tu Disponibilidad</h3>
                   <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
-                    Haz clic o arrastra sobre el calendario para pintar tus horas libres.
+                    Haz clic o arrastra sobre el calendario para marcar los horarios en los que podés hacer un role-play.
                   </p>
 
                   <div className="editor-toolbar">
@@ -3279,7 +3279,7 @@ export default function App() {
           {
             icon: <CalendarRange size={34} />,
             title: '1 · Carga tu disponibilidad',
-            desc: 'Entra a "Cargar Disponibilidad" y pinta en el calendario las horas libres de tu semana (en tu hora local). Puedes usar presets rápidos o guardar tu horario como plantilla para reutilizarlo cada semana.'
+            desc: 'Entra a "Cargar Disponibilidad" y marca en el calendario los horarios en los que podés hacer un role-play esta semana (en tu hora local). Puedes usar presets rápidos o guardar tu horario como plantilla para reutilizarlo cada semana.'
           },
           {
             icon: <Sparkles size={34} />,
