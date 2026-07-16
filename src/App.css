@@ -1770,6 +1770,54 @@ input:checked + .switch-slider:before {
   width: fit-content;
 }
 
+.meeting-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  background-color: rgba(255, 69, 58, 0.12);
+  color: var(--color-danger);
+  border: 1px solid rgba(255, 69, 58, 0.35);
+  width: fit-content;
+  animation: live-badge-glow 1.6s ease-in-out infinite;
+}
+
+.meeting-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--color-danger);
+  flex-shrink: 0;
+  animation: live-dot-blink 1.2s ease-in-out infinite;
+}
+
+@keyframes live-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.32); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 69, 58, 0); }
+}
+
+@keyframes live-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.meeting-mic-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-warning);
+  line-height: 1.35;
+}
+
 .btn-cancel-notice {
   background: none;
   border: 1px solid var(--border-color);

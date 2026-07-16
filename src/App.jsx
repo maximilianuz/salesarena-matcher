@@ -43,7 +43,8 @@ import {
   Sunset,
   Lock,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  MicOff
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -2490,7 +2491,7 @@ export default function App() {
                     Próximos Role-Plays Agendados
                   </h4>
                   <p className="section-subtitle">
-                    Estos links son visibles para toda la sala: si querés mirar o sumarte como observador a un role-play de otros compañeros, podés unirte desde acá.
+                    Estos links son visibles para toda la sala: si querés mirar o sumarte como observador a un role-play de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
                   </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
@@ -2510,6 +2511,7 @@ export default function App() {
                         const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
                         const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
                         const statusRows = meetRows.filter(a => a.status !== 'confirmado');
+                        const isLive = meetingHasStarted(meet) && !meetingHasEnded(meet);
 
                         return (
                           <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
@@ -2519,9 +2521,22 @@ export default function App() {
                               <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <Users size={10} /> {meet.participants}
                               </span>
-                              <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador">
-                                <Globe size={10} /> Abierto a la sala
-                              </span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {isLive && (
+                                  <span className="meeting-live-badge" role="status">
+                                    <span className="meeting-live-dot" aria-hidden="true"></span>
+                                    En vivo ahora
+                                  </span>
+                                )}
+                                <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador, con el micrófono apagado">
+                                  <Globe size={10} /> Abierto a la sala
+                                </span>
+                              </div>
+                              {isLive && (
+                                <span className="meeting-mic-note">
+                                  <MicOff size={10} /> Si entrás como observador, hacelo con el micrófono apagado para no interrumpir
+                                </span>
+                              )}
                               {statusRows.length > 0 && (
                                 <div className="attendance-chips">
                                   {statusRows.map(a => (
