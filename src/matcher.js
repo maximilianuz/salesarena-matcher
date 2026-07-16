@@ -35,16 +35,19 @@ const soonestSlot = (slots, now = new Date()) => {
 //   scores:   Map(email -> pct | null)
 //   excludedPairs: Set("emailA|emailB" ordenado) — parejas a no repetir
 //     (ej. propuestas ya rechazadas esta semana)
+//   pairCounts: Map("emailA|emailB" ordenado -> nº de reuniones concretadas)
+//     para la rotación anti-amiguismo (menos veces juntos = mayor prioridad)
 //
 // Devuelve { pairs: [{ a, b, slot }], unmatched: [email] } donde slot es el
 // horario común de la dupla que ocurre ANTES a partir de `now` (no el de
 // menor índice de la semana).
-export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new Set(), now = new Date()) => {
+export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new Set(), pairCounts = new Map(), now = new Date()) => {
   const scoreOf = (email) => {
     const s = scores.get(email);
     return s === null || s === undefined ? BASELINE_SCORE : s;
   };
   const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
+  const timesPaired = (e1, e2) => pairCounts.get(pairKey(e1, e2)) ?? 0;
 
   const ranked = [...members].sort((a, b) => scoreOf(b.email) - scoreOf(a.email));
   const assigned = new Set();
@@ -65,13 +68,17 @@ export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new 
       const common = [...mySlots].filter(s => candSlots.has(s));
       if (common.length === 0) continue;
 
+      const count = timesPaired(m.email, cand.email);
       const candScore = scoreOf(cand.email);
+      // Anti-amiguismo: 1º menos veces juntos, 2º mayor confiabilidad,
+      // 3º mayor solapamiento. Debe coincidir con la Edge Function.
       if (
         !best ||
-        candScore > best.score ||
-        (candScore === best.score && common.length > best.common.length)
+        count < best.count ||
+        (count === best.count && candScore > best.score) ||
+        (count === best.count && candScore === best.score && common.length > best.common.length)
       ) {
-        best = { cand, score: candScore, common };
+        best = { cand, count, score: candScore, common };
       }
     }
 
