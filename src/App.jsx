@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairs, currentWeekStartISO } from './matcher';
+import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS } from './matcher';
 import {
   LayoutDashboard,
   CalendarRange,
@@ -554,11 +554,17 @@ export default function App() {
         .filter(p => p.weekStart === week && (p.status === 'propuesto' || p.status === 'confirmado'))
         .flatMap(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()])
     );
-    // Solo se excluyen parejas RECHAZADAS (no las expiradas): igual que la
-    // Edge Function, una dupla sin respuesta se vuelve a ofrecer.
+    // Solo se excluyen parejas RECHAZADAS (se respeta el "no" explícito).
     const rejectedPairs = new Set(
       proposals
         .filter(p => p.weekStart === week && p.status === 'rechazado')
+        .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
+    );
+    // Duplas EXPIRADAS (sin respuesta): se evitan si hay otro compañero
+    // disponible; si no, se vuelven a ofrecer.
+    const expiredPairs = new Set(
+      proposals
+        .filter(p => p.weekStart === week && p.status === 'expirado')
         .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
     );
     const pool = members.filter(m => m.active && !takenOrRejected.has(m.email.toLowerCase()));
@@ -566,10 +572,11 @@ export default function App() {
 
     const slotSets = computeSlotSets(pool, availabilities);
     const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
-    const { pairs } = buildWeeklyPairs(pool, slotSets, scores, rejectedPairs);
+    const { pairs } = buildWeeklyPairs(
+      pool, slotSets, scores, rejectedPairs, new Map(), new Date(), expiredPairs, MIN_LEAD_MS
+    );
     if (pairs.length === 0) return;
 
-    const respondBy = new Date(Date.now() + 24 * 3600e3).toISOString();
     const baseId = Date.now();
     setProposals(prev => [...prev, ...pairs.map((p, i) => ({
       id: baseId + i,
@@ -582,7 +589,8 @@ export default function App() {
       statusA: 'pendiente',
       statusB: 'pendiente',
       status: 'propuesto',
-      respondBy,
+      // Plazo = 24hs antes de la reunión (no 24h desde ahora)
+      respondBy: new Date(getNextMatchDateUtc({ startSlot: p.slot }).getTime() - MIN_LEAD_MS).toISOString(),
       meetingId: null
     }))]);
   }, [members, availabilities, currentUser, proposals]);

@@ -4,28 +4,40 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
-// De una lista de slots UTC de la semana (0..167), devuelve el que ocurre
-// ANTES a partir de `now`. Un slot codifica día (0=lunes) y hora UTC; su
-// "próxima ocurrencia" se calcula igual que getNextMatchDateUtc en App.jsx.
-// Esto evita que se elija siempre el lunes (índice 0) cuando hoy es jueves y
-// la dupla también coincide, por ejemplo, mañana viernes (mucho más pronto).
-const soonestSlot = (slots, now = new Date()) => {
-  const nextOccurrenceMs = (slot) => {
-    const dayIdx = Math.floor(slot / 24);
-    const hourUtc = slot % 24;
-    const d = new Date(Date.UTC(
-      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
-    ));
-    const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
-    let delta = (dayIdx - todayIdx + 7) % 7;
-    if (delta === 0 && d <= now) delta = 7; // ya pasó hoy → semana próxima
-    d.setUTCDate(d.getUTCDate() + delta);
-    return d.getTime();
-  };
-  return slots.reduce((best, s) =>
-    nextOccurrenceMs(s) < nextOccurrenceMs(best) ? s : best
-  );
+// Antelación mínima entre "ahora" y la reunión propuesta. La confirmación debe
+// poder hacerse al menos 24hs antes; por eso nunca se propone un slot que ocurra
+// dentro de las próximas 24hs (respond_by = reunión - 24hs quedaría en el pasado).
+export const MIN_LEAD_MS = 24 * 3600e3;
+
+// Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
+// >= ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la
+// ocurrencia de esta semana cae antes del piso, rueda a la semana siguiente.
+const nextSlotOccurrenceMs = (slot, now, minLeadMs = 0) => {
+  const dayIdx = Math.floor(slot / 24);
+  const hourUtc = slot % 24;
+  const d = new Date(Date.UTC(
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
+  ));
+  const todayIdx = (d.getUTCDay() + 6) % 7; // 0 = lunes
+  const delta = (dayIdx - todayIdx + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + delta);
+  const floor = now.getTime() + minLeadMs;
+  while (d.getTime() < floor) d.setUTCDate(d.getUTCDate() + 7);
+  return d.getTime();
 };
+
+// De una lista de slots UTC de la semana, devuelve el que ocurre ANTES a partir
+// de `now` (respetando minLeadMs). Evita elegir siempre el lunes cuando hoy es
+// jueves y la dupla coincide, por ejemplo, el viernes (mucho más pronto).
+export const soonestSlot = (slots, now = new Date(), minLeadMs = 0) =>
+  slots.reduce((best, s) =>
+    nextSlotOccurrenceMs(s, now, minLeadMs) < nextSlotOccurrenceMs(best, now, minLeadMs) ? s : best
+  );
+
+// Epoch (ms) de la reunión para un slot ya elegido. Se usa para calcular
+// respond_by = reunión - 24hs de forma estable (timestamp fijo, no recalculado).
+export const slotDateMs = (slot, now = new Date(), minLeadMs = 0) =>
+  nextSlotOccurrenceMs(slot, now, minLeadMs);
 
 // Empareja 1:1 a los miembros priorizando por score de confiabilidad:
 // mayor score elige primero y obtiene el mejor compañero disponible.
@@ -33,15 +45,26 @@ const soonestSlot = (slots, now = new Date()) => {
 //   members:  [{ email, name }]
 //   slotSets: Map(email -> Set<int>) slots UTC de la semana (0..167) en que está libre
 //   scores:   Map(email -> pct | null)
-//   excludedPairs: Set("emailA|emailB" ordenado) — parejas a no repetir
-//     (ej. propuestas ya rechazadas esta semana)
+//   excludedPairs: Set("emailA|emailB" ordenado) — parejas a NO repetir
+//     (ej. propuestas ya RECHAZADAS esta semana: se respeta el "no" explícito)
 //   pairCounts: Map("emailA|emailB" ordenado -> nº de reuniones concretadas)
 //     para la rotación anti-amiguismo (menos veces juntos = mayor prioridad)
+//   softExcludedPairs: Set(...) — parejas a EVITAR si hay alternativa (ej. una
+//     propuesta que expiró sin respuesta esta semana → se prefiere otro
+//     compañero disponible; si no hay otro, se re-ofrece la misma dupla)
+//   minLeadMs: antelación mínima de la reunión respecto de `now`
 //
-// Devuelve { pairs: [{ a, b, slot }], unmatched: [email] } donde slot es el
-// horario común de la dupla que ocurre ANTES a partir de `now` (no el de
-// menor índice de la semana).
-export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new Set(), pairCounts = new Map(), now = new Date()) => {
+// Devuelve { pairs: [{ a, b, slot }], unmatched: [email] }.
+export const buildWeeklyPairs = (
+  members,
+  slotSets,
+  scores,
+  excludedPairs = new Set(),
+  pairCounts = new Map(),
+  now = new Date(),
+  softExcludedPairs = new Set(),
+  minLeadMs = 0
+) => {
   const scoreOf = (email) => {
     const s = scores.get(email);
     return s === null || s === undefined ? BASELINE_SCORE : s;
@@ -68,24 +91,32 @@ export const buildWeeklyPairs = (members, slotSets, scores, excludedPairs = new 
       const common = [...mySlots].filter(s => candSlots.has(s));
       if (common.length === 0) continue;
 
+      const isSoft = softExcludedPairs.has(pairKey(m.email, cand.email));
       const count = timesPaired(m.email, cand.email);
       const candScore = scoreOf(cand.email);
-      // Anti-amiguismo: 1º menos veces juntos, 2º mayor confiabilidad,
-      // 3º mayor solapamiento. Debe coincidir con la Edge Function.
+      // Prioridad de selección del compañero (anti-amiguismo):
+      //   0º evitar duplas soft-excluidas (expiradas) si hay alternativa
+      //   1º menos veces emparejados históricamente → fuerza "todos con todos"
+      //   2º mayor confiabilidad (premia compromiso)
+      //   3º mayor solapamiento horario
+      // Debe coincidir con la Edge Function.
       if (
         !best ||
-        count < best.count ||
-        (count === best.count && candScore > best.score) ||
-        (count === best.count && candScore === best.score && common.length > best.common.length)
+        (best.isSoft && !isSoft) ||
+        (best.isSoft === isSoft && (
+          count < best.count ||
+          (count === best.count && candScore > best.score) ||
+          (count === best.count && candScore === best.score && common.length > best.common.length)
+        ))
       ) {
-        best = { cand, count, score: candScore, common };
+        best = { cand, count, score: candScore, common, isSoft };
       }
     }
 
     if (best) {
       assigned.add(m.email);
       assigned.add(best.cand.email);
-      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now) });
+      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now, minLeadMs) });
     }
   }
 
