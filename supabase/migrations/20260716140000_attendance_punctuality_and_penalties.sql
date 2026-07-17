@@ -1,3 +1,16 @@
+-- Garantiza que la tabla exista antes de alterarla (por si esta migración
+-- corre antes que 20260716135000_create_meeting_attendees.sql)
+CREATE TABLE IF NOT EXISTS meeting_attendees (
+  id BIGSERIAL PRIMARY KEY,
+  meeting_id UUID NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+  member_email TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'confirmado' CHECK (status IN (
+    'confirmado', 'asistio', 'no_show', 'cancelado_con_aviso', 'cancelado_tarde'
+  )),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE(meeting_id, member_email)
+);
 -- Asistencia con puntualidad + penalizaciones por faltas.
 --
 -- Amplía meeting_attendees para soportar:
