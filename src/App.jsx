@@ -210,7 +210,11 @@ const generateInviteCode = () => {
 
 // Fecha/hora UTC real de la próxima ocurrencia del match.
 // match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
-const getNextMatchDateUtc = (match) => {
+// minLeadMs: piso de antelación. Debe coincidir con nextSlotOccurrenceMs
+// (src/matcher.js / la Edge Function): el emparejador elige el turno y calcula
+// respond_by respetando ese piso, así que mostrar/agendar la reunión con otra
+// regla haría que el plazo y la fecha visibles no coincidan con lo planificado.
+const getNextMatchDateUtc = (match, minLeadMs = 0) => {
   const dayIdx = Math.floor(match.startSlot / 24); // 0 = Lunes ... 6 = Domingo
   const hourUtc = match.startSlot % 24;
   const now = new Date();
@@ -219,9 +223,12 @@ const getNextMatchDateUtc = (match) => {
   ));
   // getUTCDay(): 0=Domingo..6=Sábado → convertir a 0=Lunes..6=Domingo
   const todayIdx = (start.getUTCDay() + 6) % 7;
-  let delta = (dayIdx - todayIdx + 7) % 7;
-  if (delta === 0 && start <= now) delta = 7; // ya pasó hoy → semana próxima
+  const delta = (dayIdx - todayIdx + 7) % 7;
   start.setUTCDate(start.getUTCDate() + delta);
+  // Rodar a la semana siguiente hasta respetar el piso de antelación (con
+  // minLeadMs=0 equivale a "si ya pasó hoy, va a la semana próxima").
+  const floor = now.getTime() + minLeadMs;
+  while (start.getTime() < floor) start.setUTCDate(start.getUTCDate() + 7);
   return start;
 };
 
@@ -600,8 +607,10 @@ export default function App() {
       statusA: 'pendiente',
       statusB: 'pendiente',
       status: 'propuesto',
-      // Plazo de confirmación = MIN_LEAD_MS antes de la reunión (no desde ahora)
-      respondBy: new Date(getNextMatchDateUtc({ startSlot: p.slot }).getTime() - MIN_LEAD_MS).toISOString(),
+      // Plazo de confirmación = MIN_LEAD_MS antes de la reunión (no desde ahora).
+      // Se usa el mismo piso que el emparejador para que el turno elegido y su
+      // plazo coincidan con nextSlotOccurrenceMs (matcher.js / Edge Function).
+      respondBy: new Date(getNextMatchDateUtc({ startSlot: p.slot }, MIN_LEAD_MS).getTime() - MIN_LEAD_MS).toISOString(),
       meetingId: null
     }))]);
   }, [members, availabilities, currentUser, proposals]);
@@ -1537,8 +1546,9 @@ export default function App() {
       attendeesCount: 2
     });
 
-    // Fecha/hora UTC real de la próxima ocurrencia del slot propuesto
-    const startDate = getNextMatchDateUtc({ startSlot: proposal.slot });
+    // Fecha/hora UTC real de la próxima ocurrencia del slot propuesto (con el
+    // mismo piso de antelación que usó el emparejador para planificarla)
+    const startDate = getNextMatchDateUtc({ startSlot: proposal.slot }, MIN_LEAD_MS);
     const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
     await sleep(1000);
@@ -2636,6 +2646,14 @@ export default function App() {
                     const linkedMeeting = meetings.find(mm => mm.id === myProposal.meetingId);
                     const isConfirmed = myProposal.status === 'confirmado';
 
+                    // Inicio real de la sesión (misma regla que el emparejador).
+                    // El plazo de confirmación jamás puede quedar DESPUÉS de que
+                    // empiece la reunión: se acota al menor de ambos para evitar
+                    // "Respondé en 3 h" cuando la sesión es en 1 h.
+                    const sessionStartMs = getNextMatchDateUtc({ startSlot: myProposal.slot }, MIN_LEAD_MS).getTime();
+                    const rawDeadlineMs = myProposal.respondBy ? new Date(myProposal.respondBy).getTime() : sessionStartMs;
+                    const effectiveDeadline = new Date(Math.min(rawDeadlineMs, sessionStartMs)).toISOString();
+
                     return (
                       <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
@@ -2676,10 +2694,10 @@ export default function App() {
                               </div>
                             )}
                           </div>
-                          {!isConfirmed && myProposal.respondBy && (
-                            <div className="match-deadline-chip" title={`Vence el ${new Date(myProposal.respondBy).toLocaleString()}`}>
+                          {!isConfirmed && (
+                            <div className="match-deadline-chip" title={`Vence el ${new Date(effectiveDeadline).toLocaleString()}`}>
                               <AlertCircle size={12} />
-                              Respondé {formatRespondByRelative(myProposal.respondBy)} o el cupo se reasigna
+                              Respondé {formatRespondByRelative(effectiveDeadline)} o el cupo se reasigna
                             </div>
                           )}
                         </div>
