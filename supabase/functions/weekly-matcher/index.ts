@@ -353,18 +353,33 @@ Deno.serve(async (req) => {
       const toInsert: Record<string, unknown>[] = [];
       for (const p of pairs) {
         const meetingMs = nextSlotOccurrenceMs(p.slot, now, MIN_LEAD_MS);
-        const respondBy = new Date(meetingMs - MIN_LEAD_MS).toISOString();
         const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
+
         if (revivedId !== undefined) {
+          // REASIGNACIÓN: obtener reassignment_count anterior e incrementar
+          const { data: prevProposal } = await supabase
+            .from('match_proposals')
+            .select('reassignment_count')
+            .eq('id', revivedId)
+            .single();
+          const newReassignmentCount = (prevProposal?.reassignment_count ?? 0) + 1;
+          const confirmationWindowMs = getConfirmationWindowMs(newReassignmentCount);
+          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
+
           await supabase.from('match_proposals').update({
             status: 'propuesto',
             status_a: null,
             status_b: null,
             slot_start: p.slot,
             respond_by: respondBy,
+            reassignment_count: newReassignmentCount,
             meeting_id: null
           }).eq('id', revivedId);
         } else {
+          // NUEVA PROPUESTA: reassignment_count = 0, respond_by = reunión - 4h
+          const confirmationWindowMs = getConfirmationWindowMs(0);
+          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
+
           toInsert.push({
             room_id: roomId,
             week_start: week,
@@ -373,7 +388,8 @@ Deno.serve(async (req) => {
             member_b_email: p.b.email,
             member_b_name: p.b.name,
             slot_start: p.slot,
-            respond_by: respondBy
+            respond_by: respondBy,
+            reassignment_count: 0
           });
         }
       }

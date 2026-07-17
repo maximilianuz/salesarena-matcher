@@ -503,7 +503,9 @@ export default function App() {
             statusB: d.status_b,
             status: d.status,
             respondBy: d.respond_by,
-            meetingId: d.meeting_id
+            meetingId: d.meeting_id,
+            joinedAt: d.joined_at,
+            reassignmentCount: d.reassignment_count
           })));
         }
       });
@@ -1778,6 +1780,29 @@ export default function App() {
     showNotification(msg, 'success');
   };
 
+  // Registra que el usuario clickeó el link de Google Meet (tolerancia 10 min)
+  // Se ejecuta automáticamente cuando abre el Meet, sin acción del usuario
+  const markJoined = async (proposal) => {
+    if (!proposal || !proposal.meetingId || !currentUser) return;
+
+    const now = new Date().toISOString();
+
+    // Registrar joined_at en la propuesta (cliente-side primero)
+    setProposals(prev => prev.map(p =>
+      p.id === proposal.id ? { ...p, joinedAt: now } : p
+    ));
+
+    // Guardar en BD si no estamos en mock mode
+    if (!useMockDb) {
+      const { error } = await supabase.from('match_proposals')
+        .update({ joined_at: now })
+        .eq('id', proposal.id);
+      if (error) {
+        console.warn('No se pudo registrar joined_at:', error.message);
+      }
+    }
+  };
+
   // El propio usuario cancela su asistencia ANTES del inicio.
   //   +24hs de antelación → 'cancelado_con_aviso' (no penaliza)
   //   <24hs               → 'cancelado_tarde' con MOTIVO obligatorio (cuenta
@@ -2707,7 +2732,7 @@ export default function App() {
                         <div className="match-card-footer">
                           {isConfirmed ? (
                             linkedMeeting ? (
-                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }}>
+                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }} onClick={() => markJoined(myProposal)}>
                                 <Video size={14} /> Abrir Google Meet
                               </a>
                             ) : (
