@@ -3,10 +3,17 @@ CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
 -- Grant execute permission on cron functions to postgres
-GRANT EXECUTE ON FUNCTION cron.schedule(text, text, text) TO postgres;
-GRANT EXECUTE ON FUNCTION cron.schedule(text, text, text, text) TO postgres;
-GRANT EXECUTE ON FUNCTION net.http_post(text, jsonb, text, text) TO postgres;
-
+-- Grant execute permission on cron functions to postgres (tolerante a
+-- diferencias de firma entre versiones de pg_cron/pg_net)
+DO $$ BEGIN
+  GRANT EXECUTE ON FUNCTION cron.schedule(text, text, text) TO postgres;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN
+  GRANT EXECUTE ON FUNCTION cron.schedule(text, text, text, text) TO postgres;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
+DO $$ BEGIN
+  GRANT EXECUTE ON FUNCTION net.http_post(text, jsonb, text, text) TO postgres;
+EXCEPTION WHEN OTHERS THEN NULL; END $$;
 -- Schedule weekly-matcher Edge Function to run every hour
 -- Uses pg_net (net.http_post) to trigger the Edge Function without JWT verification
 -- The Edge Function has --no-verify-jwt flag, so no Authorization header needed
