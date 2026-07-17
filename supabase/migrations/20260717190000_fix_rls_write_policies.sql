@@ -106,12 +106,9 @@ CREATE POLICY "Members can view availabilities of others in their rooms"
   ON availabilities FOR SELECT
   TO authenticated
   USING (
-    member_id IN (
-      SELECT id FROM members
-      WHERE room_id IN (
-        SELECT room_id FROM members
-        WHERE email = auth.jwt() ->> 'email'
-      )
+    room_id IN (
+      SELECT room_id FROM members
+      WHERE email = auth.jwt() ->> 'email'
     )
   );
 
