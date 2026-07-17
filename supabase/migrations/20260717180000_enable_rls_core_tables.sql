@@ -171,7 +171,7 @@ CREATE POLICY "Participants can view their meetings"
   ON meetings FOR SELECT
   TO authenticated
   USING (
-    id IN (
+    id::text IN (
       SELECT DISTINCT mp.meeting_id
       FROM match_proposals mp
       WHERE mp.meeting_id IS NOT NULL
