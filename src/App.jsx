@@ -2724,7 +2724,9 @@ export default function App() {
                           {!isConfirmed && (
                             <div className="match-deadline-chip" title={`Vence el ${new Date(effectiveDeadline).toLocaleString()}`}>
                               <AlertCircle size={12} />
-                              Respondé {formatRespondByRelative(effectiveDeadline)} o el cupo se reasigna
+                              {mySide === 'pendiente'
+                                ? `Respondé ${formatRespondByRelative(effectiveDeadline)} o el cupo se reasigna`
+                                : `${partnerName.split(' ')[0]} debe confirmar ${formatRespondByRelative(effectiveDeadline)} o se reasigna`}
                             </div>
                           )}
                         </div>
