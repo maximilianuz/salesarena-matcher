@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS } from './matcher';
+import { isInAppBrowser, isMobile, friendlyAuthError } from './utils/supabaseAuth';
 import {
   LayoutDashboard,
   CalendarRange,
@@ -44,7 +45,8 @@ import {
   Lock,
   RefreshCw,
   ShieldCheck,
-  MicOff
+  MicOff,
+  ExternalLink
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -266,6 +268,8 @@ export default function App() {
   // Estado del flujo de Login/Registro
   const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form, 3: Código de invitación
   const [loginEmail, setLoginEmail] = useState('');
+  const [isInAppBrowserDetected, setIsInAppBrowserDetected] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   // Código de invitación de la sala (protección de acceso)
   const [roomInviteCode, setRoomInviteCode] = useState('');
@@ -371,6 +375,13 @@ export default function App() {
       setShowOnboarding(true);
     }
   }, [isLoggedIn, currentUser?.email]);
+
+  // Detectar navegador in-app en el montaje inicial
+  useEffect(() => {
+    if (isInAppBrowser()) {
+      setIsInAppBrowserDetected(true);
+    }
+  }, []);
 
   const closeOnboarding = () => {
     if (currentUser) {
@@ -1119,6 +1130,8 @@ export default function App() {
   const handleGoogleLoginSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
+    setLoginError('');
+
     if (!useMockDb) {
       // Iniciar sesión con Google OAuth usando Supabase (no requiere ingresar email en nuestro input)
       const { error } = await supabase.auth.signInWithOAuth({
@@ -1129,7 +1142,9 @@ export default function App() {
         }
       });
       if (error) {
-        showNotification('Error al iniciar sesión con Google: ' + error.message);
+        const friendlyMsg = friendlyAuthError(error, 'es');
+        setLoginError(friendlyMsg);
+        showNotification('Error al iniciar sesión: ' + friendlyMsg);
       }
       return;
     }
@@ -1971,6 +1986,43 @@ export default function App() {
                 <h2 style={{ margin: '10px 0 6px 0', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
                 <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta de Google para ingresar al coordinador de roleplays.</p>
               </div>
+
+              {isInAppBrowserDetected && (
+                <div style={{
+                  padding: '12px 14px',
+                  backgroundColor: 'rgba(255, 159, 10, 0.1)',
+                  border: '1px solid rgba(255, 159, 10, 0.3)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'flex-start'
+                }}>
+                  <ExternalLink size={18} style={{ color: 'var(--color-warning)', flexShrink: 0, marginTop: '2px' }} />
+                  <div style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5' }}>
+                    <strong>Abre en tu navegador</strong>
+                    <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Google bloquea el acceso desde navegadores integrados. Por favor, abre este enlace en <strong>Chrome</strong>, <strong>Safari</strong> u otro navegador de tu dispositivo.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {loginError && (
+                <div style={{
+                  padding: '12px 14px',
+                  backgroundColor: 'rgba(255, 59, 95, 0.1)',
+                  border: '1px solid rgba(255, 59, 95, 0.3)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'flex-start'
+                }}>
+                  <AlertCircle size={18} style={{ color: 'var(--color-danger)', flexShrink: 0, marginTop: '2px' }} />
+                  <div style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5' }}>
+                    {loginError}
+                  </div>
+                </div>
+              )}
 
               {!useMockDb ? (
                 /* REAL PRODUCTION OAUTH: Single-click Google login */
