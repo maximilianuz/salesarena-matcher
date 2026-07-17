@@ -4,10 +4,29 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
-// Antelación mínima entre "ahora" y la reunión propuesta. La confirmación debe
-// poder hacerse al menos 4hs antes; por eso nunca se propone un slot que ocurra
-// dentro de las próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
-export const MIN_LEAD_MS = 4 * 3600e3;
+// Ventana de confirmación ESCALONADA. En cada (re)asignación, el plazo para
+// confirmar se elige como el mayor escalón que aún deje el vencimiento en el
+// futuro: 4hs → 2hs → 1h → 30min. Así, si una propuesta vence sin confirmar y el
+// emparejador reasigna más cerca de la reunión, la nueva ventana es más corta en
+// forma automática, hasta un piso de 30min antes de la reunión.
+// Debe coincidir con la Edge Function (supabase/functions/weekly-matcher).
+export const CONFIRM_STEPS_MS = [4, 2, 1, 0.5].map((h) => h * 3600e3);
+
+// Antelación mínima para proponer un slot: el escalón más chico (30min). Un slot
+// que ocurra dentro de los próximos 30min ya no se propone (no habría ventana de
+// confirmación).
+export const MIN_LEAD_MS = CONFIRM_STEPS_MS[CONFIRM_STEPS_MS.length - 1];
+
+// respond_by (epoch ms) para una reunión dada: el mayor escalón cuyo vencimiento
+// siga siendo futuro respecto de `now`. Devuelve null si ni el escalón más chico
+// entra (reunión a < 30min) → esa dupla/slot no se debe proponer.
+export const respondByMs = (meetingMs, now = new Date()) => {
+  const t = now.getTime();
+  for (const step of CONFIRM_STEPS_MS) {
+    if (meetingMs - step > t) return meetingMs - step;
+  }
+  return null;
+};
 
 // Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
 // >= ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la

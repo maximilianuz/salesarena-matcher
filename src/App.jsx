@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS } from './matcher';
+import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
 import { isInAppBrowser, isMobile, friendlyAuthError } from './utils/supabaseAuth';
 import {
   LayoutDashboard,
@@ -596,23 +596,28 @@ export default function App() {
     if (pairs.length === 0) return;
 
     const baseId = Date.now();
-    setProposals(prev => [...prev, ...pairs.map((p, i) => ({
-      id: baseId + i,
-      weekStart: week,
-      aEmail: p.a.email,
-      aName: p.a.name,
-      bEmail: p.b.email,
-      bName: p.b.name,
-      slot: p.slot,
-      statusA: 'pendiente',
-      statusB: 'pendiente',
-      status: 'propuesto',
-      // Plazo de confirmación = MIN_LEAD_MS antes de la reunión (no desde ahora).
-      // Se usa el mismo piso que el emparejador para que el turno elegido y su
-      // plazo coincidan con nextSlotOccurrenceMs (matcher.js / Edge Function).
-      respondBy: new Date(getNextMatchDateUtc({ startSlot: p.slot }, MIN_LEAD_MS).getTime() - MIN_LEAD_MS).toISOString(),
-      meetingId: null
-    }))]);
+    const nowRef = new Date();
+    setProposals(prev => [...prev, ...pairs.map((p, i) => {
+      const meetingMs = getNextMatchDateUtc({ startSlot: p.slot }, MIN_LEAD_MS).getTime();
+      // Plazo de confirmación escalonado (4h→2h→1h→30m), igual que la Edge
+      // Function. Si por algún motivo no entra ni el escalón más chico, se usa el
+      // inicio de la reunión como tope.
+      const rbMs = respondByMs(meetingMs, nowRef) ?? meetingMs;
+      return {
+        id: baseId + i,
+        weekStart: week,
+        aEmail: p.a.email,
+        aName: p.a.name,
+        bEmail: p.b.email,
+        bName: p.b.name,
+        slot: p.slot,
+        statusA: 'pendiente',
+        statusB: 'pendiente',
+        status: 'propuesto',
+        respondBy: new Date(rbMs).toISOString(),
+        meetingId: null
+      };
+    })]);
   }, [members, availabilities, currentUser, proposals]);
 
   // ¿La sesión ya terminó? (inicio + duración)
@@ -784,7 +789,8 @@ export default function App() {
           punctuality: d.punctuality,
           cancelReason: d.cancel_reason,
           reportedBy: d.reported_by,
-          reportedAt: d.reported_at
+          reportedAt: d.reported_at,
+          joinedAt: d.joined_at
         })));
       }
 
@@ -1673,7 +1679,8 @@ export default function App() {
             punctuality: d.punctuality,
             cancelReason: d.cancel_reason,
             reportedBy: d.reported_by,
-            reportedAt: d.reported_at
+            reportedAt: d.reported_at,
+            joinedAt: d.joined_at
           }))]);
         }
       }
@@ -1746,6 +1753,29 @@ export default function App() {
   };
 
   // --- COMPROMISO DE ASISTENCIA ---
+  // Registra que el usuario abrió el Meet (click al botón/enlace). El barrido de
+  // asistencia del weekly-matcher usa joined_at para resolver automáticamente,
+  // a los 10 min del inicio, quién asistió y quién quedó no-show. Es fire-and-
+  // forget: no bloquea la apertura del enlace.
+  const markJoined = (meeting) => {
+    if (!meeting || meeting.id == null || !currentUser) return;
+    const mine = attendances.find(a =>
+      a.meetingId === meeting.id &&
+      a.memberEmail.toLowerCase() === currentUser.email.toLowerCase()
+    );
+    if (!mine || mine.joinedAt || mine.status !== 'confirmado') return; // ya registrado o ya resuelto
+    const joinedAt = new Date().toISOString();
+    setAttendances(prev => prev.map(a => a.id === mine.id ? { ...a, joinedAt } : a));
+    if (!useMockDb) {
+      supabase.from('meeting_attendees')
+        .update({ joined_at: joinedAt })
+        .eq('id', mine.id)
+        .then(({ error }) => {
+          if (error) console.error('No se pudo registrar joined_at:', error.message);
+        });
+    }
+  };
+
   // El compañero reporta el resultado del otro. outcome:
   //   'a_tiempo' → asistió dentro de los 10 min de tolerancia
   //   'tarde'    → asistió pero fuera de la tolerancia
@@ -2707,7 +2737,7 @@ export default function App() {
                         <div className="match-card-footer">
                           {isConfirmed ? (
                             linkedMeeting ? (
-                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }}>
+                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }} onClick={() => markJoined(linkedMeeting)}>
                                 <Video size={14} /> Abrir Google Meet
                               </a>
                             ) : (
@@ -2814,6 +2844,7 @@ export default function App() {
                                 className="btn btn-indigo"
                                 style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
                                 aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
+                                onClick={() => markJoined(meet)}
                               >
                                 <Video size={12} /> Meet
                               </a>

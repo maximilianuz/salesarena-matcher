@@ -31,7 +31,10 @@ supabase db push
 This will:
 - Create the `match_proposals` table
 - Enable the `pg_cron` and `pg_net` extensions
-- Create the cron job that triggers `weekly-matcher` hourly
+- Create the cron job that triggers `weekly-matcher` every 10 minutes
+  (the earlier hourly job `weekly-matcher-hourly` is replaced by
+  `weekly-matcher-10min`; the 10-minute cadence is required for the staged
+  confirmation windows —4h→2h→1h→30m— and the 10-minute attendance tolerance)
 
 **Troubleshooting:** If the migration fails because `pg_cron` is not available in your Supabase project, it may be using an older PostgreSQL version. Contact Supabase support to enable it, or manually create the cron job in the SQL editor.
 
@@ -48,7 +51,7 @@ supabase functions deploy weekly-matcher --no-verify-jwt
 After deployment, verify the cron job was created:
 
 1. Go to Supabase Dashboard > SQL Editor
-2. Run: `SELECT * FROM cron.job WHERE jobname = 'weekly-matcher-hourly';`
+2. Run: `SELECT * FROM cron.job WHERE jobname = 'weekly-matcher-10min';`
 3. Should show one row with a valid schedule
 
 ### 5. Test Match Generation
@@ -108,7 +111,7 @@ Overlap logic is used in 3 locations:
 Check execution logs:
 ```sql
 SELECT * FROM cron.job_run_details WHERE job_id = (
-  SELECT jobid FROM cron.job WHERE jobname = 'weekly-matcher-hourly'
+  SELECT jobid FROM cron.job WHERE jobname = 'weekly-matcher-10min'
 ) ORDER BY end_time DESC LIMIT 10;
 ```
 
@@ -125,7 +128,7 @@ SELECT * FROM cron.job_run_details WHERE job_id = (
 ### Users don't see proposals in UI
 
 - Proposals are only shown in "Panel de Control" tab
-- Edge Function runs once per hour, so wait up to 60 minutes for new proposals
+- Edge Function runs every 10 minutes, so wait up to ~10 minutes for new proposals
 - Verify RLS policies allow user to see their own proposals:
    ```sql
    SELECT * FROM match_proposals WHERE member_a_email = 'user@example.com';
@@ -140,5 +143,6 @@ SELECT * FROM cron.job_run_details WHERE job_id = (
 ## Next Steps
 
 - Monitor the cron job logs regularly
-- Adjust `RESPOND_HOURS` environment variable if needed (default: 24 hours)
+- Confirmation windows are staged (4h→2h→1h→30m) and hard-coded in the Edge
+  Function (`CONFIRM_STEPS_MS`); mirror any change in `src/matcher.js`
 - Test with multiple timezones to verify UTC matching works correctly
