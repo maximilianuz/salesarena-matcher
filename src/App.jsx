@@ -197,6 +197,18 @@ const resolveTimezone = (countryName) => {
   }
 };
 
+// Adivina el país del usuario a partir de la zona horaria que reporta su
+// navegador, para poder registrarlo sin pedirle que lo elija a mano.
+const guessCountryFromBrowserTz = () => {
+  try {
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const matched = ZONAS.find(z => z.tz === browserTz);
+    return matched ? matched.country : 'Argentina';
+  } catch (e) {
+    return 'Argentina';
+  }
+};
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Código de invitación de sala: 6 caracteres alfanuméricos en mayúscula
@@ -862,11 +874,24 @@ export default function App() {
         const inviteOk = (urlInviteCode || '').trim().toUpperCase() === realCode.toUpperCase();
 
         if (isFounder || !realCode || inviteOk) {
-          setLoginStep(2);
+          // Auto-registro directo: usamos el nombre de la cuenta de Google y
+          // detectamos el país/zona horaria por el navegador, sin pedirle
+          // nada al usuario. Si Google no trae nombre, caemos al formulario.
+          const googleName = session.user.user_metadata?.full_name ||
+            session.user.user_metadata?.name || '';
+          if (googleName.trim()) {
+            const guessedCountry = guessCountryFromBrowserTz();
+            setLoginName(googleName);
+            setLoginCountry(guessedCountry);
+            await registerMember(googleName, guessedCountry, email);
+          } else {
+            setLoginStep(2);
+            setIsLoggedIn(false);
+          }
         } else {
           setLoginStep(3);
+          setIsLoggedIn(false);
         }
-        setIsLoggedIn(false);
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
@@ -1201,24 +1226,16 @@ export default function App() {
     }
   };
 
-  const handleProfileRegisterSubmit = async (e) => {
-    e.preventDefault();
-    if (!loginName || !loginCountry) return;
-
-    // Guard de acceso: sin código válido no se puede registrar en una sala
-    // protegida que ya tiene miembros (defensa en profundidad del paso 3)
-    const inviteOk = members.length === 0 || !roomInviteCode ||
-      hasValidInvite(urlInviteCode) || hasValidInvite(inviteCodeInput);
-    if (!inviteOk) {
-      setLoginStep(3);
-      return;
-    }
-
-    const finalCountry = loginCountry === 'Otro' ? customLoginCountry.trim() : loginCountry;
+  // Registra un miembro nuevo en Supabase y actualiza el estado local.
+  // Se usa tanto para el auto-registro directo (OAuth) como para el
+  // formulario manual de respaldo (handleProfileRegisterSubmit).
+  const registerMember = async (rawName, rawCountry, emailOverride) => {
+    const email = (emailOverride || loginEmail).trim().toLowerCase();
+    const finalCountry = rawCountry === 'Otro' ? customLoginCountry.trim() : rawCountry;
     const finalTz = resolveTimezone(finalCountry);
     const newUser = {
-      name: loginName.trim(),
-      email: loginEmail.trim().toLowerCase(),
+      name: rawName.trim(),
+      email,
       country: finalCountry,
       tz: finalTz,
       active: true
@@ -1235,7 +1252,7 @@ export default function App() {
       });
       if (error) {
         showNotification('Error al registrar perfil en Supabase: ' + error.message);
-        return;
+        return false;
       }
     }
 
@@ -1251,7 +1268,24 @@ export default function App() {
     localStorage.setItem('salesarena-logged', 'true');
     localStorage.setItem('salesarena-user', JSON.stringify(newUser));
 
-    showNotification(`¡Registro completo! Bienvenido a Sales-Arena Matcher, ${newUser.name}.`);
+    showNotification(`¡Bienvenido a Sales-Arena Matcher, ${newUser.name}!`);
+    return true;
+  };
+
+  const handleProfileRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (!loginName || !loginCountry) return;
+
+    // Guard de acceso: sin código válido no se puede registrar en una sala
+    // protegida que ya tiene miembros (defensa en profundidad del paso 3)
+    const inviteOk = members.length === 0 || !roomInviteCode ||
+      hasValidInvite(urlInviteCode) || hasValidInvite(inviteCodeInput);
+    if (!inviteOk) {
+      setLoginStep(3);
+      return;
+    }
+
+    await registerMember(loginName, loginCountry);
   };
 
   const handleLogout = async () => {
