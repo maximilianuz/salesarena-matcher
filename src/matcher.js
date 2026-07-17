@@ -4,22 +4,29 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
-// Escalones de plazo de confirmación en cada reasignación:
-// 1ª propuesta: 4h, 2ª: 2h, 3ª: 1h, 4ª+: 30m. Se usa el contador `reassignment_count`.
-export const CONFIRMATION_WINDOWS_MS = [
-  4 * 3600e3,   // 4 horas (propuesta inicial)
-  2 * 3600e3,   // 2 horas (1ª reasignación)
-  1 * 3600e3,   // 1 hora (2ª reasignación)
-  30 * 60e3     // 30 minutos (3ª+ reasignación)
-];
+// Ventana de confirmación ESCALONADA. En cada (re)asignación, el plazo para
+// confirmar se elige como el mayor escalón que aún deje el vencimiento en el
+// futuro: 4hs → 2hs → 1h → 30min. Así, si una propuesta vence sin confirmar y el
+// emparejador reasigna más cerca de la reunión, la nueva ventana es más corta en
+// forma automática, hasta un piso de 30min antes de la reunión.
+// Debe coincidir con la Edge Function (supabase/functions/weekly-matcher).
+export const CONFIRM_STEPS_MS = [4, 2, 1, 0.5].map((h) => h * 3600e3);
 
-export const getConfirmationWindowMs = (reassignmentCount = 0) => {
-  const idx = Math.min(reassignmentCount, CONFIRMATION_WINDOWS_MS.length - 1);
-  return CONFIRMATION_WINDOWS_MS[idx];
+// Antelación mínima para proponer un slot: el escalón más chico (30min). Un slot
+// que ocurra dentro de los próximos 30min ya no se propone (no habría ventana de
+// confirmación).
+export const MIN_LEAD_MS = CONFIRM_STEPS_MS[CONFIRM_STEPS_MS.length - 1];
+
+// respond_by (epoch ms) para una reunión dada: el mayor escalón cuyo vencimiento
+// siga siendo futuro respecto de `now`. Devuelve null si ni el escalón más chico
+// entra (reunión a < 30min) → esa dupla/slot no se debe proponer.
+export const respondByMs = (meetingMs, now = new Date()) => {
+  const t = now.getTime();
+  for (const step of CONFIRM_STEPS_MS) {
+    if (meetingMs - step > t) return meetingMs - step;
+  }
+  return null;
 };
-
-// Antelación mínima entre "ahora" y la reunión propuesta (siempre 4hs para elegir slot).
-export const MIN_LEAD_MS = 4 * 3600e3;
 
 // Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
 // >= ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la

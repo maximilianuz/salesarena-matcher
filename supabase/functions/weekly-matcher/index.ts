@@ -15,9 +15,16 @@
 //      Las duplas RECHAZADAS esta semana se excluyen; las EXPIRADAS se evitan
 //      si hay otro compañero disponible (reasignación por mapa de calor) y solo
 //      se re-ofrecen si son la única coincidencia.
-//   4. Asigna el horario común más PRÓXIMO que esté a >= 4hs (para que haya
-//      ventana de confirmación) e inserta/reactiva la propuesta con
-//      respond_by = reunión - 4hs (confirmación mínima con 4hs de antelación).
+//   4. Asigna el horario común más PRÓXIMO que esté a >= 30min e inserta/reactiva
+//      la propuesta con una VENTANA DE CONFIRMACIÓN ESCALONADA: respond_by = el
+//      mayor escalón (4hs → 2hs → 1h → 30min) cuyo vencimiento siga en el futuro.
+//      Como el cron corre cada 10 min, al vencer una propuesta sin confirmar se
+//      reasigna casi en el acto y la nueva ventana es más corta automáticamente,
+//      hasta 30min antes de la reunión ("oportunidades" hasta que se cumpla la hora).
+//   5. BARRIDO DE ASISTENCIA (tolerancia 10 min): para reuniones cuya hora ya pasó
+//      +10min, a cada participante que sigue 'confirmado' (nadie reportó) se lo
+//      resuelve por el click al Meet: con joined_at → 'asistio' (a_tiempo/tarde
+//      según los 10 min), sin joined_at → 'no_show'.
 //
 // Score de confiabilidad (60 días) ponderado por puntualidad: asistió a tiempo
 // = 1, asistió tarde (>10 min) = 0.5, no-show / cancelación tardía = 0.
@@ -27,27 +34,23 @@
 //
 // Deploy:   supabase functions deploy weekly-matcher --no-verify-jwt
 // Secrets:  usa SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY (inyectados por defecto)
-// Config:   LEAD_HOURS (opcional, default 4) — antelación mínima y plazo de
-//           confirmación previo a la reunión.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// Escalones de plazo de confirmación en cada reasignación:
-// 1ª propuesta: 4h, 2ª: 2h, 3ª: 1h, 4ª+: 30m.
-const CONFIRMATION_WINDOWS_MS = [
-  4 * 3600e3,   // 4 horas
-  2 * 3600e3,   // 2 horas
-  1 * 3600e3,   // 1 hora
-  30 * 60e3     // 30 minutos
-];
-
-const getConfirmationWindowMs = (reassignmentCount = 0): number => {
-  const idx = Math.min(reassignmentCount, CONFIRMATION_WINDOWS_MS.length - 1);
-  return CONFIRMATION_WINDOWS_MS[idx];
+// Ventana de confirmación escalonada: 4h → 2h → 1h → 30m. En cada (re)asignación
+// se toma el mayor escalón cuyo vencimiento siga en el futuro; el piso para
+// proponer un slot es el escalón más chico (30 min). Debe coincidir con
+// CONFIRM_STEPS_MS / respondByMs en src/matcher.js.
+const CONFIRM_STEPS_MS = [4, 2, 1, 0.5].map((h) => h * 3600e3);
+const MIN_LEAD_MS = CONFIRM_STEPS_MS[CONFIRM_STEPS_MS.length - 1];
+const respondByMs = (meetingMs: number, now: Date): number | null => {
+  const t = now.getTime();
+  for (const step of CONFIRM_STEPS_MS) if (meetingMs - step > t) return meetingMs - step;
+  return null;
 };
-
-const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '4');
-const MIN_LEAD_MS = LEAD_HOURS * 3600e3;
+// Tolerancia de asistencia: si a los 10 min del inicio nadie abrió el Meet, se
+// marca no-show automático.
+const ATTENDANCE_TOLERANCE_MS = 10 * 60 * 1000;
 const BASELINE_SCORE = 50;
 
 const supabase = createClient(
@@ -177,13 +180,61 @@ Deno.serve(async (req) => {
     const week = currentWeekStartISO();
     const nowIso = now.toISOString();
 
-    // 1. Expirar propuestas vencidas (todas las salas). respond_by = reunión -
-    //    4hs, así que "vencida" = no confirmada con 4hs de antelación.
+    // 1. Expirar propuestas vencidas (todas las salas). respond_by = escalón de
+    //    confirmación (4h/2h/1h/30m), así que "vencida" = no confirmada dentro de
+    //    esa ventana. Al correr cada 10 min, la reasignación es casi inmediata.
     await supabase
       .from('match_proposals')
       .update({ status: 'expirado' })
       .eq('status', 'propuesto')
       .lt('respond_by', nowIso);
+
+    // 1b. BARRIDO DE ASISTENCIA (tolerancia 10 min). Para reuniones cuya hora de
+    //     inicio + 10min ya pasó (y no más viejas que 24h, para no reprocesar
+    //     historia), a cada participante que sigue 'confirmado' (nadie lo reportó
+    //     a mano) se lo resuelve por el click al Meet registrado en joined_at:
+    //       joined_at presente → 'asistio' (a_tiempo si entró dentro de los 10 min)
+    //       joined_at ausente  → 'no_show'
+    //     Es idempotente: una vez resuelto, la fila deja de estar 'confirmado'.
+    try {
+      const sweepFloor = new Date(now.getTime() - 24 * 3600e3).toISOString();
+      const sweepCeil = new Date(now.getTime() - ATTENDANCE_TOLERANCE_MS).toISOString();
+      const { data: dueMeetings } = await supabase
+        .from('meetings')
+        .select('id, starts_at')
+        .not('starts_at', 'is', null)
+        .lt('starts_at', sweepCeil)
+        .gt('starts_at', sweepFloor);
+      const dueIds = (dueMeetings || []).map((m) => m.id);
+      if (dueIds.length) {
+        const startById = new Map<string, number>(
+          (dueMeetings || []).map((m) => [m.id, Date.parse(m.starts_at)])
+        );
+        const { data: pend } = await supabase
+          .from('meeting_attendees')
+          .select('id, meeting_id, joined_at, status')
+          .in('meeting_id', dueIds)
+          .eq('status', 'confirmado');
+        for (const a of pend || []) {
+          const startMs = startById.get(a.meeting_id);
+          if (startMs === undefined) continue;
+          if (a.joined_at) {
+            const punctuality = Date.parse(a.joined_at) <= startMs + ATTENDANCE_TOLERANCE_MS
+              ? 'a_tiempo' : 'tarde';
+            await supabase.from('meeting_attendees')
+              .update({ status: 'asistio', punctuality, reported_by: 'system', reported_at: nowIso })
+              .eq('id', a.id);
+          } else {
+            await supabase.from('meeting_attendees')
+              .update({ status: 'no_show', reported_by: 'system', reported_at: nowIso })
+              .eq('id', a.id);
+          }
+        }
+      }
+    } catch (_e) {
+      // Si la columna joined_at aún no existe (migración sin aplicar), el barrido
+      // se omite sin frenar el emparejamiento.
+    }
 
     // 2. Salas a procesar (opcional: ?room=<id> para una sola)
     const url = new URL(req.url);
@@ -353,33 +404,22 @@ Deno.serve(async (req) => {
       const toInsert: Record<string, unknown>[] = [];
       for (const p of pairs) {
         const meetingMs = nextSlotOccurrenceMs(p.slot, now, MIN_LEAD_MS);
+        // Plazo escalonado: 4h→2h→1h→30m. Si la reunión está a <30min no hay
+        // ventana posible → no se propone (se reintentará en la próxima corrida).
+        const rbMs = respondByMs(meetingMs, now);
+        if (rbMs === null) continue;
+        const respondBy = new Date(rbMs).toISOString();
         const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
-
         if (revivedId !== undefined) {
-          // REASIGNACIÓN: obtener reassignment_count anterior e incrementar
-          const { data: prevProposal } = await supabase
-            .from('match_proposals')
-            .select('reassignment_count')
-            .eq('id', revivedId)
-            .single();
-          const newReassignmentCount = (prevProposal?.reassignment_count ?? 0) + 1;
-          const confirmationWindowMs = getConfirmationWindowMs(newReassignmentCount);
-          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
-
           await supabase.from('match_proposals').update({
             status: 'propuesto',
             status_a: null,
             status_b: null,
             slot_start: p.slot,
             respond_by: respondBy,
-            reassignment_count: newReassignmentCount,
             meeting_id: null
           }).eq('id', revivedId);
         } else {
-          // NUEVA PROPUESTA: reassignment_count = 0, respond_by = reunión - 4h
-          const confirmationWindowMs = getConfirmationWindowMs(0);
-          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
-
           toInsert.push({
             room_id: roomId,
             week_start: week,
@@ -388,8 +428,7 @@ Deno.serve(async (req) => {
             member_b_email: p.b.email,
             member_b_name: p.b.name,
             slot_start: p.slot,
-            respond_by: respondBy,
-            reassignment_count: 0
+            respond_by: respondBy
           });
         }
       }
