@@ -2646,11 +2646,13 @@ export default function App() {
                     const linkedMeeting = meetings.find(mm => mm.id === myProposal.meetingId);
                     const isConfirmed = myProposal.status === 'confirmado';
 
-                    // Inicio real de la sesión (misma regla que el emparejador).
-                    // El plazo de confirmación jamás puede quedar DESPUÉS de que
-                    // empiece la reunión: se acota al menor de ambos para evitar
-                    // "Respondé en 3 h" cuando la sesión es en 1 h.
-                    const sessionStartMs = getNextMatchDateUtc({ startSlot: myProposal.slot }, MIN_LEAD_MS).getTime();
+                    // Próxima ocurrencia del turno tal como la muestra la
+                    // etiqueta de horario (slotToLocalLabel usa el día/hora del
+                    // slot sin semana → la ocurrencia MÁS PRÓXIMA, sin piso).
+                    // El plazo de confirmación jamás puede quedar DESPUÉS de esa
+                    // sesión: se acota al menor de ambos para evitar mostrar
+                    // "Respondé en 3 h" cuando la sesión visible es en 1 h.
+                    const sessionStartMs = getNextMatchDateUtc({ startSlot: myProposal.slot }).getTime();
                     const rawDeadlineMs = myProposal.respondBy ? new Date(myProposal.respondBy).getTime() : sessionStartMs;
                     const effectiveDeadline = new Date(Math.min(rawDeadlineMs, sessionStartMs)).toISOString();
 
