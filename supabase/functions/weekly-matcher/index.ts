@@ -176,6 +176,14 @@ const buildWeeklyPairs = (
 
 Deno.serve(async (req) => {
   try {
+    // Validar secreto compartido (prevenir invocación pública arbitraria)
+    const cronSecret = Deno.env.get('CRON_SECRET') || 'default-insecure-change-me';
+    const headerSecret = req.headers.get('x-cron-secret');
+    if (headerSecret !== cronSecret) {
+      console.warn('Rejected request: invalid or missing x-cron-secret header');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    }
+
     const now = new Date();
     const week = currentWeekStartISO();
     const nowIso = now.toISOString();

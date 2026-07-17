@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS match_proposals (
 );
 
 -- Índices
-CREATE INDEX idx_match_proposals_room_week ON match_proposals(room_id, week_start);
-CREATE INDEX idx_match_proposals_status ON match_proposals(status);
-CREATE INDEX idx_match_proposals_respond_by ON match_proposals(respond_by);
-CREATE INDEX idx_match_proposals_member_a ON match_proposals(member_a_email);
-CREATE INDEX idx_match_proposals_member_b ON match_proposals(member_b_email);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_room_week ON match_proposals(room_id, week_start);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_status ON match_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_respond_by ON match_proposals(respond_by);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_member_a ON match_proposals(member_a_email);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_member_b ON match_proposals(member_b_email);
 
 -- RLS Policy: Cada usuario solo ve sus propias propuestas
 ALTER TABLE match_proposals ENABLE ROW LEVEL SECURITY;
@@ -57,15 +57,13 @@ CREATE POLICY "Users can view their own proposals"
 
 CREATE POLICY "Users can update their own proposal status"
   ON match_proposals FOR UPDATE
+  TO authenticated
   USING (auth.jwt() ->> 'email' IN (member_a_email, member_b_email))
-  WITH CHECK (
-    -- Solo pueden cambiar su propio status
-    (auth.jwt() ->> 'email' = member_a_email AND status_a IS DISTINCT FROM OLD.status_a AND status_b IS NOT DISTINCT FROM OLD.status_b AND status IS NOT DISTINCT FROM OLD.status) OR
-    (auth.jwt() ->> 'email' = member_b_email AND status_b IS DISTINCT FROM OLD.status_b AND status_a IS NOT DISTINCT FROM OLD.status_a AND status IS NOT DISTINCT FROM OLD.status)
-  );
+  WITH CHECK (auth.jwt() ->> 'email' IN (member_a_email, member_b_email));
 
--- Solo service_role (Edge Function) puede insertar y cambiar status global
+-- Service role (Edge Function) puede insertar y cambiar status global
 CREATE POLICY "Service role can manage proposals"
   ON match_proposals FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
