@@ -6,10 +6,20 @@
 -- no-shows poco después del inicio. La función es idempotente, así que es seguro
 -- ejecutarla con esta frecuencia.
 
--- 1. Quitar el job horario anterior (si existe). No falla si ya no está.
+<<<<<<< HEAD
+-- 1. Quitar jobs anteriores si existen (no falla si ya no están):
+--    - 'weekly-matcher-hourly': el cron horario original.
+--    - 'weekly-matcher-every-10min': variante creada a mano durante pruebas
+--      (mismo intervalo, otro nombre). Se elimina para no duplicar disparos.
 DO $$
 BEGIN
   PERFORM cron.unschedule('weekly-matcher-hourly');
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+DO $$
+BEGIN
+  PERFORM cron.unschedule('weekly-matcher-every-10min');
 EXCEPTION WHEN OTHERS THEN
   NULL;
 END $$;
