@@ -32,9 +32,20 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// Antelación mínima entre la confirmación y la reunión. La confirmación debe
-// hacerse al menos 4hs antes; por eso no se propone un slot dentro de las
-// próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
+// Escalones de plazo de confirmación en cada reasignación:
+// 1ª propuesta: 4h, 2ª: 2h, 3ª: 1h, 4ª+: 30m.
+const CONFIRMATION_WINDOWS_MS = [
+  4 * 3600e3,   // 4 horas
+  2 * 3600e3,   // 2 horas
+  1 * 3600e3,   // 1 hora
+  30 * 60e3     // 30 minutos
+];
+
+const getConfirmationWindowMs = (reassignmentCount = 0): number => {
+  const idx = Math.min(reassignmentCount, CONFIRMATION_WINDOWS_MS.length - 1);
+  return CONFIRMATION_WINDOWS_MS[idx];
+};
+
 const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '4');
 const MIN_LEAD_MS = LEAD_HOURS * 3600e3;
 const BASELINE_SCORE = 50;
@@ -342,18 +353,33 @@ Deno.serve(async (req) => {
       const toInsert: Record<string, unknown>[] = [];
       for (const p of pairs) {
         const meetingMs = nextSlotOccurrenceMs(p.slot, now, MIN_LEAD_MS);
-        const respondBy = new Date(meetingMs - MIN_LEAD_MS).toISOString();
         const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
+
         if (revivedId !== undefined) {
+          // REASIGNACIÓN: obtener reassignment_count anterior e incrementar
+          const { data: prevProposal } = await supabase
+            .from('match_proposals')
+            .select('reassignment_count')
+            .eq('id', revivedId)
+            .single();
+          const newReassignmentCount = (prevProposal?.reassignment_count ?? 0) + 1;
+          const confirmationWindowMs = getConfirmationWindowMs(newReassignmentCount);
+          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
+
           await supabase.from('match_proposals').update({
             status: 'propuesto',
             status_a: null,
             status_b: null,
             slot_start: p.slot,
             respond_by: respondBy,
+            reassignment_count: newReassignmentCount,
             meeting_id: null
           }).eq('id', revivedId);
         } else {
+          // NUEVA PROPUESTA: reassignment_count = 0, respond_by = reunión - 4h
+          const confirmationWindowMs = getConfirmationWindowMs(0);
+          const respondBy = new Date(meetingMs - confirmationWindowMs).toISOString();
+
           toInsert.push({
             room_id: roomId,
             week_start: week,
@@ -362,7 +388,8 @@ Deno.serve(async (req) => {
             member_b_email: p.b.email,
             member_b_name: p.b.name,
             slot_start: p.slot,
-            respond_by: respondBy
+            respond_by: respondBy,
+            reassignment_count: 0
           });
         }
       }
