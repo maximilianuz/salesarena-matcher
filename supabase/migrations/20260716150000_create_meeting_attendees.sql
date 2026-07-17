@@ -49,5 +49,6 @@ CREATE POLICY "Members can update their own attendance"
 
 CREATE POLICY "Service role can manage all attendance"
   ON meeting_attendees FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+  TO service_role
+  USING (true)
+  WITH CHECK (true);

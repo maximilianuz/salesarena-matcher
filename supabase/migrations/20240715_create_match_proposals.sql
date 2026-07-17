@@ -57,15 +57,13 @@ CREATE POLICY "Users can view their own proposals"
 
 CREATE POLICY "Users can update their own proposal status"
   ON match_proposals FOR UPDATE
+  TO authenticated
   USING (auth.jwt() ->> 'email' IN (member_a_email, member_b_email))
-  WITH CHECK (
-    -- Solo pueden cambiar su propio status
-    (auth.jwt() ->> 'email' = member_a_email AND status_a IS DISTINCT FROM OLD.status_a AND status_b IS NOT DISTINCT FROM OLD.status_b AND status IS NOT DISTINCT FROM OLD.status) OR
-    (auth.jwt() ->> 'email' = member_b_email AND status_b IS DISTINCT FROM OLD.status_b AND status_a IS NOT DISTINCT FROM OLD.status_a AND status IS NOT DISTINCT FROM OLD.status)
-  );
+  WITH CHECK (auth.jwt() ->> 'email' IN (member_a_email, member_b_email));
 
--- Solo service_role (Edge Function) puede insertar y cambiar status global
+-- Service role (Edge Function) puede insertar y cambiar status global
 CREATE POLICY "Service role can manage proposals"
   ON match_proposals FOR ALL
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
+  TO service_role
+  USING (true)
+  WITH CHECK (true);

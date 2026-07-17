@@ -6,7 +6,6 @@
 -- no-shows poco después del inicio. La función es idempotente, así que es seguro
 -- ejecutarla con esta frecuencia.
 
-<<<<<<< HEAD
 -- 1. Quitar jobs anteriores si existen (no falla si ya no están):
 --    - 'weekly-matcher-hourly': el cron horario original.
 --    - 'weekly-matcher-every-10min': variante creada a mano durante pruebas
