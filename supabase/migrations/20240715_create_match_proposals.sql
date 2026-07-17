@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS match_proposals (
 );
 
 -- Índices
-CREATE INDEX idx_match_proposals_room_week ON match_proposals(room_id, week_start);
-CREATE INDEX idx_match_proposals_status ON match_proposals(status);
-CREATE INDEX idx_match_proposals_respond_by ON match_proposals(respond_by);
-CREATE INDEX idx_match_proposals_member_a ON match_proposals(member_a_email);
-CREATE INDEX idx_match_proposals_member_b ON match_proposals(member_b_email);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_room_week ON match_proposals(room_id, week_start);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_status ON match_proposals(status);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_respond_by ON match_proposals(respond_by);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_member_a ON match_proposals(member_a_email);
+CREATE INDEX IF NOT EXISTS idx_match_proposals_member_b ON match_proposals(member_b_email);
 
 -- RLS Policy: Cada usuario solo ve sus propias propuestas
 ALTER TABLE match_proposals ENABLE ROW LEVEL SECURITY;
