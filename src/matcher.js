@@ -4,9 +4,21 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
-// Antelación mínima entre "ahora" y la reunión propuesta. La confirmación debe
-// poder hacerse al menos 4hs antes; por eso nunca se propone un slot que ocurra
-// dentro de las próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
+// Escalones de plazo de confirmación en cada reasignación:
+// 1ª propuesta: 4h, 2ª: 2h, 3ª: 1h, 4ª+: 30m. Se usa el contador `reassignment_count`.
+export const CONFIRMATION_WINDOWS_MS = [
+  4 * 3600e3,   // 4 horas (propuesta inicial)
+  2 * 3600e3,   // 2 horas (1ª reasignación)
+  1 * 3600e3,   // 1 hora (2ª reasignación)
+  30 * 60e3     // 30 minutos (3ª+ reasignación)
+];
+
+export const getConfirmationWindowMs = (reassignmentCount = 0) => {
+  const idx = Math.min(reassignmentCount, CONFIRMATION_WINDOWS_MS.length - 1);
+  return CONFIRMATION_WINDOWS_MS[idx];
+};
+
+// Antelación mínima entre "ahora" y la reunión propuesta (siempre 4hs para elegir slot).
 export const MIN_LEAD_MS = 4 * 3600e3;
 
 // Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea

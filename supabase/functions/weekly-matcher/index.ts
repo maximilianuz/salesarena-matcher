@@ -32,9 +32,20 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-// Antelación mínima entre la confirmación y la reunión. La confirmación debe
-// hacerse al menos 4hs antes; por eso no se propone un slot dentro de las
-// próximas 4hs (respond_by = reunión - 4hs quedaría en el pasado).
+// Escalones de plazo de confirmación en cada reasignación:
+// 1ª propuesta: 4h, 2ª: 2h, 3ª: 1h, 4ª+: 30m.
+const CONFIRMATION_WINDOWS_MS = [
+  4 * 3600e3,   // 4 horas
+  2 * 3600e3,   // 2 horas
+  1 * 3600e3,   // 1 hora
+  30 * 60e3     // 30 minutos
+];
+
+const getConfirmationWindowMs = (reassignmentCount = 0): number => {
+  const idx = Math.min(reassignmentCount, CONFIRMATION_WINDOWS_MS.length - 1);
+  return CONFIRMATION_WINDOWS_MS[idx];
+};
+
 const LEAD_HOURS = Number(Deno.env.get('LEAD_HOURS') || '4');
 const MIN_LEAD_MS = LEAD_HOURS * 3600e3;
 const BASELINE_SCORE = 50;
