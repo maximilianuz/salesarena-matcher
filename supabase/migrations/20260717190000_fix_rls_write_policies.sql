@@ -112,11 +112,21 @@ CREATE POLICY "Members can view availabilities of others in their rooms"
     )
   );
 
-CREATE POLICY "Members can create/update/delete their own availabilities"
-  ON availabilities FOR INSERT, UPDATE, DELETE
+CREATE POLICY "Members can insert their own availabilities"
+  ON availabilities FOR INSERT
+  TO authenticated
+  WITH CHECK (email = auth.jwt() ->> 'email');
+
+CREATE POLICY "Members can update their own availabilities"
+  ON availabilities FOR UPDATE
   TO authenticated
   USING (email = auth.jwt() ->> 'email')
   WITH CHECK (email = auth.jwt() ->> 'email');
+
+CREATE POLICY "Members can delete their own availabilities"
+  ON availabilities FOR DELETE
+  TO authenticated
+  USING (email = auth.jwt() ->> 'email');
 
 CREATE POLICY "Service role can manage all availabilities"
   ON availabilities FOR ALL
@@ -142,11 +152,16 @@ CREATE POLICY "Template creator and room members can view"
     )
   );
 
-CREATE POLICY "Template creator can update/delete"
-  ON templates FOR UPDATE, DELETE
+CREATE POLICY "Template creator can update"
+  ON templates FOR UPDATE
   TO authenticated
   USING (created_by = auth.jwt() ->> 'email')
   WITH CHECK (created_by = auth.jwt() ->> 'email');
+
+CREATE POLICY "Template creator can delete"
+  ON templates FOR DELETE
+  TO authenticated
+  USING (created_by = auth.jwt() ->> 'email');
 
 CREATE POLICY "Authenticated users can create templates in their rooms"
   ON templates FOR INSERT
