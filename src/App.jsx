@@ -546,13 +546,44 @@ export default function App() {
     return `en ${diffD} día${diffD === 1 ? '' : 's'}`;
   };
 
+  // ¿La sesión ya terminó? (inicio + duración)
+  const meetingHasEnded = (meeting) => {
+    if (!meeting.startsAt) return false; // reuniones viejas sin timestamp: sin prompt
+    return Date.now() > new Date(meeting.startsAt).getTime() + (meeting.duration || 60) * 60000;
+  };
+
+  const meetingHasStarted = (meeting) => {
+    if (!meeting.startsAt) return true; // sin timestamp no se permite cancelar
+    return Date.now() >= new Date(meeting.startsAt).getTime();
+  };
+
+  // En un role-play 1:1 basta con que cancele UNO de los dos para que la
+  // reunión ya no exista: se considera cancelada con cualquier cancelación.
+  const meetingWasCancelled = (meeting) => attendances.some(a =>
+    a.meetingId === meeting.id &&
+    (a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde'));
+
+  // Reuniones vigentes para el dashboard: ni canceladas ni ya terminadas.
+  // Las demás no deben quedar eternas en pantalla.
+  const upcomingMeetings = meetings.filter(m =>
+    !meetingWasCancelled(m) && !meetingHasEnded(m));
+
   // Propuesta activa del usuario esta semana (y la última, para mensajes de estado)
   const myEmailLower = currentUser?.email?.toLowerCase();
   const myWeekProposals = !currentUser ? [] : proposals.filter(p =>
     p.weekStart === currentWeekStartISO() &&
     (p.aEmail.toLowerCase() === myEmailLower || p.bEmail.toLowerCase() === myEmailLower)
   );
-  const myProposal = myWeekProposals.find(p => p.status === 'propuesto' || p.status === 'confirmado') || null;
+  // Una propuesta deja de estar viva si su reunión fue cancelada por cualquiera
+  // de los dos o ya terminó, aunque la fila siga 'confirmado' en la base (p. ej.
+  // si el compañero canceló y su update de propuesta aún no llegó).
+  const proposalIsLive = (p) => {
+    if (p.status !== 'propuesto' && p.status !== 'confirmado') return false;
+    const linked = p.meetingId != null ? meetings.find(m => m.id === p.meetingId) : null;
+    if (!linked) return true;
+    return !meetingWasCancelled(linked) && !meetingHasEnded(linked);
+  };
+  const myProposal = myWeekProposals.find(proposalIsLive) || null;
   const myLastClosedProposal = myProposal ? null : myWeekProposals.sort((x, y) => (y.id || 0) - (x.id || 0))[0] || null;
 
   // Modo demo: correr el emparejador localmente (en producción lo hace la
@@ -565,10 +596,12 @@ export default function App() {
         .filter(p => p.weekStart === week && (p.status === 'propuesto' || p.status === 'confirmado'))
         .flatMap(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()])
     );
-    // Solo se excluyen parejas RECHAZADAS (se respeta el "no" explícito).
+    // Se excluyen parejas RECHAZADAS (se respeta el "no" explícito) y las
+    // CANCELADAS esta semana (no re-ofrecer la misma dupla que se cayó;
+    // cada integrante queda libre para matchear con otros).
     const rejectedPairs = new Set(
       proposals
-        .filter(p => p.weekStart === week && p.status === 'rechazado')
+        .filter(p => p.weekStart === week && (p.status === 'rechazado' || p.status === 'cancelado'))
         .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
     );
     // Duplas EXPIRADAS (sin respuesta): se evitan si hay otro compañero
@@ -612,17 +645,6 @@ export default function App() {
       };
     })]);
   }, [members, availabilities, currentUser, proposals]);
-
-  // ¿La sesión ya terminó? (inicio + duración)
-  const meetingHasEnded = (meeting) => {
-    if (!meeting.startsAt) return false; // reuniones viejas sin timestamp: sin prompt
-    return Date.now() > new Date(meeting.startsAt).getTime() + (meeting.duration || 60) * 60000;
-  };
-
-  const meetingHasStarted = (meeting) => {
-    if (!meeting.startsAt) return true; // sin timestamp no se permite cancelar
-    return Date.now() >= new Date(meeting.startsAt).getTime();
-  };
 
   // Score de confiabilidad (últimos 60 días), ponderado por puntualidad:
   //   asistió a tiempo = 1 · asistió tarde = 0.5 · no-show = 0 ·
@@ -1921,6 +1943,25 @@ export default function App() {
         ? { ...a, status: newStatus, cancelReason, reportedBy: currentUser.email, reportedAt }
         : a
     ));
+
+    // Cerrar la propuesta vinculada: sin esto, la dupla quedaría 'confirmado'
+    // toda la semana y el emparejador nunca liberaría a ninguno de los dos.
+    // Con 'cancelado', ambos vuelven al pool y pueden ser reasignados con otro
+    // compañero disponible en la próxima corrida (cada 10 min).
+    const linkedProposal = proposals.find(p => p.meetingId === meeting.id);
+    if (linkedProposal) {
+      if (!useMockDb) {
+        // Si el CHECK de la base aún no admite 'cancelado' (migración
+        // pendiente), este update falla sin romper el flujo: la UI oculta la
+        // reunión igual a partir de la cancelación de asistencia.
+        await supabase.from('match_proposals')
+          .update({ status: 'cancelado' })
+          .eq('id', linkedProposal.id);
+      }
+      setProposals(prev => prev.map(p =>
+        p.id === linkedProposal.id ? { ...p, status: 'cancelado' } : p));
+    }
+
     showNotification(
       isLate
         ? 'Cancelaste sobre la hora. Quedó registrada como falta del mes.'
@@ -2616,8 +2657,8 @@ export default function App() {
                     <Video size={18} />
                   </div>
                   <div className="kpi-info">
-                    <span className="kpi-val">{meetings.length}</span>
-                    <span className="kpi-label">Meets Creados</span>
+                    <span className="kpi-val">{upcomingMeetings.length}</span>
+                    <span className="kpi-label">Meets Próximos</span>
                   </div>
                 </div>
               </div>
@@ -2765,20 +2806,14 @@ export default function App() {
                         <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
                         <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
                       </div>
-                    ) : meetings.length === 0 ? (
+                    ) : upcomingMeetings.length === 0 ? (
                       <div className="empty-state">
                         <CalendarDays size={30} />
                         <span className="empty-state-title">Sin reuniones agendadas</span>
                         <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet, visible para toda la sala.</span>
                       </div>
                     ) : (
-                      meetings
-                        .filter(meet => {
-                          const meetRows = attendances.filter(a => a.meetingId === meet.id);
-                          const allCancelled = meetRows.length > 0 && meetRows.every(a =>
-                            a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde');
-                          return !allCancelled;
-                        })
+                      upcomingMeetings
                         .map((meet, idx) => {
                           const meetRows = attendances.filter(a => a.meetingId === meet.id);
                           const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
