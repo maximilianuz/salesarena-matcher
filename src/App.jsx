@@ -382,13 +382,15 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
-  // Mostrar la guía automáticamente en el primer ingreso de cada usuario
-  useEffect(() => {
-    if (isLoggedIn && currentUser && !localStorage.getItem(`salesarena-guide-${currentUser.email.toLowerCase()}`)) {
-      setOnboardingStep(0);
-      setShowOnboarding(true);
-    }
-  }, [isLoggedIn, currentUser?.email]);
+  // Guía disponible bajo demanda (no mostrar automáticamente en primer ingreso)
+  // Esto evita que nuevos usuarios se sientan como que necesitan "pedir permiso"
+  // o pasar por un tutorial obligatorio. La guía sigue disponible via Help button.
+  // useEffect(() => {
+  //   if (isLoggedIn && currentUser && !localStorage.getItem(`salesarena-guide-${currentUser.email.toLowerCase()}`)) {
+  //     setOnboardingStep(0);
+  //     setShowOnboarding(true);
+  //   }
+  // }, [isLoggedIn, currentUser?.email]);
 
   // Detectar navegador in-app en el montaje inicial
   useEffect(() => {
@@ -2770,80 +2772,70 @@ export default function App() {
                         <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet, visible para toda la sala.</span>
                       </div>
                     ) : (
-                      meetings.map((meet, idx) => {
-                        const meetRows = attendances.filter(a => a.meetingId === meet.id);
-                        const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
-                        const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
-                        // ANÓNIMO: el voto de puntualidad/asistencia (asistió a tiempo, tarde,
-                        // no_show) NO se muestra atribuido en la sala; solo alimenta el % de
-                        // confiabilidad agregado. Sí se muestran las CANCELACIONES, que son una
-                        // acción propia y transparente que el equipo debe ver.
-                        const statusRows = meetRows.filter(a =>
-                          a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde');
-                        const isLive = meetingHasStarted(meet) && !meetingHasEnded(meet);
+                      meetings
+                        .filter(meet => {
+                          const meetRows = attendances.filter(a => a.meetingId === meet.id);
+                          const allCancelled = meetRows.length > 0 && meetRows.every(a =>
+                            a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde');
+                          return !allCancelled;
+                        })
+                        .map((meet, idx) => {
+                          const meetRows = attendances.filter(a => a.meetingId === meet.id);
+                          const myRow = currentUser && meetRows.find(a => a.memberEmail.toLowerCase() === currentUser.email.toLowerCase());
+                          const canCancel = myRow && myRow.status === 'confirmado' && !meetingHasStarted(meet);
+                          const isLive = meetingHasStarted(meet) && !meetingHasEnded(meet);
 
-                        return (
-                          <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
-                            <div className="meeting-info">
-                              <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
-                              <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
-                              <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Users size={10} /> {meet.participants}
-                              </span>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          return (
+                            <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
+                              <div className="meeting-info">
+                                <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
+                                <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
+                                <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <Users size={10} /> {meet.participants}
+                                </span>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {isLive && (
+                                    <span className="meeting-live-badge" role="status">
+                                      <span className="meeting-live-dot" aria-hidden="true"></span>
+                                      En vivo ahora
+                                    </span>
+                                  )}
+                                  <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador, con el micrófono apagado">
+                                    <Globe size={10} /> Abierto a la sala
+                                  </span>
+                                </div>
                                 {isLive && (
-                                  <span className="meeting-live-badge" role="status">
-                                    <span className="meeting-live-dot" aria-hidden="true"></span>
-                                    En vivo ahora
+                                  <span className="meeting-mic-note">
+                                    <MicOff size={10} /> Si entrás como observador, hacelo con el micrófono apagado para no interrumpir
                                   </span>
                                 )}
-                                <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador, con el micrófono apagado">
-                                  <Globe size={10} /> Abierto a la sala
-                                </span>
                               </div>
-                              {isLive && (
-                                <span className="meeting-mic-note">
-                                  <MicOff size={10} /> Si entrás como observador, hacelo con el micrófono apagado para no interrumpir
-                                </span>
-                              )}
-                              {statusRows.length > 0 && (
-                                <div className="attendance-chips">
-                                  {statusRows.map(a => (
-                                    <span key={a.id} className={`attendance-chip attendance-chip-${a.status}`} title={a.cancelReason || undefined}>
-                                      <AlertCircle size={9} />
-                                      {a.memberName.split(' ')[0]}
-                                      {a.status === 'cancelado_tarde' ? ' canceló tarde' : ' canceló con aviso'}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                              <a
-                                href={meet.meetLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="btn btn-indigo"
-                                style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
-                                aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
-                                onClick={() => markJoined(meet)}
-                              >
-                                <Video size={12} /> Meet
-                              </a>
-                              {canCancel && (
-                                <button
-                                  type="button"
-                                  className="btn-cancel-notice"
-                                  onClick={() => cancelMyAttendance(meet)}
-                                  title="Cancela tu asistencia antes del inicio; no cuenta como ausencia"
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                <a
+                                  href={meet.meetLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="btn btn-indigo"
+                                  style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
+                                  aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
+                                  onClick={() => markJoined(meet)}
                                 >
-                                  Cancelar con aviso
-                                </button>
-                              )}
+                                  <Video size={12} /> Meet
+                                </a>
+                                {canCancel && (
+                                  <button
+                                    type="button"
+                                    className="btn-cancel-notice"
+                                    onClick={() => cancelMyAttendance(meet)}
+                                    title="Cancela tu asistencia antes del inicio; no cuenta como ausencia"
+                                  >
+                                    Cancelar con aviso
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })
                     )}
                   </div>
                 </div>
