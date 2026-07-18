@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
+import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid } from './slots';
 import { isInAppBrowser, isMobile, friendlyAuthError } from './utils/supabaseAuth';
 import {
   LayoutDashboard,
@@ -153,30 +154,11 @@ const ReliabilityBadge = ({ pct }) => {
   );
 };
 
-// Offset real en minutos respecto de UTC para cualquier zona IANA.
-// Usa Intl (nativo del navegador) y refleja automáticamente el horario
-// de verano (DST) vigente en el momento del cálculo.
-const tzOffsetCache = {};
-const getOffsetMinutes = (tz) => {
-  if (!tz || tz === 'UTC') return 0;
-  if (tzOffsetCache[tz] !== undefined) return tzOffsetCache[tz];
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: tz,
-      timeZoneName: 'shortOffset'
-    }).formatToParts(new Date());
-    const name = parts.find(p => p.type === 'timeZoneName')?.value || 'GMT';
-    // name es "GMT-3", "GMT+5:30" o "GMT" (=UTC)
-    const m = name.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
-    const offset = m
-      ? (m[1] === '-' ? -1 : 1) * (parseInt(m[2], 10) * 60 + (m[3] ? parseInt(m[3], 10) : 0))
-      : 0;
-    tzOffsetCache[tz] = offset;
-    return offset;
-  } catch {
-    return 0; // zona inválida → tratar como UTC
-  }
-};
+// Patrón LIKE/ILIKE seguro para un valor literal (escapa %, _ y \).
+// Se usa para borrar/actualizar filas por nombre de usuario sin distinguir
+// mayúsculas: la tabla availabilities guarda "user" como texto libre y un
+// .eq() estricto dejaba filas viejas huérfanas si el nombre cambió de casing.
+const escapeLikeLiteral = (value) => value.replace(/[\\%_]/g, '\\$&');
 
 const resolveTimezone = (countryName) => {
   if (!countryName) return 'UTC';
@@ -428,9 +410,13 @@ export default function App() {
   };
 
   // --- MOTOR DE COINCIDENCIAS (REACT PORT) ---
+  // currentUser?.tz está en las deps porque el heatmap se dibuja en la hora
+  // local del usuario activo: sin esa dep, si la sesión OAuth se resolvía
+  // DESPUÉS de cargar la sala, el mapa quedaba calculado en UTC (corrido
+  // varias horas respecto de lo que la persona marcó en su grilla).
   useEffect(() => {
     calculateEngine();
-  }, [members, availabilities]);
+  }, [members, availabilities, currentUser?.tz]);
 
   // --- MANEJO DE TEMAS (DARK/LIGHT/SYSTEM) ---
   useEffect(() => {
@@ -524,8 +510,12 @@ export default function App() {
             bEmail: d.member_b_email,
             bName: d.member_b_name,
             slot: d.slot_start,
-            statusA: d.status_a,
-            statusB: d.status_b,
+            // El weekly-matcher inserta/reactiva propuestas con status_a/b en
+            // NULL (= sin responder). El UI decide con 'pendiente': sin este
+            // mapeo, una propuesta nueva mostraba "Esperando..." en vez de los
+            // botones Aceptar/Rechazar y nadie podía responder jamás.
+            statusA: d.status_a || 'pendiente',
+            statusB: d.status_b || 'pendiente',
             status: d.status,
             respondBy: d.respond_by,
             meetingId: d.meeting_id
@@ -533,30 +523,6 @@ export default function App() {
         }
       });
   }, [currentUser?.email, currentRoomId]);
-
-  // Slots UTC (0..167) libres por miembro, a partir de su disponibilidad local
-  const computeSlotSets = (mems, avails) => {
-    const map = new Map();
-    mems.forEach(member => {
-      const offset = getOffsetMinutes(member.tz);
-      const set = new Set();
-      avails
-        .filter(a => a.user.toLowerCase() === member.name.toLowerCase())
-        .forEach(rule => {
-          const startUtcMin = rule.dayIdx * 1440 + rule.startHour * 60 - offset;
-          const endUtcMin = rule.dayIdx * 1440 + rule.endHour * 60 - offset;
-          // Solapamiento (no contención total): con offsets no múltiplos de 60
-          // (ej. India UTC+5:30) un bloque local de 1h nunca cae completamente
-          // dentro de un slot UTC de 1h, y con "contención total" ese miembro
-          // quedaría con 0 slots para siempre, sin ningún aviso.
-          for (let s = 0; s < 168; s++) {
-            if (s * 60 < endUtcMin && (s + 1) * 60 > startUtcMin) set.add(s);
-          }
-        });
-      map.set(member.email, set);
-    });
-    return map;
-  };
 
   // Slot UTC → etiqueta en la hora local de una zona ("Lunes 14:00")
   const slotToLocalLabel = (slot, tz) => {
@@ -781,6 +747,22 @@ export default function App() {
         })));
       }
 
+      // 3b. Fetch Plantillas base (horario habitual). Antes vivían solo en el
+      // estado de React: tras recargar la página, "Usar mi plantilla" partía
+      // de una lista vacía y borraba la disponibilidad cargada.
+      const { data: tplData, error: tplError } = await supabase
+        .from('templates')
+        .select('*')
+        .eq('room_id', currentRoomId);
+      if (!tplError && tplData) {
+        setTemplates(tplData.filter(d => d.day_idx != null).map(d => ({
+          user: d.user,
+          dayIdx: d.day_idx,
+          startHour: d.start_hour,
+          endHour: d.end_hour
+        })));
+      }
+
       // 4. Fetch Meetings
       const { data: meetData } = await supabase
         .from('meetings')
@@ -908,98 +890,40 @@ export default function App() {
 
   // Calcula heatmap y afinidad (agregados). El emparejamiento ya NO se hace
   // acá: lo resuelve el job semanal 1:1 (weekly-matcher) vía match_proposals.
+  // La traducción local→UTC (con envolvente semanal y dedupe por miembro)
+  // vive en src/slots.js, compartida con los tests y alineada con la Edge
+  // Function.
   const calculateEngine = () => {
     const activeMembers = members.filter(m => m.active);
-    if (activeMembers.length < 2) {
+    // El heatmap se muestra desde el PRIMER miembro activo: si la persona es
+    // la única de la sala, igual tiene que ver sus propias marcas reflejadas.
+    if (activeMembers.length === 0) {
       setHeatmap([]);
       setAffinity([]);
       return;
     }
 
-    const nSlots = 7 * 24; // 168 slots de 1 hora
-    const presence = Array.from({ length: nSlots }, () => []);
-    const freeSlotsCount = activeMembers.map(() => 0);
-
-    // Mapear intervalos locales a UTC
-    activeMembers.forEach((member, memberIdx) => {
-      const offset = getOffsetMinutes(member.tz);
-      const userRules = availabilities.filter(a => a.user.toLowerCase() === member.name.toLowerCase());
-
-      userRules.forEach(rule => {
-        // Traducir inicio y fin local a minutos desde el lunes 00:00 local
-        const startLocalMin = rule.dayIdx * 24 * 60 + rule.startHour * 60;
-        const endLocalMin = rule.dayIdx * 24 * 60 + rule.endHour * 60;
-
-        // Traducir a UTC minutes
-        const startUtcMin = startLocalMin - offset;
-        const endUtcMin = endLocalMin - offset;
-
-        // Rellenar slots de 1 hora
-        for (let s = 0; s < nSlots; s++) {
-          const slotStartMin = s * 60;
-          const slotEndMin = (s + 1) * 60;
-
-          // Solapamiento (no contención total): ver computeSlotSets más arriba
-          // para el motivo — evita que offsets no múltiplos de 60 (India, etc.)
-          // dejen a un miembro con 0 slots libres sin ningún aviso.
-          if (slotStartMin < endUtcMin && slotEndMin > startUtcMin) {
-            presence[s].push(memberIdx);
-            freeSlotsCount[memberIdx]++;
-          }
-        }
-      });
-    });
-
-    // 1. Calcular Heatmap (7 días x 24 horas)
-    const grid = [];
-    const viewOffset = getOffsetMinutes(currentUser?.tz || 'UTC'); // Ver en hora local del usuario activo
-
-    for (let d = 0; d < 7; d++) {
-      const hoursRow = [];
-      for (let h = 0; h < 24; h++) {
-        // Convertir día/hora local de Tomás a UTC
-        const localMin = d * 24 * 60 + h * 60;
-        const utcMin = localMin - viewOffset;
-        const slotIdx = Math.floor((utcMin / 60) + nSlots) % nSlots;
-
-        // Personas libres en este slot
-        const freeCount = presence[slotIdx] ? presence[slotIdx].length : 0;
-        const freeNames = presence[slotIdx] ? presence[slotIdx].map(idx => activeMembers[idx].name).join(', ') : '';
-
-        hoursRow.push({ count: freeCount, names: freeNames });
-      }
-      grid.push(hoursRow);
-    }
+    const { grid, slotSets } = buildHeatmapGrid(
+      activeMembers, availabilities, currentUser?.tz || 'UTC'
+    );
     setHeatmap(grid);
 
-    // 3. Matriz de Afinidad (Solapamientos relativos)
-    const n = activeMembers.length;
-    const affinityMatrix = Array.from({ length: n }, () => Array(n).fill(0));
-
-    // Contar solapamientos
-    for (let s = 0; s < nSlots; s++) {
-      const here = presence[s];
-      for (let a = 0; a < here.length; a++) {
-        for (let b = a + 1; b < here.length; b++) {
-          affinityMatrix[here[a]][here[b]]++;
-          affinityMatrix[here[b]][here[a]]++;
-        }
-      }
+    // Matriz de Afinidad (solapamientos relativos): requiere al menos 2
+    if (activeMembers.length < 2) {
+      setAffinity([]);
+      return;
     }
-
-    // Convertir a porcentajes
+    const sets = activeMembers.map(m => slotSets.get(m.email) || new Set());
     const calculatedAffinity = activeMembers.map((member, i) => {
       const partnerStats = activeMembers.map((partner, j) => {
         if (i === j) return { name: partner.name, pct: null };
-        const denom = Math.min(freeSlotsCount[i], freeSlotsCount[j]);
-        const pct = denom ? Math.round((affinityMatrix[i][j] / denom) * 100) : 0;
+        let common = 0;
+        sets[i].forEach(s => { if (sets[j].has(s)) common++; });
+        const denom = Math.min(sets[i].size, sets[j].size);
+        const pct = denom ? Math.round((common / denom) * 100) : 0;
         return { name: partner.name, pct };
       });
-
-      return {
-        name: member.name,
-        stats: partnerStats
-      };
+      return { name: member.name, stats: partnerStats };
     });
     setAffinity(calculatedAffinity);
   };
@@ -1007,12 +931,20 @@ export default function App() {
   // --- ACCIONES DEL WIZARD ---
   const handleWizardParticipation = (participate) => {
     setWizardStatus({ type: 'loading', msg: 'Guardando tu estado...' });
-    setTimeout(() => {
-      // Modificar en la lista de miembros
+    setTimeout(async () => {
+      // Modificar en la lista de miembros (y persistir en la DB: antes el
+      // cambio de participación del wizard se perdía al recargar)
       const updatedMembers = members.map(m =>
         m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: participate } : m
       );
       setMembers(updatedMembers);
+      setCurrentUser(prev => ({ ...prev, active: participate }));
+      if (!useMockDb) {
+        await supabase.from('members')
+          .update({ active: participate })
+          .eq('room_id', currentRoomId)
+          .eq('email', currentUser.email);
+      }
 
       if (participate) {
         // Cargar horarios del usuario activo en la grilla visual
@@ -1026,7 +958,14 @@ export default function App() {
         setWizardGrid(gridSlots);
         setWizardStep(2);
       } else {
-        // Borrar horarios semanales
+        // Borrar horarios semanales (también en la DB: antes solo se limpiaba
+        // el estado local y las marcas "volvían" al recargar la página)
+        if (!useMockDb) {
+          await supabase.from('availabilities')
+            .delete()
+            .eq('room_id', currentRoomId)
+            .ilike('user', escapeLikeLiteral(currentUser.name));
+        }
         const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
         setAvailabilities(cleanAvail);
         setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
@@ -1069,9 +1008,46 @@ export default function App() {
 
   const handleUseTemplate = () => {
     setWizardStatus({ type: 'loading', msg: 'Aplicando horarios base de tu plantilla...' });
-    setTimeout(() => {
-      // Reemplazar horarios en la disponibilidad semanal
+    setTimeout(async () => {
       const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+
+      // Sin plantilla guardada no hay nada que aplicar: antes este camino
+      // BORRABA la disponibilidad ya cargada (la plantilla vivía solo en
+      // memoria y quedaba vacía tras recargar la página).
+      if (userTemplateRules.length === 0) {
+        setWizardStatus({
+          type: 'error',
+          msg: 'Todavía no tenés una plantilla base guardada. Cargá tus horarios a mano y marcá "Guardar como mi Plantilla Base".'
+        });
+        return;
+      }
+
+      // Reemplazar horarios en la DB (antes solo se cambiaba el estado local
+      // y el heatmap/matcher de los demás nunca veían el cambio)
+      if (!useMockDb) {
+        const { error: delError } = await supabase.from('availabilities')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .ilike('user', escapeLikeLiteral(currentUser.name));
+        if (delError) {
+          setWizardStatus({ type: 'error', msg: 'Error al actualizar horarios en Supabase.' });
+          return;
+        }
+        const { error: insError } = await supabase.from('availabilities').insert(
+          userTemplateRules.map(r => ({
+            room_id: currentRoomId,
+            user: r.user,
+            day_idx: r.dayIdx,
+            start_hour: r.startHour,
+            end_hour: r.endHour
+          }))
+        );
+        if (insError) {
+          setWizardStatus({ type: 'error', msg: 'Error al insertar horarios en Supabase.' });
+          return;
+        }
+      }
+
       const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
       setAvailabilities([...cleanAvail, ...userTemplateRules]);
 
@@ -1123,11 +1099,13 @@ export default function App() {
     }
 
     if (!useMockDb) {
-      // Borrar antiguos bloques en Supabase
+      // Borrar antiguos bloques en Supabase (case-insensitive: un .eq estricto
+      // dejaba filas viejas si el nombre cambió de mayúsculas/minúsculas, y
+      // esas filas fantasma seguían pintando el heatmap)
       const { error: delError } = await supabase.from('availabilities')
         .delete()
         .eq('room_id', currentRoomId)
-        .eq('user', currentUser.name);
+        .ilike('user', escapeLikeLiteral(currentUser.name));
 
       if (delError) {
         setWizardStatus({ type: 'error', msg: 'Error al actualizar horarios en Supabase.' });
@@ -1155,8 +1133,29 @@ export default function App() {
     const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
     setAvailabilities([...cleanAvail, ...newRules]);
 
-    // 4. Si se guarda como plantilla
+    // 4. Si se guarda como plantilla (también en la DB: antes la plantilla
+    // vivía solo en memoria y desaparecía al recargar la página)
     if (saveAsTemplate) {
+      if (!useMockDb) {
+        await supabase.from('templates')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .ilike('user', escapeLikeLiteral(currentUser.name));
+        if (newRules.length > 0) {
+          const { error: tplError } = await supabase.from('templates').insert(
+            newRules.map(r => ({
+              room_id: currentRoomId,
+              user: r.user,
+              day_idx: r.dayIdx,
+              start_hour: r.startHour,
+              end_hour: r.endHour
+            }))
+          );
+          if (tplError) {
+            showNotification('Tus horarios se guardaron, pero la plantilla base no pudo guardarse: ' + tplError.message, 'error');
+          }
+        }
+      }
       const cleanTemplate = templates.filter(t => t.user.toLowerCase() !== currentUser.name.toLowerCase());
       setTemplates([...cleanTemplate, ...newRules]);
     }
@@ -1540,7 +1539,7 @@ export default function App() {
         await supabase.from('availabilities')
           .delete()
           .eq('room_id', currentRoomId)
-          .eq('user', currentUser.name);
+          .ilike('user', escapeLikeLiteral(currentUser.name));
       }
       setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase()));
       showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
@@ -1751,13 +1750,46 @@ export default function App() {
     if (!accept) newStatus = 'rechazado';
     else if (otherStatus === 'aceptado') newStatus = 'confirmado';
 
+    // ¿Este cliente es el responsable de crear el Meet?
+    let shouldCreateMeeting = newStatus === 'confirmado';
+
     if (!useMockDb) {
+      // 1. Guardar SOLO mi lado (y el rechazo, que es unilateral). La
+      //    promoción a 'confirmado' va aparte con un update condicional:
+      //    si ambos aceptan casi a la vez, cada cliente veía al otro en
+      //    'pendiente' (estado local viejo), ambos escribían
+      //    status='propuesto' y la dupla quedaba trabada sin Meet.
       const dbPatch = meIsA ? { status_a: newSide } : { status_b: newSide };
-      dbPatch.status = newStatus;
+      if (!accept) dbPatch.status = 'rechazado';
       const { error } = await supabase.from('match_proposals').update(dbPatch).eq('id', proposal.id);
       if (error) {
         showNotification('No se pudo guardar tu respuesta: ' + error.message, 'error');
         return;
+      }
+
+      if (accept) {
+        // 2. Releer la fila para conocer la respuesta REAL del compañero y,
+        //    si ambos aceptaron, reclamar la confirmación de forma atómica
+        //    (.eq status 'propuesto'): un solo cliente "gana" y crea el Meet.
+        const { data: fresh } = await supabase.from('match_proposals')
+          .select('status_a, status_b, status')
+          .eq('id', proposal.id)
+          .maybeSingle();
+        const bothAccepted = !!fresh && fresh.status_a === 'aceptado' && fresh.status_b === 'aceptado';
+        shouldCreateMeeting = false;
+        if (bothAccepted) {
+          newStatus = 'confirmado';
+          if (fresh.status !== 'confirmado') {
+            const { data: claimed } = await supabase.from('match_proposals')
+              .update({ status: 'confirmado' })
+              .eq('id', proposal.id)
+              .eq('status', 'propuesto')
+              .select('id');
+            shouldCreateMeeting = !!claimed && claimed.length > 0;
+          }
+        } else {
+          newStatus = fresh?.status || 'propuesto';
+        }
       }
     }
 
@@ -1772,8 +1804,10 @@ export default function App() {
       showNotification('Rechazaste la propuesta. El emparejador te asignará otro compañero disponible en la próxima corrida.');
       return;
     }
-    if (newStatus === 'confirmado') {
+    if (newStatus === 'confirmado' && shouldCreateMeeting) {
       await createProposalMeeting(updated);
+    } else if (newStatus === 'confirmado') {
+      showNotification('¡Dupla confirmada! Tu compañero está generando el Meet; el enlace aparecerá en la sala en un momento.', 'success');
     } else {
       const partnerName = meIsA ? proposal.bName : proposal.aName;
       showNotification(`¡Aceptaste! Esperando la confirmación de ${partnerName.split(' ')[0]}.`, 'success');

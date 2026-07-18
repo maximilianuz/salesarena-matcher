@@ -366,10 +366,18 @@ Deno.serve(async (req) => {
             // Solapamiento (no contención total): con offsets no múltiplos de 60
             // (ej. India UTC+5:30) un bloque local de 1h nunca cae completamente
             // dentro de un slot UTC de 1h, y con "contención total" ese miembro
-            // quedaría con 0 slots para siempre, sin ningún aviso. Debe coincidir
-            // con src/App.jsx (computeSlotSets / calculateEngine).
-            for (let s = 0; s < 168; s++) {
-              if (s * 60 < endUtcMin && (s + 1) * 60 > startUtcMin) set.add(s);
+            // quedaría con 0 slots para siempre, sin ningún aviso.
+            // Envolvente semanal (±10080 min): un bloque local pegado al límite
+            // de la semana cae, en UTC, en la otra punta (ej. Domingo 22:00 en
+            // Argentina = Lunes 01:00 UTC); sin el wrap esas horas se perdían.
+            // Debe coincidir con src/slots.js (addRuleSlots).
+            for (const shift of [-10080, 0, 10080]) {
+              const lo = startUtcMin + shift;
+              const hi = endUtcMin + shift;
+              if (hi <= 0 || lo >= 10080) continue;
+              for (let s = 0; s < 168; s++) {
+                if (s * 60 < hi && (s + 1) * 60 > lo) set.add(s);
+              }
             }
           });
         slotSets.set(m.email, set);
