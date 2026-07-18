@@ -13,6 +13,14 @@
 --    ("user"/day_idx/start_hour/end_hour). Se alinean las columnas para que
 --    la plantilla pueda persistirse (antes vivía solo en memoria del
 --    navegador y se perdía al recargar).
+--
+--    NOTA: en producción sobrevivían políticas RLS viejas del modelo
+--    original (basadas en created_by) que la migración 20260718100000 no
+--    llegó a borrar porque los nombres no coincidían. Esas políticas
+--    dependen de created_by y bloquean el DROP COLUMN
+--    (ERROR 2BP01). Por eso, antes de tocar columnas, se eliminan TODAS
+--    las políticas de templates de forma dinámica y luego se recrean las
+--    correctas (lectura pública + escritura de miembros de la sala).
 
 -- ============ MATCH_PROPOSALS: valores reales del doble opt-in ============
 
@@ -34,6 +42,20 @@ ALTER TABLE match_proposals ADD CONSTRAINT match_proposals_status_b_check
 
 -- ============ TEMPLATES: misma forma que availabilities ============
 
+-- 2a. Borrar TODAS las políticas existentes sobre templates (viejas o nuevas)
+--     para que ninguna quede dependiendo de created_by/name/content.
+DO $$
+DECLARE pol record;
+BEGIN
+  FOR pol IN
+    SELECT policyname FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'templates'
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.templates', pol.policyname);
+  END LOOP;
+END $$;
+
+-- 2b. Alinear columnas con lo que la app usa (igual que availabilities)
 ALTER TABLE templates DROP COLUMN IF EXISTS created_by;
 ALTER TABLE templates DROP COLUMN IF EXISTS name;
 ALTER TABLE templates DROP COLUMN IF EXISTS content;
@@ -41,3 +63,32 @@ ALTER TABLE templates ADD COLUMN IF NOT EXISTS "user" TEXT;
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS day_idx INTEGER;
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS start_hour NUMERIC;
 ALTER TABLE templates ADD COLUMN IF NOT EXISTS end_hour NUMERIC;
+
+-- 2c. Recrear las políticas correctas: lectura pública (la app lee antes del
+--     login, rol anon) y escritura para miembros de la sala. Debe coincidir
+--     con el modelo de 20260718100000.
+ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public can view templates" ON templates;
+DROP POLICY IF EXISTS "Room members can manage templates" ON templates;
+
+CREATE POLICY "Public can view templates"
+  ON templates FOR SELECT
+  TO anon, authenticated
+  USING (true);
+
+CREATE POLICY "Room members can manage templates"
+  ON templates FOR ALL
+  TO authenticated
+  USING (
+    room_id IN (
+      SELECT room_id FROM members
+      WHERE lower(email) = lower(auth.jwt() ->> 'email')
+    )
+  )
+  WITH CHECK (
+    room_id IN (
+      SELECT room_id FROM members
+      WHERE lower(email) = lower(auth.jwt() ->> 'email')
+    )
+  );
