@@ -176,10 +176,12 @@ const buildWeeklyPairs = (
 
 Deno.serve(async (req) => {
   try {
-    // Validar secreto compartido (prevenir invocación pública arbitraria)
-    const cronSecret = Deno.env.get('CRON_SECRET') || 'default-insecure-change-me';
-    const headerSecret = req.headers.get('x-cron-secret');
-    if (headerSecret !== cronSecret) {
+    // Secreto compartido OPCIONAL. La función es idempotente y el cliente la
+    // dispara legítimamente al activar participación (sin secreto), así que
+    // solo se exige el header cuando CRON_SECRET está configurado. Si se
+    // configura, hay que enviarlo también desde el cron y el cliente.
+    const cronSecret = Deno.env.get('CRON_SECRET');
+    if (cronSecret && req.headers.get('x-cron-secret') !== cronSecret) {
       console.warn('Rejected request: invalid or missing x-cron-secret header');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
     }
