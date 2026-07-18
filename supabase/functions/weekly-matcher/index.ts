@@ -223,12 +223,25 @@ Deno.serve(async (req) => {
         const { data: pend } = await supabase
           .from('meeting_attendees')
           .select('id, meeting_id, joined_at, status')
-          .in('meeting_id', dueIds)
-          .eq('status', 'confirmado');
+          .in('meeting_id', dueIds);
+        // Reuniones caídas por cancelación de algún participante: al que quedó
+        // 'confirmado' esperando NO se lo puede penalizar como no-show por no
+        // unirse a una sesión que ya no iba a ocurrir. Se lo resuelve como
+        // 'cancelado_con_aviso' (no computa en confiabilidad ni en faltas).
+        const cancelledMeetings = new Set(
+          (pend || [])
+            .filter((a) => a.status === 'cancelado_con_aviso' || a.status === 'cancelado_tarde')
+            .map((a) => a.meeting_id)
+        );
         for (const a of pend || []) {
+          if (a.status !== 'confirmado') continue;
           const startMs = startById.get(a.meeting_id);
           if (startMs === undefined) continue;
-          if (a.joined_at) {
+          if (cancelledMeetings.has(a.meeting_id)) {
+            await supabase.from('meeting_attendees')
+              .update({ status: 'cancelado_con_aviso', reported_by: 'system', reported_at: nowIso })
+              .eq('id', a.id);
+          } else if (a.joined_at) {
             const punctuality = Date.parse(a.joined_at) <= startMs + ATTENDANCE_TOLERANCE_MS
               ? 'a_tiempo' : 'tarde';
             await supabase.from('meeting_attendees')
@@ -329,9 +342,12 @@ Deno.serve(async (req) => {
           .flatMap(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()])
       );
       // Parejas RECHAZADAS esta semana: exclusión DURA (se respeta el "no").
+      // Las CANCELADAS también: si uno canceló la sesión, no se re-ofrece la
+      // misma dupla esta semana, pero cada integrante queda libre en el pool
+      // para ser emparejado con OTRO compañero disponible.
       const excluded = new Set<string>(
         (weekProposals || [])
-          .filter(p => p.status === 'rechazado')
+          .filter(p => p.status === 'rechazado' || p.status === 'cancelado')
           .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
       // Parejas EXPIRADAS (nadie confirmó con 4hs de antelación): exclusión
