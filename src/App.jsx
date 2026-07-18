@@ -197,6 +197,19 @@ const resolveTimezone = (countryName) => {
   }
 };
 
+// Deriva un nombre presentable del email cuando la cuenta de Google no
+// trae nombre (ej. "carlos.mendoza@gmail.com" → "Carlos Mendoza").
+const nameFromEmail = (email) => {
+  const base = (email || '').split('@')[0];
+  const pretty = base
+    .replace(/[._\-+]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  return pretty || 'Invitado';
+};
+
 // Adivina el país del usuario a partir de la zona horaria que reporta su
 // navegador, para poder registrarlo sin pedirle que lo elija a mano.
 const guessCountryFromBrowserTz = () => {
@@ -873,21 +886,14 @@ export default function App() {
         const isFounder = !count; // sala vacía: el primer miembro entra sin código
         const inviteOk = (urlInviteCode || '').trim().toUpperCase() === realCode.toUpperCase();
 
+        // Auto-registro directo: nombre de la cuenta de Google (o derivado del
+        // email si Google no lo trae) y país/zona horaria del navegador.
+        const googleName = (session.user.user_metadata?.full_name ||
+          session.user.user_metadata?.name || nameFromEmail(email)).trim();
+        setLoginName(googleName);
+
         if (isFounder || !realCode || inviteOk) {
-          // Auto-registro directo: usamos el nombre de la cuenta de Google y
-          // detectamos el país/zona horaria por el navegador, sin pedirle
-          // nada al usuario. Si Google no trae nombre, caemos al formulario.
-          const googleName = session.user.user_metadata?.full_name ||
-            session.user.user_metadata?.name || '';
-          if (googleName.trim()) {
-            const guessedCountry = guessCountryFromBrowserTz();
-            setLoginName(googleName);
-            setLoginCountry(guessedCountry);
-            await registerMember(googleName, guessedCountry, email);
-          } else {
-            setLoginStep(2);
-            setIsLoggedIn(false);
-          }
+          await registerMember(googleName, guessCountryFromBrowserTz(), email);
         } else {
           setLoginStep(3);
           setIsLoggedIn(false);
@@ -895,7 +901,7 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
-      setLoginStep(2); // el guard de handleProfileRegisterSubmit re-valida el código
+      showNotification('No pudimos completar tu registro. Recarga la página e intenta de nuevo.');
       setIsLoggedIn(false);
     }
   };
@@ -1209,26 +1215,26 @@ export default function App() {
       // con miembros existentes se requiere invitación válida
       const isFounder = members.length === 0;
       if (isFounder || !roomInviteCode || hasValidInvite(urlInviteCode)) {
-        setLoginStep(2);
+        await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
       } else {
         setLoginStep(3);
       }
     }
   };
 
-  const handleInviteCodeSubmit = (e) => {
+  const handleInviteCodeSubmit = async (e) => {
     e.preventDefault();
     if (hasValidInvite(inviteCodeInput)) {
       setInviteError('');
-      setLoginStep(2);
+      await registerMember(loginName || nameFromEmail(loginEmail), guessCountryFromBrowserTz());
     } else {
       setInviteError('Código incorrecto. Pídele el código vigente a quien administra la sala.');
     }
   };
 
   // Registra un miembro nuevo en Supabase y actualiza el estado local.
-  // Se usa tanto para el auto-registro directo (OAuth) como para el
-  // formulario manual de respaldo (handleProfileRegisterSubmit).
+  // Se usa desde el auto-registro OAuth, el flujo mock y el paso de
+  // código de invitación.
   const registerMember = async (rawName, rawCountry, emailOverride) => {
     const email = (emailOverride || loginEmail).trim().toLowerCase();
     const finalCountry = rawCountry === 'Otro' ? customLoginCountry.trim() : rawCountry;
@@ -1270,22 +1276,6 @@ export default function App() {
 
     showNotification(`¡Bienvenido a Sales-Arena Matcher, ${newUser.name}!`);
     return true;
-  };
-
-  const handleProfileRegisterSubmit = async (e) => {
-    e.preventDefault();
-    if (!loginName || !loginCountry) return;
-
-    // Guard de acceso: sin código válido no se puede registrar en una sala
-    // protegida que ya tiene miembros (defensa en profundidad del paso 3)
-    const inviteOk = members.length === 0 || !roomInviteCode ||
-      hasValidInvite(urlInviteCode) || hasValidInvite(inviteCodeInput);
-    if (!inviteOk) {
-      setLoginStep(3);
-      return;
-    }
-
-    await registerMember(loginName, loginCountry);
   };
 
   const handleLogout = async () => {
@@ -2141,86 +2131,6 @@ export default function App() {
                 </form>
               )}
             </div>
-          )}
-
-          {/* STEP 2: PROFILE SETUP FORM */}
-          {loginStep === 2 && (
-            <form onSubmit={handleProfileRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Completar Perfil</h2>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)' }}>Es tu primera vez ingresando con esta cuenta. Completa tu información base.</p>
-              </div>
-
-              <div className="form-group" style={{ textAlign: 'left' }}>
-                <label htmlFor="reg-email-readonly" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Email de Registro (Gmail)</label>
-                <input
-                  id="reg-email-readonly"
-                  type="email"
-                  className="form-input"
-                  value={loginEmail}
-                  readOnly
-                  disabled
-                  style={{
-                    width: '100%',
-                    boxSizing: 'border-box',
-                    padding: '10px 14px',
-                    backgroundColor: 'rgba(120, 120, 120, 0.08)',
-                    cursor: 'not-allowed',
-                    color: 'var(--text-muted)'
-                  }}
-                />
-              </div>
-
-              <div className="form-group" style={{ textAlign: 'left' }}>
-                <label htmlFor="reg-name" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Nombre Completo</label>
-                <input
-                  type="text"
-                  id="reg-name"
-                  className="form-input"
-                  value={loginName}
-                  onChange={(e) => setLoginName(e.target.value)}
-                  placeholder="Ej. Carlos Mendoza"
-                  required
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
-                />
-              </div>
-
-              <div className="form-group" style={{ textAlign: 'left' }}>
-                <label htmlFor="reg-country" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>País de Origen</label>
-                <select
-                  id="reg-country"
-                  className="form-select"
-                  value={loginCountry}
-                  onChange={(e) => setLoginCountry(e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px', marginBottom: loginCountry === 'Otro' ? '12px' : '0' }}
-                >
-                  {ZONAS.map(z => (
-                    <option key={z.country} value={z.country}>{z.country}</option>
-                  ))}
-                  <option value="Otro">Otro (Escribir país)...</option>
-                </select>
-                {loginCountry === 'Otro' && (
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={customLoginCountry}
-                    onChange={(e) => setCustomLoginCountry(e.target.value)}
-                    placeholder="Escribe tu país de origen... Ej. Italia"
-                    required
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
-                  />
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-                <button type="button" className="btn btn-outline" style={{ flex: 1, padding: '10px' }} onClick={() => setLoginStep(1)}>
-                  Atrás
-                </button>
-                <button type="submit" className="btn btn-indigo" style={{ flex: 2, padding: '10px', fontWeight: '600' }}>
-                  Finalizar Registro
-                </button>
-              </div>
-            </form>
           )}
 
           {/* STEP 3: CÓDIGO DE INVITACIÓN (SALA PROTEGIDA) */}
