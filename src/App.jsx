@@ -1314,16 +1314,20 @@ export default function App() {
       if (newSlug !== currentRoomId) {
         // 1. Crear o actualizar la nueva sala con el slug correcto
         await supabase.from('rooms').upsert({ id: newSlug, name: nextName });
-        // Conservar el código de invitación en el nuevo slug
-        if (roomInviteCode) {
-          await supabase.from('rooms').update({ invite_code: roomInviteCode }).eq('id', newSlug);
-        }
-        // 2. Migrar los registros vinculados a la nueva sala
+        // 2. Migrar los registros vinculados a la nueva sala. members va
+        //    PRIMERO: las políticas RLS de escritura exigen ser miembro de la
+        //    sala destino, así que la membresía debe migrar antes que el resto.
         await supabase.from('members').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('availabilities').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('templates').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('meetings').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        // 3. Eliminar la sala antigua si no es la sala por defecto
+        // 3. Conservar el código de invitación (requiere ya ser miembro del
+        //    nuevo slug, por eso va después de migrar members)
+        if (roomInviteCode) {
+          await supabase.from('rooms').update({ invite_code: roomInviteCode }).eq('id', newSlug);
+        }
+        // 4. Eliminar la sala antigua si no es la sala por defecto (la política
+        //    permite borrar salas que quedaron sin miembros)
         if (currentRoomId !== 'grupo-a') {
           await supabase.from('rooms').delete().eq('id', currentRoomId);
         }
