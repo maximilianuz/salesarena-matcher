@@ -1669,7 +1669,7 @@ export default function App() {
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
-        showNotification(`No se pudo crear el Meet: ${err.message}. La dupla quedó confirmada; reintenta desde la tarjeta de tu propuesta.`, 'error');
+        showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. Usá "Crear Meet" para reintentar. ${err.message}`, 'error');
         return;
       }
     }
@@ -1787,7 +1787,7 @@ export default function App() {
       if (!accept) dbPatch.status = 'rechazado';
       const { error } = await supabase.from('match_proposals').update(dbPatch).eq('id', proposal.id);
       if (error) {
-        showNotification('No se pudo guardar tu respuesta: ' + error.message, 'error');
+        showNotification('No pudimos guardar tu respuesta. Revisá la conexión e intentá nuevamente. ' + error.message, 'error');
         return;
       }
 
@@ -1876,7 +1876,7 @@ export default function App() {
         .update({ status: newStatus, punctuality, reported_by: currentUser.email, reported_at: reportedAt })
         .eq('id', attendance.id);
       if (error) {
-        showNotification('No se pudo guardar el reporte: ' + error.message, 'error');
+        showNotification('No pudimos registrar la asistencia. Intentá nuevamente antes de cerrar esta pantalla. ' + error.message, 'error');
         return;
       }
     }
@@ -2292,9 +2292,14 @@ export default function App() {
       <a href="#main-content" className="skip-to-content">Saltar al contenido principal</a>
 
       {/* TOAST NOTIFICATION SYSTEM */}
-      <div className="toast-container" aria-live="polite" role="status">
+      <div className="toast-container">
         {toasts.map(t => (
-          <div key={t.id} className={`toast-item toast-${t.type}`}>
+          <div
+            key={t.id}
+            className={`toast-item toast-${t.type}`}
+            role={t.type === 'error' ? 'alert' : 'status'}
+            aria-live={t.type === 'error' ? 'assertive' : 'polite'}
+          >
             <span className="toast-icon" aria-hidden="true">
               {t.type === 'error' ? '✕' : t.type === 'success' ? '✓' : 'i'}
             </span>
@@ -2673,33 +2678,80 @@ export default function App() {
                     Mi Role-Play de la Semana
                   </h4>
                   {isRoomDataLoading ? (
-                    <div className="match-card-skeleton" aria-busy="true" aria-label="Cargando tu propuesta de la semana">
+                    <div className="match-card-skeleton" role="status" aria-live="polite" aria-busy="true" aria-label="Cargando tu propuesta de la semana">
                       <div className="skeleton" style={{ width: '40px', height: '40px', borderRadius: '50%' }}></div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <div className="skeleton" style={{ width: '55%', height: '14px' }}></div>
                         <div className="skeleton" style={{ width: '80%', height: '11px' }}></div>
+                        <span className="dashboard-status-loading-text">Cargando tu propuesta semanal…</span>
                       </div>
                     </div>
                   ) : !myProposal ? (
-                    <div className="empty-state">
-                      <AlertCircle size={30} />
-                      <span className="empty-state-title">
-                        {myLastClosedProposal ? 'Buscando nuevo compañero' : 'Aún sin compañero asignado'}
-                      </span>
-                      <span className="empty-state-desc">
-                        {myLastClosedProposal
-                          ? 'Tu propuesta anterior se cerró. El emparejador te asignará otro candidato disponible en su próxima corrida.'
-                          : 'El emparejador semanal te asigna un compañero 1:1 según tu disponibilidad y confiabilidad. Asegúrate de tener tu disponibilidad cargada.'}
-                      </span>
-                    </div>
+                    (() => {
+                      const hasAvailability = availabilities.some(a =>
+                        a.user.toLowerCase() === currentUser.name.toLowerCase()
+                      );
+                      const emptyState = !currentUser.active
+                        ? {
+                            title: 'Tu participación está inactiva.',
+                            description: 'Activá tu participación para volver a entrar en los emparejamientos semanales.'
+                          }
+                        : !hasAvailability
+                          ? {
+                              title: 'Todavía no cargaste disponibilidad.',
+                              description: 'Cargá al menos un horario disponible para que el matcher pueda buscar una coincidencia.'
+                            }
+                          : myLastClosedProposal
+                            ? {
+                                title: 'Buscando una nueva coincidencia.',
+                                description: 'Tu propuesta anterior se cerró; no necesitás hacer nada mientras el matcher busca otra opción.'
+                              }
+                            : {
+                                title: 'Todavía no tenés una propuesta.',
+                                description: 'Cargá tu disponibilidad y mantené activa tu participación. El matcher buscará una coincidencia.'
+                              };
+                      return (
+                        <div className="empty-state">
+                          <AlertCircle size={30} />
+                          <span className="empty-state-title">{emptyState.title}</span>
+                          <span className="empty-state-desc">{emptyState.description}</span>
+                        </div>
+                      );
+                    })()
                   ) : (() => {
                     const meIsA = myProposal.aEmail.toLowerCase() === myEmailLower;
                     const partnerName = meIsA ? myProposal.bName : myProposal.aName;
                     const partnerEmail = meIsA ? myProposal.bEmail : myProposal.aEmail;
                     const partnerMember = members.find(m => m.email.toLowerCase() === partnerEmail.toLowerCase());
                     const mySide = meIsA ? myProposal.statusA : myProposal.statusB;
+                    const otherSide = meIsA ? myProposal.statusB : myProposal.statusA;
                     const linkedMeeting = meetings.find(mm => mm.id === myProposal.meetingId);
                     const isConfirmed = myProposal.status === 'confirmado';
+                    const statusPresentation = isConfirmed && linkedMeeting
+                      ? {
+                          variant: 'meeting-ready',
+                          label: 'Reunión agendada',
+                          nextStep: 'Abrí el Meet cuando llegue el horario.'
+                        }
+                      : isConfirmed
+                        ? {
+                            variant: 'confirmed',
+                            label: 'Dupla confirmada',
+                            nextStep: 'Creá el evento de Calendar y el enlace de Meet.'
+                          }
+                        : mySide === 'pendiente'
+                          ? {
+                              variant: 'action-required',
+                              label: 'Requiere tu respuesta',
+                              nextStep: 'Confirmá si podés asistir.'
+                            }
+                          : {
+                              variant: 'waiting',
+                              label: 'Esperando confirmación',
+                              nextStep: otherSide === 'pendiente'
+                                ? 'No necesitás hacer nada. Te avisaremos cuando la otra persona responda.'
+                                : 'No necesitás hacer nada mientras se actualiza la propuesta.'
+                            };
 
                     // Próxima ocurrencia del turno tal como la muestra la
                     // etiqueta de horario (slotToLocalLabel usa el día/hora del
@@ -2728,9 +2780,9 @@ export default function App() {
                               </div>
                             </div>
                           </div>
-                          <span className={`proposal-status-pill ${isConfirmed ? 'confirmed' : 'pending'}`}>
+                          <span className={`dashboard-proposal-status dashboard-proposal-status--${statusPresentation.variant}`} role="status">
                             <span className="status-dot" aria-hidden="true"></span>
-                            {isConfirmed ? 'Confirmado' : 'Propuesto'}
+                            {statusPresentation.label}
                           </span>
                         </div>
 
@@ -2757,6 +2809,10 @@ export default function App() {
                               Respondé {formatRespondByRelative(effectiveDeadline)} o el cupo se reasigna
                             </div>
                           )}
+                          <div className={`dashboard-next-step dashboard-next-step--${statusPresentation.variant}`}>
+                            <span className="dashboard-next-step-label">Tu siguiente paso</span>
+                            <span className="dashboard-next-step-text">{statusPresentation.nextStep}</span>
+                          </div>
                         </div>
 
                         <div className="match-card-footer">
@@ -2802,15 +2858,16 @@ export default function App() {
                   </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
-                      <div aria-busy="true" aria-label="Cargando reuniones agendadas" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div role="status" aria-live="polite" aria-busy="true" aria-label="Cargando reuniones agendadas" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
                         <div className="skeleton" style={{ height: '48px', borderRadius: '12px' }}></div>
+                        <span className="dashboard-status-loading-text">Cargando próximas reuniones…</span>
                       </div>
                     ) : upcomingMeetings.length === 0 ? (
                       <div className="empty-state">
                         <CalendarDays size={30} />
-                        <span className="empty-state-title">Sin reuniones agendadas</span>
-                        <span className="empty-state-desc">Agenda un horario coincidente y aparecerá aquí con su link de Meet, visible para toda la sala.</span>
+                        <span className="empty-state-title">Todavía no hay reuniones confirmadas.</span>
+                        <span className="empty-state-desc">Cuando una propuesta sea aceptada por ambas personas, el enlace aparecerá aquí.</span>
                       </div>
                     ) : (
                       upcomingMeetings

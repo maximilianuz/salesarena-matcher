@@ -1694,6 +1694,77 @@ input:checked + .switch-slider:before {
   border-radius: 10px;
 }
 
+/* Estados derivados del dashboard: presentación visual, sin nuevos valores de negocio. */
+.dashboard-proposal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.dashboard-proposal-status--action-required,
+.dashboard-next-step--action-required {
+  color: var(--color-warning);
+  background-color: rgba(255, 159, 10, 0.09);
+  border-color: rgba(255, 159, 10, 0.28);
+}
+
+.dashboard-proposal-status--waiting,
+.dashboard-next-step--waiting {
+  color: var(--color-primary);
+  background-color: rgba(94, 92, 230, 0.09);
+  border-color: rgba(94, 92, 230, 0.25);
+}
+
+.dashboard-proposal-status--confirmed,
+.dashboard-next-step--confirmed {
+  color: #30d158;
+  background-color: rgba(48, 209, 88, 0.08);
+  border-color: rgba(48, 209, 88, 0.25);
+}
+
+.dashboard-proposal-status--meeting-ready,
+.dashboard-next-step--meeting-ready {
+  color: #64d2ff;
+  background-color: rgba(100, 210, 255, 0.08);
+  border-color: rgba(100, 210, 255, 0.25);
+}
+
+.dashboard-next-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  padding: 9px 11px;
+  border: 1px solid;
+  border-radius: 10px;
+}
+
+.dashboard-next-step-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.dashboard-next-step-text {
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.dashboard-status-loading-text {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
 /* =========================================
    SCORE DE CONFIABILIDAD
    ========================================= */
