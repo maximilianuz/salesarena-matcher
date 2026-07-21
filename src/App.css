@@ -921,6 +921,16 @@ input:checked + .switch-slider:before {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.match-card-identity {
+  flex: 1 1 180px;
+}
+
+.match-card-partner-name {
+  overflow-wrap: anywhere;
 }
 
 .match-card-time-group {
@@ -1705,34 +1715,57 @@ input:checked + .switch-slider:before {
   font-size: 11px;
   font-weight: 800;
   white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 100%;
+  margin-left: auto;
 }
 
 .dashboard-proposal-status--action-required,
 .dashboard-next-step--action-required {
-  color: var(--color-warning);
+  color: #7a4300;
   background-color: rgba(255, 159, 10, 0.09);
   border-color: rgba(255, 159, 10, 0.28);
 }
 
 .dashboard-proposal-status--waiting,
 .dashboard-next-step--waiting {
-  color: var(--color-primary);
+  color: #3730a3;
   background-color: rgba(94, 92, 230, 0.09);
   border-color: rgba(94, 92, 230, 0.25);
 }
 
 .dashboard-proposal-status--confirmed,
 .dashboard-next-step--confirmed {
-  color: #30d158;
+  color: #087a2f;
   background-color: rgba(48, 209, 88, 0.08);
   border-color: rgba(48, 209, 88, 0.25);
 }
 
 .dashboard-proposal-status--meeting-ready,
 .dashboard-next-step--meeting-ready {
-  color: #64d2ff;
+  color: #075985;
   background-color: rgba(100, 210, 255, 0.08);
   border-color: rgba(100, 210, 255, 0.25);
+}
+
+html.dark .dashboard-proposal-status--action-required,
+html.dark .dashboard-next-step--action-required {
+  color: var(--color-warning);
+}
+
+html.dark .dashboard-proposal-status--waiting,
+html.dark .dashboard-next-step--waiting {
+  color: var(--color-primary);
+}
+
+html.dark .dashboard-proposal-status--confirmed,
+html.dark .dashboard-next-step--confirmed {
+  color: #30d158;
+}
+
+html.dark .dashboard-proposal-status--meeting-ready,
+html.dark .dashboard-next-step--meeting-ready {
+  color: #64d2ff;
 }
 
 .dashboard-next-step {

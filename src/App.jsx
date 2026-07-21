@@ -2766,12 +2766,12 @@ export default function App() {
                     return (
                       <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                          <div className="match-card-identity" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                             <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
                               {getInitials(partnerName)}
                             </span>
                             <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
+                              <div className="match-card-partner-name" style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
                                 {partnerName}
                               </div>
                               <div className="match-card-subline">
@@ -2837,8 +2837,8 @@ export default function App() {
                             </div>
                           ) : (
                             <div className="proposal-waiting">
-                              <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
-                              Aceptaste la propuesta. Esperando a {partnerName.split(' ')[0]}...
+                              <Check size={14} aria-hidden="true" />
+                              Tu respuesta quedó registrada.
                             </div>
                           )}
                         </div>
