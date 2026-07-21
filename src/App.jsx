@@ -1297,7 +1297,7 @@ export default function App() {
     localStorage.setItem('salesarena-logged', 'true');
     localStorage.setItem('salesarena-user', JSON.stringify(newUser));
 
-    showNotification(`¡Bienvenido a Sales-Arena Matcher, ${newUser.name}!`);
+    showNotification(`¡Bienvenido a Sales Arena Matcher, ${newUser.name}!`);
     return true;
   };
 
@@ -1630,8 +1630,8 @@ export default function App() {
         }
 
         const eventPayload = {
-          summary: `Sales-Arena Roleplay: ${participantsStr}`,
-          description: 'Videollamada de entrenamiento agendada mediante Sales-Arena Matcher.',
+          summary: `Sales Arena Roleplay: ${participantsStr}`,
+          description: 'Videollamada de entrenamiento agendada mediante Sales Arena Matcher.',
           start: { dateTime: startDate.toISOString(), timeZone: 'UTC' },
           end: { dateTime: endDate.toISOString(), timeZone: 'UTC' },
           attendees: [{ email: proposal.aEmail }, { email: proposal.bEmail }],
@@ -2109,7 +2109,7 @@ export default function App() {
                 <ChessKnightIcon size={44} />
               </div>
               <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales-Arena</span>
+                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales Arena</span>
                 <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
               </div>
             </a>
@@ -2119,7 +2119,39 @@ export default function App() {
           {loginStep === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                <div className="room-indicator-badge">
+                <h1 style={{ margin: '0 0 10px 0', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Sales Arena Matcher</h1>
+                {/* Propósito de la app: visible en la página principal SIN iniciar
+                    sesión (requisito de verificación de la pantalla de consentimiento
+                    OAuth de Google). Explica qué hace la app y por qué usa Google. */}
+                <p style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.55' }}>
+                  <strong style={{ color: 'var(--text-main)' }}>Sales Arena Matcher</strong> coordina automáticamente sesiones de práctica
+                  de ventas (<em>role-plays</em>) uno a uno entre los integrantes de un equipo.
+                  Cada persona carga su disponibilidad horaria una sola vez y la app cruza los
+                  horarios de todo el equipo —incluso entre distintas zonas horarias— para
+                  emparejar duplas y agendar la reunión en común.
+                </p>
+                <div style={{
+                  textAlign: 'left',
+                  fontSize: '12.5px',
+                  color: 'var(--text-muted)',
+                  lineHeight: '1.5',
+                  backgroundColor: 'rgba(10,132,255,0.06)',
+                  border: '1px solid rgba(10,132,255,0.18)',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '4px',
+                  display: 'flex',
+                  gap: '10px',
+                  alignItems: 'flex-start'
+                }}>
+                  <CalendarCheck size={16} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
+                  <span>
+                    Al iniciar sesión con Google, la app usa el acceso a tu <strong>Google Calendar</strong> con
+                    un único fin: crear el evento con el enlace de <strong>Google Meet</strong> cuando
+                    ambos integrantes de una dupla confirman la sesión. No se accede a otros datos de tu cuenta.
+                  </span>
+                </div>
+                <div className="room-indicator-badge" style={{ marginTop: '8px' }}>
                   <span className="room-indicator-dot"></span>
                   <span>Sala de coordinación: <strong>{roomName}</strong></span>
                 </div>
@@ -2128,8 +2160,7 @@ export default function App() {
                     <Check size={11} /> Invitación válida detectada
                   </div>
                 )}
-                <h2 style={{ margin: '10px 0 6px 0', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>Utiliza tu cuenta de Google para ingresar al coordinador de roleplays.</p>
+                <h2 style={{ margin: '14px 0 0 0', fontSize: '15px', fontWeight: '700', letterSpacing: '-0.3px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
               </div>
 
               {isInAppBrowserDetected && (
@@ -2363,7 +2394,7 @@ export default function App() {
           </div>
           <div className="brand-title-stacked">
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span className="brand-title-sales">Sales-Arena</span>
+              <span className="brand-title-sales">Sales Arena</span>
               <span className="portal-badge-mini">PORTAL ↗</span>
             </div>
             <span className="brand-title-arena">Matcher</span>
@@ -2390,7 +2421,7 @@ export default function App() {
             </div>
             <div className="brand-title-stacked">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="brand-title-sales">Sales-Arena</span>
+                <span className="brand-title-sales">Sales Arena</span>
                 <span className="portal-badge-mini">PORTAL ↗</span>
               </div>
               <span className="brand-title-arena">Matcher</span>
@@ -3640,7 +3671,7 @@ export default function App() {
           {
             icon: <ChessKnightIcon size={44} />,
             title: `¡Bienvenido, ${currentUser.name.split(' ')[0]}!`,
-            desc: 'Sales-Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad de todos, sin importar el país. Cargás tu horario una vez y el sistema se encarga del resto: lo único que tenés que hacer es confirmar. Esta guía te muestra cómo funciona.'
+            desc: 'Sales Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad de todos, sin importar el país. Cargás tu horario una vez y el sistema se encarga del resto: lo único que tenés que hacer es confirmar. Esta guía te muestra cómo funciona.'
           },
           {
             icon: <CalendarRange size={34} />,
