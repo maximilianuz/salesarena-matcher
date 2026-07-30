@@ -10,7 +10,7 @@ Matcher resuelve la coordinación previa: quién puede reunirse, en qué horario
 
 - Inicio de sesión con Google OAuth mediante Supabase Auth.
 - Perfil de participante con nombre, correo, país, zona horaria y estado activo.
-- Salas con código de invitación y administración de miembros.
+- Salas con nombre único, creación restringida al administrador, y administración de miembros por enlace directo.
 - Carga semanal de disponibilidad y reutilización de plantillas horarias.
 - Conversión de horarios locales a slots UTC, incluidos husos con offsets fraccionarios y cruces de semana.
 - Mapa de calor y afinidad horaria entre participantes.

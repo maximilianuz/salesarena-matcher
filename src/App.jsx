@@ -209,14 +209,8 @@ const guessCountryFromBrowserTz = () => {
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Código de invitación de sala: 6 caracteres alfanuméricos en mayúscula
-const generateInviteCode = () => {
-  let code = '';
-  while (code.length < 6) {
-    code += Math.random().toString(36).replace(/[^a-z0-9]/g, '');
-  }
-  return code.substring(0, 6).toUpperCase();
-};
+// Único usuario habilitado para crear salas nuevas, por el momento.
+const ADMIN_EMAIL = 'community.argen.manager@gmail.com';
 
 // Fecha/hora UTC real de la próxima ocurrencia del match.
 // match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
@@ -283,17 +277,11 @@ export default function App() {
   });
 
   // Estado del flujo de Login/Registro
-  const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form, 3: Código de invitación
+  const [loginStep, setLoginStep] = useState(1); // 1: Google Email, 2: Profile setup Form
   const [loginEmail, setLoginEmail] = useState('');
   const [isInAppBrowserDetected, setIsInAppBrowserDetected] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Código de invitación de la sala (protección de acceso)
-  const [roomInviteCode, setRoomInviteCode] = useState('');
-  const [inviteCodeInput, setInviteCodeInput] = useState('');
-  const [inviteError, setInviteError] = useState('');
-  const [urlInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
-  const [loginName, setLoginName] = useState('');
   const [loginCountry, setLoginCountry] = useState('Argentina');
   const [customLoginCountry, setCustomLoginCountry] = useState('');
   const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
@@ -460,18 +448,6 @@ export default function App() {
   // salas redirige explícitamente; no se reescribe la URL con el nombre
   // slugificado porque en salas con nombre por defecto ("Sala Grupo-a") ese
   // slug apunta a una sala distinta y rompía el refresh y los links copiados.
-
-  // Código de invitación en modo demo local (sin Supabase): persistido por sala
-  useEffect(() => {
-    if (!useMockDb) return;
-    const key = `salesarena-invite-${currentRoomId}`;
-    let code = localStorage.getItem(key);
-    if (!code) {
-      code = generateInviteCode();
-      localStorage.setItem(key, code);
-    }
-    setRoomInviteCode(code);
-  }, [currentRoomId]);
 
   // Modo demo local: reuniones, asistencia y propuestas persisten en localStorage
   const mockHydratedRef = React.useRef(false);
@@ -776,17 +752,15 @@ export default function App() {
 
   const isChronicOffender = (email) => getChronicBlockedMonths(email) >= CHRONIC_BLOCK_THRESHOLD;
 
-  // ¿El código provisto coincide con el de la sala?
-  const hasValidInvite = (code) =>
-    !!roomInviteCode && (code || '').trim().toUpperCase() === roomInviteCode.toUpperCase();
-
   // --- REAL-TIME DATA SYNCHRONIZATION WITH SUPABASE ---
   useEffect(() => {
     if (useMockDb) return;
 
     const loadSupabaseData = async () => {
       setIsRoomDataLoading(true);
-      // 1. Fetch Room (or create it if it doesn't exist)
+      // 1. Fetch Room (o crearla solo si es la sala por defecto de la app:
+      // cualquier otra sala nueva se crea exclusivamente desde handleCreateRoom,
+      // que ya valida que quien la pide sea el administrador)
       let { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .select('*')
@@ -795,29 +769,14 @@ export default function App() {
 
       if (roomError || !roomData) {
         const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
-        const newCode = generateInviteCode();
-        await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
+        if (currentRoomId === 'grupo-a') {
+          await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
+        }
         setRoomName(defaultName);
         setRenameRoomInput(defaultName);
-        // Asignar código de invitación (si la columna aún no existe, se ignora
-        // el error y la sala queda sin protección hasta correr la migración)
-        const { error: codeError } = await supabase.from('rooms')
-          .update({ invite_code: newCode })
-          .eq('id', currentRoomId);
-        if (!codeError) setRoomInviteCode(newCode);
       } else {
         setRoomName(roomData.name);
         setRenameRoomInput(roomData.name);
-        if (roomData.invite_code) {
-          setRoomInviteCode(roomData.invite_code);
-        } else {
-          // Sala creada antes de la migración: generar código ahora
-          const newCode = generateInviteCode();
-          const { error: codeError } = await supabase.from('rooms')
-            .update({ invite_code: newCode })
-            .eq('id', currentRoomId);
-          if (!codeError) setRoomInviteCode(newCode);
-        }
       }
 
       // 2. Fetch Members
@@ -955,33 +914,12 @@ export default function App() {
         localStorage.setItem('salesarena-logged', 'true');
         localStorage.setItem('salesarena-user', JSON.stringify(userObj));
       } else {
-        // Usuario nuevo: validar acceso a la sala por código de invitación.
-        // Se consulta el código directo de la DB para evitar closures viejos.
-        const { count } = await supabase
-          .from('members')
-          .select('*', { count: 'exact', head: true })
-          .eq('room_id', currentRoomId);
-        const { data: roomRow } = await supabase
-          .from('rooms')
-          .select('invite_code')
-          .eq('id', currentRoomId)
-          .maybeSingle();
-        const realCode = roomRow?.invite_code || '';
-        const isFounder = !count; // sala vacía: el primer miembro entra sin código
-        const inviteOk = (urlInviteCode || '').trim().toUpperCase() === realCode.toUpperCase();
-
+        // Usuario nuevo: se registra directamente como miembro de la sala.
         // Auto-registro directo: nombre de la cuenta de Google (o derivado del
         // email si Google no lo trae) y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
           session.user.user_metadata?.name || nameFromEmail(email)).trim();
-        setLoginName(googleName);
-
-        if (isFounder || !realCode || inviteOk) {
-          await registerMember(googleName, guessCountryFromBrowserTz(), email);
-        } else {
-          setLoginStep(3);
-          setIsLoggedIn(false);
-        }
+        await registerMember(googleName, guessCountryFromBrowserTz(), email);
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
@@ -1304,7 +1242,7 @@ export default function App() {
     }
 
     const existing = members.find(m => m.email.toLowerCase() === emailToUse.toLowerCase());
-    
+
     if (existing) {
       setCurrentUser(existing);
       setIsLoggedIn(true);
@@ -1312,24 +1250,7 @@ export default function App() {
       localStorage.setItem('salesarena-user', JSON.stringify(existing));
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
-      // Usuario nuevo: la sala vacía no exige código (fundador);
-      // con miembros existentes se requiere invitación válida
-      const isFounder = members.length === 0;
-      if (isFounder || !roomInviteCode || hasValidInvite(urlInviteCode)) {
-        await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
-      } else {
-        setLoginStep(3);
-      }
-    }
-  };
-
-  const handleInviteCodeSubmit = async (e) => {
-    e.preventDefault();
-    if (hasValidInvite(inviteCodeInput)) {
-      setInviteError('');
-      await registerMember(loginName || nameFromEmail(loginEmail), guessCountryFromBrowserTz());
-    } else {
-      setInviteError('Código incorrecto. Pídele el código vigente a quien administra la sala.');
+      await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
     }
   };
 
@@ -1385,7 +1306,6 @@ export default function App() {
     }
     setIsLoggedIn(false);
     setLoginEmail('');
-    setLoginName('');
     setLoginStep(1);
     localStorage.removeItem('salesarena-logged');
     localStorage.removeItem('salesarena-user');
@@ -1413,8 +1333,16 @@ export default function App() {
 
     if (!useMockDb) {
       if (newSlug !== currentRoomId) {
-        // 1. Crear o actualizar la nueva sala con el slug correcto
-        await supabase.from('rooms').upsert({ id: newSlug, name: nextName });
+        // El nuevo slug no puede pisar una sala existente y distinta: si ya
+        // hay una sala con ese nombre, renombrar fusionaría ambas sin avisar.
+        const { data: collision } = await supabase.from('rooms').select('id').eq('id', newSlug).maybeSingle();
+        if (collision) {
+          showNotification(`Ya existe una sala con el nombre "${nextName}". Elegí otro nombre.`, 'error');
+          setRoomName(roomName);
+          return;
+        }
+        // 1. Crear la nueva sala con el slug correcto
+        await supabase.from('rooms').insert({ id: newSlug, name: nextName });
         // 2. Migrar los registros vinculados a la nueva sala. members va
         //    PRIMERO: las políticas RLS de escritura exigen ser miembro de la
         //    sala destino, así que la membresía debe migrar antes que el resto.
@@ -1422,12 +1350,7 @@ export default function App() {
         await supabase.from('availabilities').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('templates').update({ room_id: newSlug }).eq('room_id', currentRoomId);
         await supabase.from('meetings').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        // 3. Conservar el código de invitación (requiere ya ser miembro del
-        //    nuevo slug, por eso va después de migrar members)
-        if (roomInviteCode) {
-          await supabase.from('rooms').update({ invite_code: roomInviteCode }).eq('id', newSlug);
-        }
-        // 4. Eliminar la sala antigua si no es la sala por defecto (la política
+        // 3. Eliminar la sala antigua si no es la sala por defecto (la política
         //    permite borrar salas que quedaron sin miembros)
         if (currentRoomId !== 'grupo-a') {
           await supabase.from('rooms').delete().eq('id', currentRoomId);
@@ -1438,12 +1361,9 @@ export default function App() {
     }
 
     if (newSlug !== currentRoomId) {
-      if (useMockDb && roomInviteCode) {
-        localStorage.setItem(`salesarena-invite-${newSlug}`, roomInviteCode);
-      }
       showNotification(`¡Sala renombrada a "${nextName}"! Actualizando enlace a /room/${newSlug}...`);
       setIsRoomModalOpen(false);
-      window.location.href = `/room/${newSlug}${roomInviteCode ? `?invite=${roomInviteCode}` : ''}`;
+      window.location.href = `/room/${newSlug}`;
     } else {
       showNotification(`Sala renombrada con éxito a "${nextName}"`);
       setIsRoomModalOpen(false);
@@ -1452,6 +1372,10 @@ export default function App() {
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
+    if (currentUser.email.toLowerCase() !== ADMIN_EMAIL) {
+      showNotification('Solo el administrador puede crear salas nuevas.', 'error');
+      return;
+    }
     if (!newRoomNameInput.trim()) return;
 
     const rawName = newRoomNameInput.trim();
@@ -1467,29 +1391,25 @@ export default function App() {
       return;
     }
 
-    const newCode = generateInviteCode();
-
     if (!useMockDb) {
-      // 1. Create the room in Supabase
+      // No se permiten dos salas con el mismo nombre (mismo slug resultante)
+      const { data: existingRoom } = await supabase.from('rooms').select('id').eq('id', slug).maybeSingle();
+      if (existingRoom) {
+        showNotification(`Ya existe una sala con el nombre "${rawName}". Elegí otro nombre.`, 'error');
+        return;
+      }
       const { error } = await supabase.from('rooms').insert({ id: slug, name: rawName });
-      if (error && error.code !== '23505') { // 23505 is duplicate key error, which means room already exists
+      if (error) {
         showNotification('Error al crear sala en base de datos: ' + error.message);
         return;
       }
-      // 2. Asignar código de invitación (se ignora si la columna aún no existe)
-      if (!error) {
-        await supabase.from('rooms').update({ invite_code: newCode }).eq('id', slug);
-      }
-    } else {
-      localStorage.setItem(`salesarena-invite-${slug}`, newCode);
     }
 
     showNotification(`¡Sala "${rawName}" creada con éxito! Redirigiendo...`);
     setIsRoomModalOpen(false);
     setNewRoomNameInput('');
 
-    // Redirect browser to the new room URL (con invitación para el creador)
-    window.location.href = `/room/${slug}?invite=${newCode}`;
+    window.location.href = `/room/${slug}`;
   };
 
   const handleDeleteRoom = async () => {
@@ -1518,31 +1438,14 @@ export default function App() {
   // El enlace de invitación apunta SIEMPRE al id real de la sala (no al nombre
   // slugificado, que puede diferir en salas con nombre por defecto)
   const buildInviteUrl = () => {
-    return `${window.location.origin}/room/${currentRoomId}${roomInviteCode ? `?invite=${roomInviteCode}` : ''}`;
-  };
-
-  const handleRegenerateInviteCode = async () => {
-    const newCode = generateInviteCode();
-    if (!useMockDb) {
-      const { error } = await supabase.from('rooms')
-        .update({ invite_code: newCode })
-        .eq('id', currentRoomId);
-      if (error) {
-        showNotification('No se pudo regenerar el código: ' + error.message, 'error');
-        return;
-      }
-    } else {
-      localStorage.setItem(`salesarena-invite-${currentRoomId}`, newCode);
-    }
-    setRoomInviteCode(newCode);
-    showNotification('Código regenerado. Los enlaces de invitación anteriores dejaron de funcionar.', 'success');
+    return `${window.location.origin}/room/${currentRoomId}`;
   };
 
   const handleCopyRoomInvite = () => {
     const inviteUrl = buildInviteUrl();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(inviteUrl).then(() => {
-        showNotification(`Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\nIncluye el código de invitación: quien entre con este link va directo al registro de esta sala.`, 'success');
+        showNotification(`Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\nQuien entre con este link va directo al registro de esta sala.`, 'success');
       }).catch(() => {
         prompt('Copia el enlace para compartir tu sala:', inviteUrl);
       });
@@ -2227,11 +2130,6 @@ export default function App() {
                   <span className="room-indicator-dot"></span>
                   <span>Sala de coordinación: <strong>{roomName}</strong></span>
                 </div>
-                {urlInviteCode && hasValidInvite(urlInviteCode) && (
-                  <div className="invite-valid-badge">
-                    <Check size={11} /> Invitación válida detectada
-                  </div>
-                )}
                 <h2 style={{ margin: '14px 0 0 0', fontSize: '15px', fontWeight: '700', letterSpacing: '-0.3px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
               </div>
 
@@ -2315,51 +2213,6 @@ export default function App() {
                 </form>
               )}
             </div>
-          )}
-
-          {/* STEP 3: CÓDIGO DE INVITACIÓN (SALA PROTEGIDA) */}
-          {loginStep === 3 && (
-            <form onSubmit={handleInviteCodeSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div className="invite-lock-icon">
-                  <Lock size={26} />
-                </div>
-                <h2 style={{ margin: '14px 0 8px 0', fontSize: '20px', fontWeight: '800', letterSpacing: '-0.5px' }}>Sala Privada</h2>
-                <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                  Para unirte a <strong>{roomName}</strong> necesitas un código de invitación.
-                  Pídeselo a la persona que te compartió la sala, o usa su enlace de invitación completo.
-                </p>
-              </div>
-
-              <div className="form-group" style={{ textAlign: 'left' }}>
-                <label htmlFor="invite-code" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Código de Invitación</label>
-                <input
-                  type="text"
-                  id="invite-code"
-                  className="form-input invite-code-input"
-                  value={inviteCodeInput}
-                  onChange={(e) => { setInviteCodeInput(e.target.value.toUpperCase()); setInviteError(''); }}
-                  placeholder="······"
-                  maxLength={6}
-                  autoComplete="off"
-                  required
-                />
-                {inviteError && (
-                  <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: 'var(--color-danger)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <AlertCircle size={13} /> {inviteError}
-                  </p>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button type="button" className="btn btn-outline" style={{ flex: 1, padding: '10px' }} onClick={() => { setLoginStep(1); setInviteError(''); setInviteCodeInput(''); }}>
-                  Atrás
-                </button>
-                <button type="submit" className="btn btn-indigo" style={{ flex: 2, padding: '10px', fontWeight: '600' }}>
-                  Validar Código
-                </button>
-              </div>
-            </form>
           )}
 
           {/* Legal links: required so the privacy policy is discoverable from
@@ -3835,10 +3688,10 @@ export default function App() {
               </button>
             </div>
 
-            {/* Sección de Compartir Enlace de Invitación */}
+            {/* Sección de Compartir Enlace de la Sala */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '18px' }}>
               <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Share2 size={14} /> Compartir Enlace de Invitación
+                <Share2 size={14} /> Compartir Enlace de la Sala
               </label>
               <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                 Al enviar este enlace, cualquier nuevo integrante accederá al registro inicial específicamente vinculado a la sala <strong>{roomName}</strong>.
@@ -3859,25 +3712,6 @@ export default function App() {
                 >
                   <Copy size={14} />
                   Copiar
-                </button>
-              </div>
-
-              {/* Código de invitación de la sala */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                    <Lock size={12} /> Código de acceso:
-                  </span>
-                  <span className="invite-code-chip">{roomInviteCode || 'Sin protección'}</span>
-                </div>
-                <button
-                  type="button"
-                  className="btn-small"
-                  onClick={handleRegenerateInviteCode}
-                  title="Genera un código nuevo e invalida los enlaces anteriores"
-                  style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-                >
-                  <RefreshCw size={12} /> Regenerar
                 </button>
               </div>
             </div>
@@ -3901,27 +3735,34 @@ export default function App() {
               </div>
             </form>
 
-            {/* Formulario 2: Crear Nueva Sala */}
-            <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
-              <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. Compartirás esa nueva URL para invitar a otras personas a participar de forma aislada.
-              </p>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={newRoomNameInput}
-                  onChange={(e) => setNewRoomNameInput(e.target.value)}
-                  placeholder="Ej. Marketing 2026"
-                  required
-                  style={{ flex: 1, padding: '8px 12px' }}
-                />
-                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                  Crear
-                </button>
+            {/* Formulario 2: Crear Nueva Sala (solo administrador, por ahora) */}
+            {currentUser.email.toLowerCase() === ADMIN_EMAIL ? (
+              <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                  Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente.
+                </p>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={newRoomNameInput}
+                    onChange={(e) => setNewRoomNameInput(e.target.value)}
+                    placeholder="Ej. Marketing 2026"
+                    required
+                    style={{ flex: 1, padding: '8px 12px' }}
+                  />
+                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
+                    Crear
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                <Lock size={13} style={{ flexShrink: 0 }} />
+                Solo el administrador puede crear salas nuevas por el momento.
               </div>
-            </form>
+            )}
 
             {/* Sección 3: Eliminar Sala */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
