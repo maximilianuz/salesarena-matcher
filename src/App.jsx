@@ -137,6 +137,16 @@ const getAvatarColor = (name) => {
 // Nombre corto de la zona horaria (ciudad)
 const tzCity = (tz) => (tz || 'UTC').split('/').pop().replace(/_/g, ' ');
 
+// Isotipo oficial de Google para el botón de inicio de sesión
+const GoogleMark = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+);
+
 // Badge de confiabilidad: % de asistencia en sesiones reportadas (60 días)
 const ReliabilityBadge = ({ pct }) => {
   if (pct === null || pct === undefined) {
@@ -2062,149 +2072,91 @@ export default function App() {
 
   if (!isLoggedIn || !currentUser) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        backgroundColor: 'var(--bg-main)',
-        backgroundImage: 'var(--bg-glows)',
-        backgroundAttachment: 'fixed',
-        color: 'var(--text-main)',
-        fontFamily: 'var(--font-sans)',
-        padding: '20px',
-        boxSizing: 'border-box'
-      }}>
-        {/* Theme select widget float top-right */}
-        <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '8px', zIndex: 10 }}>
+      <div className="login-screen">
+        {/* Selector de tema (claro / oscuro / seguir sistema) */}
+        <div className="login-theme-switch">
           <div className="theme-selector" style={{ margin: 0 }}>
-            <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro">
-              <Sun size={12} />
+            <button className={`theme-btn ${theme === 'light' ? 'active' : ''}`} onClick={() => setTheme('light')} title="Modo Claro" aria-pressed={theme === 'light'}>
+              <Sun size={12} aria-hidden="true" />
             </button>
-            <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro">
-              <Moon size={12} />
+            <button className={`theme-btn ${theme === 'dark' ? 'active' : ''}`} onClick={() => setTheme('dark')} title="Modo Oscuro" aria-pressed={theme === 'dark'}>
+              <Moon size={12} aria-hidden="true" />
             </button>
-            <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema">
-              <Monitor size={12} />
+            <button className={`theme-btn ${theme === 'system' ? 'active' : ''}`} onClick={() => setTheme('system')} title="Seguir Sistema" aria-pressed={theme === 'system'}>
+              <Monitor size={12} aria-hidden="true" />
             </button>
           </div>
         </div>
 
-        <div className="glass login-card" style={{
-          width: '100%',
-          maxWidth: '440px',
-          padding: '40px 30px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-          border: '1px solid var(--border-color)',
-          textAlign: 'center',
-          boxSizing: 'border-box',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div className="login-card-accent" aria-hidden="true"></div>
+        <div className="login-card">
+          {/* Marca */}
+          <a
+            href="https://sales-arena.netlify.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Visitar el portal oficial de Sales Arena"
+            className="login-brand"
+          >
+            <div className="brand-logo-container horse-glow-pulse">
+              <ChessKnightIcon size={44} />
+            </div>
+            <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
+              <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales Arena</span>
+              <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
+            </div>
+          </a>
 
-          {/* Logo Brand Header */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '10px' }}>
-            <a
-              href="https://sales-arena.netlify.app/"
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Haz clic en el caballo para visitar el portal oficial de Sales Arena"
-              className="brand-logo-interactive"
-            >
-              <div className="brand-logo-container horse-glow-pulse">
-                <ChessKnightIcon size={44} />
-              </div>
-              <div className="brand-title-stacked" style={{ textAlign: 'left' }}>
-                <span className="brand-title-sales" style={{ fontSize: '12px' }}>Sales Arena</span>
-                <span className="brand-title-arena" style={{ fontSize: '20px' }}>Matcher</span>
-              </div>
-            </a>
-          </div>
-
-          {/* STEP 1: GOOGLE EMAIL INPUT */}
           {loginStep === 1 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                  Coordina tu próxima sesión de práctica en un clic.
-                </p>
-                <div className="room-indicator-badge" style={{ marginBottom: '18px' }}>
-                  <span className="room-indicator-dot"></span>
-                  <span>Sala de coordinación: <strong>{roomName}</strong></span>
+            <div>
+              <p className="login-lede">
+                Coordiná tu próxima sesión de práctica de ventas en un clic.
+              </p>
+
+              {/* Disclosure del uso de Google Calendar, visible antes de iniciar
+                  sesión (requisito de verificación de la pantalla de consentimiento
+                  OAuth de Google). La descripción general del producto ya vive en
+                  la landing pública (/), no hace falta repetirla en este paso. */}
+              <div className="login-disclosure">
+                <div className="login-disclosure-icon">
+                  <CalendarCheck size={15} aria-hidden="true" />
                 </div>
-                {/* Disclosure del uso de Google Calendar, visible antes de iniciar
-                    sesión (requisito de verificación de la pantalla de consentimiento
-                    OAuth de Google). La descripción general del producto ya vive en
-                    la landing pública (/), no hace falta repetirla en este paso. */}
-                <div className="login-disclosure">
-                  <div className="login-disclosure-icon">
-                    <CalendarCheck size={15} />
-                  </div>
-                  <span>
-                    Al iniciar sesión con Google, la app usa el acceso a tu <strong>Google Calendar</strong> con
-                    un único fin: crear el evento con el enlace de <strong>Google Meet</strong> cuando
-                    ambos integrantes de una dupla confirman la sesión. No se accede a otros datos de tu cuenta.
-                  </span>
-                </div>
+                <span>
+                  Al iniciar sesión con Google, la app usa el acceso a tu <strong>Google Calendar</strong> con
+                  un único fin: crear el evento con el enlace de <strong>Google Meet</strong> cuando
+                  ambos integrantes de una dupla confirman la sesión. No se accede a otros datos de tu cuenta.
+                </span>
               </div>
 
               {isInAppBrowserDetected && (
-                <div style={{
-                  padding: '12px 14px',
-                  backgroundColor: 'rgba(255, 159, 10, 0.1)',
-                  border: '1px solid rgba(255, 159, 10, 0.3)',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems: 'flex-start'
-                }}>
-                  <ExternalLink size={18} style={{ color: 'var(--color-warning)', flexShrink: 0, marginTop: '2px' }} />
-                  <div style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5' }}>
-                    <strong>Abre en tu navegador</strong>
+                <div className="login-notice login-notice--warning">
+                  <ExternalLink size={18} style={{ color: 'var(--color-warning)', flexShrink: 0, marginTop: '2px' }} aria-hidden="true" />
+                  <div>
+                    <strong>Abrí el enlace en tu navegador</strong>
                     <p style={{ margin: '6px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
-                      Google bloquea el acceso desde navegadores integrados. Por favor, abre este enlace en <strong>Chrome</strong>, <strong>Safari</strong> u otro navegador de tu dispositivo.
+                      Google bloquea el acceso desde navegadores integrados. Abrí este enlace en <strong>Chrome</strong>, <strong>Safari</strong> u otro navegador de tu dispositivo.
                     </p>
                   </div>
                 </div>
               )}
 
               {loginError && (
-                <div style={{
-                  padding: '12px 14px',
-                  backgroundColor: 'rgba(255, 59, 95, 0.1)',
-                  border: '1px solid rgba(255, 59, 95, 0.3)',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems: 'flex-start'
-                }}>
-                  <AlertCircle size={18} style={{ color: 'var(--color-danger)', flexShrink: 0, marginTop: '2px' }} />
-                  <div style={{ fontSize: '13px', color: 'var(--text-main)', lineHeight: '1.5' }}>
-                    {loginError}
-                  </div>
+                <div className="login-notice login-notice--danger" role="alert">
+                  <AlertCircle size={18} style={{ color: 'var(--color-danger)', flexShrink: 0, marginTop: '2px' }} aria-hidden="true" />
+                  <div>{loginError}</div>
                 </div>
               )}
 
               {!useMockDb ? (
                 /* REAL PRODUCTION OAUTH: Single-click Google login */
-                <button 
-                  type="button" 
-                  className="btn btn-indigo" 
-                  onClick={handleGoogleLoginSubmit}
-                  style={{ padding: '12px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: '600' }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                  </svg>
-                  Iniciar Sesión con Google
+                <button type="button" className="login-google-btn" onClick={handleGoogleLoginSubmit}>
+                  <span className="login-google-mark" aria-hidden="true">
+                    <GoogleMark />
+                  </span>
+                  Iniciar sesión con Google
                 </button>
               ) : (
                 /* LOCAL MOCK TESTING: With optional email input */
-                <form onSubmit={handleGoogleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <form onSubmit={handleGoogleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div className="form-group" style={{ textAlign: 'left' }}>
                     <label htmlFor="login-email" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Correo de Prueba (Gmail)</label>
                     <input
@@ -2217,13 +2169,10 @@ export default function App() {
                       style={{ width: '100%', boxSizing: 'border-box', padding: '10px 14px' }}
                     />
                   </div>
-                  <button type="submit" className="btn btn-indigo" style={{ padding: '12px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontWeight: '600' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
+                  <button type="submit" className="login-google-btn">
+                    <span className="login-google-mark" aria-hidden="true">
+                      <GoogleMark />
+                    </span>
                     Continuar con Google (Simulado)
                   </button>
                 </form>
@@ -2231,38 +2180,22 @@ export default function App() {
             </div>
           )}
 
-          {/* Legal links: required so the privacy policy is discoverable from
-              within the app interface, not only on the marketing homepage
-              (Google OAuth verification requirement). */}
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '12px' }}>
-            <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-              Política de Privacidad
-            </a>
-            <span style={{ color: 'var(--border-color)' }}>·</span>
-            <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
-              Términos de Servicio
-            </a>
-          </div>
-
-          {/* Elegant Footer to official portal */}
-          <div style={{ marginTop: '12px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center' }}>
+          <div className="login-footer">
+            {/* Legal links: required so the privacy policy is discoverable from
+                within the app interface, not only on the marketing homepage
+                (Google OAuth verification requirement). */}
+            <div className="login-legal">
+              <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer">Política de Privacidad</a>
+              <span className="login-legal-sep" aria-hidden="true">·</span>
+              <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer">Términos de Servicio</a>
+            </div>
             <a
+              className="login-portal-link"
               href="https://sales-arena.netlify.app/"
               target="_blank"
               rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '12.5px',
-                color: 'var(--text-muted)',
-                textDecoration: 'none',
-                fontWeight: '500',
-                transition: 'color 0.2s'
-              }}
             >
-              <span>¿Conoces Sales Arena?</span>
-              <span style={{ color: 'var(--color-primary)', fontWeight: '700' }}>Visitar Portal Oficial ↗</span>
+              ¿Conocés Sales Arena? <strong>Visitar Portal Oficial ↗</strong>
             </a>
           </div>
         </div>
