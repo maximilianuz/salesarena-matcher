@@ -758,9 +758,10 @@ export default function App() {
 
     const loadSupabaseData = async () => {
       setIsRoomDataLoading(true);
-      // 1. Fetch Room (o crearla solo si es la sala por defecto de la app:
-      // cualquier otra sala nueva se crea exclusivamente desde handleCreateRoom,
-      // que ya valida que quien la pide sea el administrador)
+      // 1. Fetch Room. Esta consulta es solo de lectura: ninguna sala se crea
+      // acá. La única sala que puede crearse "sola" es al iniciar sesión por
+      // primera vez siendo el administrador (ver handleOAuthSession); el
+      // resto se crea exclusivamente desde handleCreateRoom.
       let { data: roomData, error: roomError } = await supabase
         .from('rooms')
         .select('*')
@@ -769,9 +770,6 @@ export default function App() {
 
       if (roomError || !roomData) {
         const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
-        if (currentRoomId === 'grupo-a') {
-          await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
-        }
         setRoomName(defaultName);
         setRenameRoomInput(defaultName);
       } else {
@@ -914,7 +912,31 @@ export default function App() {
         localStorage.setItem('salesarena-logged', 'true');
         localStorage.setItem('salesarena-user', JSON.stringify(userObj));
       } else {
-        // Usuario nuevo: se registra directamente como miembro de la sala.
+        // Usuario nuevo: verificar primero si la sala existe. Ninguna sala se
+        // crea por el simple hecho de que alguien visite su URL: solo se
+        // crea acá si quien inicia sesión es el administrador (bootstrap de
+        // una sala nueva); cualquier otra persona recibe un aviso en vez de
+        // quedar registrada en una sala que nadie creó.
+        const { data: roomRow } = await supabase
+          .from('rooms')
+          .select('id')
+          .eq('id', currentRoomId)
+          .maybeSingle();
+
+        if (!roomRow && email.toLowerCase() !== ADMIN_EMAIL) {
+          setLoginError('Esta sala todavía no fue creada. Pedile el enlace correcto a quien administra la plataforma.');
+          setIsLoggedIn(false);
+          await supabase.auth.signOut();
+          return;
+        }
+
+        if (!roomRow) {
+          const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
+          await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
+          setRoomName(defaultName);
+          setRenameRoomInput(defaultName);
+        }
+
         // Auto-registro directo: nombre de la cuenta de Google (o derivado del
         // email si Google no lo trae) y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
@@ -2125,7 +2147,6 @@ export default function App() {
                     ambos integrantes de una dupla confirman la sesión. No se accede a otros datos de tu cuenta.
                   </span>
                 </div>
-                <h2 style={{ margin: '20px 0 0 0', fontSize: '15px', fontWeight: '700', letterSpacing: '-0.3px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
               </div>
 
               {isInAppBrowserDetected && (
