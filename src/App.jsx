@@ -47,7 +47,10 @@ import {
   RefreshCw,
   ShieldCheck,
   MicOff,
-  ExternalLink
+  ExternalLink,
+  BarChart3,
+  Award,
+  TrendingUp
 } from 'lucide-react';
 
 const ChessKnightIcon = ({ size = 26 }) => (
@@ -697,6 +700,53 @@ export default function App() {
         )
         .map(a => ({ meeting: m, attendance: a }));
     });
+
+  // --- REPORTES Y ANÁLISIS ---
+  // Todo lo que sigue se calcula a partir de lo que cada participante reporta
+  // después de cada sesión (asistió / no se presentó / canceló). La app no
+  // accede al contenido de las videollamadas: solo agrega esos reportes de
+  // asistencia para mostrar el estado de la coordinación de la sala.
+  const monthStartMs = (() => {
+    const now = new Date();
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  })();
+
+  const meetingsThisMonth = meetings.filter(m => {
+    const when = m.startsAt ? Date.parse(m.startsAt) : NaN;
+    return !Number.isNaN(when) && when >= monthStartMs;
+  });
+
+  // Confiabilidad promedio de la sala: mismo cálculo que getReliability,
+  // pero agregando los reportes de todos los miembros en vez de uno solo.
+  const roomReliability = (() => {
+    const cutoff = Date.now() - 60 * 24 * 3600e3;
+    const vals = attendances.filter(a => {
+      const meeting = meetings.find(m => m.id === a.meetingId);
+      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
+      return !Number.isNaN(when) && when >= cutoff;
+    }).map(a => scoreValue(a.status, a.punctuality)).filter(v => v !== null);
+    if (vals.length === 0) return null;
+    return Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100);
+  })();
+
+  const blockedMembersCount = members.filter(m => isBlocked(m.email)).length;
+
+  const mySessionsCompleted = !currentUser ? 0 : attendances.filter(a =>
+    a.memberEmail.toLowerCase() === currentUser.email.toLowerCase() && a.status === 'asistio'
+  ).length;
+
+  // Ranking de confiabilidad de la sala (sin historial suficiente = al final).
+  const reliabilityRanking = [...members]
+    .map(m => ({ ...m, reliabilityPct: getReliability(m.email), monthlyFaltas: getMonthlyFaltas(m.email) }))
+    .sort((a, b) => {
+      if (a.reliabilityPct === null && b.reliabilityPct === null) return 0;
+      if (a.reliabilityPct === null) return 1;
+      if (b.reliabilityPct === null) return -1;
+      return b.reliabilityPct - a.reliabilityPct;
+    });
+
+  const myRank = !currentUser ? null :
+    reliabilityRanking.findIndex(m => m.email.toLowerCase() === currentUser.email.toLowerCase()) + 1;
 
   // ¿El código provisto coincide con el de la sala?
   const hasValidInvite = (code) =>
@@ -2457,6 +2507,9 @@ export default function App() {
           <button type="button" className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} aria-current={activeTab === 'members' ? 'page' : undefined} onClick={() => handleTabClick('members')}>
             <UserCheck size={17} /> Gestionar Equipo
           </button>
+          <button type="button" className={`nav-link ${activeTab === 'reportes' ? 'active' : ''}`} aria-current={activeTab === 'reportes' ? 'page' : undefined} onClick={() => handleTabClick('reportes')}>
+            <BarChart3 size={17} /> Reportes y Análisis
+          </button>
         </div>
 
         {/* THEME SELECTOR WIDGET */}
@@ -2512,6 +2565,7 @@ export default function App() {
               {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
               {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
               {activeTab === 'members' && 'Miembros y Roles de la Sala'}
+              {activeTab === 'reportes' && 'Reportes y Análisis'}
             </h2>
             <p className="view-subtitle">
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
@@ -2519,6 +2573,7 @@ export default function App() {
               {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
               {activeTab === 'affinity' && '% de coincidencia relativa entre parejas de role-players.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
+              {activeTab === 'reportes' && 'Métricas de asistencia y coordinación de la sala, en base a lo que cada participante reporta después de cada sesión.'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -3501,6 +3556,144 @@ export default function App() {
                     <UserPlus size={16} /> Agregar a la Sala
                   </button>
                 </form>
+              </div>
+
+            </div>
+          )}
+
+          {activeTab === 'reportes' && (
+            <div>
+              <div className="glass" style={{ padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <BarChart3 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
+                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                  Estas métricas se calculan a partir de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos automáticamente, no analizarlos.
+                </div>
+              </div>
+
+              {/* KPIs personales */}
+              <h4 className="section-title" style={{ marginBottom: '12px' }}>
+                <Award size={15} className="section-title-icon" />
+                Tu Actividad
+              </h4>
+              <div className="metrics-grid" style={{ marginBottom: '28px' }}>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{getReliability(currentUser.email) !== null ? `${getReliability(currentUser.email)}%` : '—'}</span>
+                    <span className="kpi-label">Tu Confiabilidad (60 días)</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                    <Handshake size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{mySessionsCompleted}</span>
+                    <span className="kpi-label">Sesiones Completadas</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: getMonthlyFaltas(currentUser.email) > 0 ? 'rgba(255,59,48,0.1)' : 'rgba(120,120,120,0.08)', color: getMonthlyFaltas(currentUser.email) > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                    <X size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{getMonthlyFaltas(currentUser.email)}</span>
+                    <span className="kpi-label">Faltas Este Mes</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(255,149,0,0.12)', color: '#ff9500' }}>
+                    <Trophy size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{myRank ? `#${myRank}` : '—'}</span>
+                    <span className="kpi-label">Tu Puesto en la Sala</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPIs de la sala */}
+              <h4 className="section-title" style={{ marginBottom: '12px' }}>
+                <TrendingUp size={15} className="section-title-icon" />
+                Resumen de la Sala
+              </h4>
+              <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                    <Video size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{meetingsThisMonth.length}</span>
+                    <span className="kpi-label">Sesiones Este Mes</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                    <ShieldCheck size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{roomReliability !== null ? `${roomReliability}%` : '—'}</span>
+                    <span className="kpi-label">Confiabilidad de la Sala</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(255,59,48,0.1)' : 'rgba(120,120,120,0.08)', color: blockedMembersCount > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                    <Lock size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{blockedMembersCount}</span>
+                    <span className="kpi-label">Miembros Bloqueados</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
+                    <Users size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{members.length}</span>
+                    <span className="kpi-label">Role-Players en la Sala</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Ranking de confiabilidad */}
+              <div className="section-card glass">
+                <h4 className="section-title">
+                  <Trophy size={15} className="section-title-icon" />
+                  Ranking de Confiabilidad
+                </h4>
+                <p className="section-subtitle">
+                  Ordenado por % de asistencia reportada en los últimos 60 días. Quien no tiene historial suficiente aparece como "Nuevo".
+                </p>
+                <div className="members-list-card">
+                  {reliabilityRanking.map((m, idx) => {
+                    const isSelf = m.email.toLowerCase() === currentUser.email.toLowerCase();
+                    return (
+                      <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={m.email}>
+                        <div style={{ width: '22px', textAlign: 'center', fontWeight: '700', fontSize: '12.5px', color: 'var(--text-muted)', flexShrink: 0 }}>
+                          {idx + 1}
+                        </div>
+                        <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
+                          {getInitials(m.name)}
+                        </div>
+                        <div className="member-row-info">
+                          <span className="member-row-name">
+                            {m.name}
+                            {isSelf && <span className="member-badge-self">Tú</span>}
+                            <ReliabilityBadge pct={m.reliabilityPct} />
+                          </span>
+                          <span className="member-row-details">
+                            {m.monthlyFaltas > 0
+                              ? `${m.monthlyFaltas} falta${m.monthlyFaltas > 1 ? 's' : ''} este mes`
+                              : 'Sin faltas este mes'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
             </div>
