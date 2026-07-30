@@ -1,15 +1,454 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sales Arena Matcher</title>
-    <meta name="description" content="Sales Arena Matcher coordina automáticamente sesiones de práctica de ventas (role-plays) 1:1 entre los miembros de un equipo, cruzando su disponibilidad horaria entre distintas zonas horarias y creando la videollamada de Google Meet en el calendario de cada participante." />
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Arena Matcher - Coordina Sesiones de Práctica de Ventas</title>
+    <meta name="description" content="Plataforma que automáticamente coordina sesiones de práctica de ventas 1:1 entre tu equipo. Cruza disponibilidades, maneja zonas horarias y crea videollamadas en Google Meet. Verificado y seguro.">
+    <meta name="keywords" content="sales training, role-playing, sales practice, team coordination, Google Meet">
+    <meta property="og:title" content="Sales Arena Matcher">
+    <meta property="og:description" content="Coordina automáticamente sesiones de práctica de ventas entre tu equipo">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://sales-arena-matcher.com">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #4F46E5;
+            --primary-dark: #4338CA;
+            --secondary: #10B981;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --bg-light: #F9FAFB;
+            --bg-white: #FFFFFF;
+            --border: #E5E7EB;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text-dark: #F3F4F6;
+                --text-light: #D1D5DB;
+                --bg-light: #111827;
+                --bg-white: #1F2937;
+                --border: #374151;
+            }
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            background-color: var(--bg-white);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* Header */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            header {
+                background: rgba(31, 41, 55, 0.95);
+            }
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .cta-button {
+            background: var(--primary);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .cta-button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        /* Hero Section */
+        .hero {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--secondary);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .security-badge::before {
+            content: "✓";
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+        }
+
+        .subtitle {
+            font-size: 1.25rem;
+            color: var(--text-light);
+            margin-bottom: 2rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 3rem;
+            font-size: 1.1rem;
+        }
+
+        /* Features Section */
+        .features {
+            background: var(--bg-light);
+            padding: 4rem 2rem;
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .features-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .features h2 {
+            text-align: center;
+            font-size: 2.25rem;
+            margin-bottom: 3rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--bg-white);
+            padding: 2rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 20px 25px rgba(0, 0, 0, 0.1);
+            transform: translateY(-5px);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-dark);
+        }
+
+        .feature-card p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+
+        /* How It Works */
+        .how-it-works {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        .how-it-works h2 {
+            text-align: center;
+            font-size: 2.25rem;
+            margin-bottom: 3rem;
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+        }
+
+        .step {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            font-weight: 700;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .step h3 {
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .step p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 4rem 2rem;
+            text-align: center;
+        }
+
+        .cta-section h2 {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .cta-section p {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+        }
+
+        .cta-section .cta-button {
+            background: white;
+            color: var(--primary);
+            font-size: 1.1rem;
+            padding: 1rem 2rem;
+        }
+
+        .cta-section .cta-button:hover {
+            background: var(--bg-light);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-light);
+            border-top: 1px solid var(--border);
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-light);
+            font-size: 0.875rem;
+        }
+
+        .footer-links {
+            margin-bottom: 1rem;
+        }
+
+        .footer-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            margin: 0 1rem;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header-content {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .features h2,
+            .how-it-works h2,
+            .cta-section h2 {
+                font-size: 1.75rem;
+            }
+
+            .cta-button {
+                padding: 0.5rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <div class="logo">Sales Arena Matcher</div>
+            <a href="/app" class="cta-button">
+                Ingresar con Google
+            </a>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="security-badge">Seguro • Verificado por Google</div>
+        <h1>Coordina Automáticamente tus Sesiones de Práctica de Ventas</h1>
+        <p class="subtitle">
+            Sales Arena Matcher cruza disponibilidades, maneja zonas horarias y crea videollamadas de Google Meet automáticamente. Todo en un solo lugar.
+        </p>
+        <a href="/app" class="cta-button hero-cta">
+            Comenzar Ahora →
+        </a>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="features-container">
+            <h2>¿Por qué Sales Arena Matcher?</h2>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Coordinación Automática</h3>
+                    <p>Elimina los emails infinitos. Nuestro sistema cruza automáticamente la disponibilidad de tu equipo.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🌍</div>
+                    <h3>Zonas Horarias Inteligentes</h3>
+                    <p>Soporta equipos distribuidos globalmente. Maneja automáticamente todas las zonas horarias.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📞</div>
+                    <h3>Google Meet Integrado</h3>
+                    <p>Las videollamadas se crean automáticamente en los calendarios de ambos participantes.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Reportes y Análisis</h3>
+                    <p>Monitorea el progreso de tu equipo con dashboards detallados y métricas en tiempo real.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Seguridad Verificada</h3>
+                    <p>Cumple con todos los requisitos de seguridad de Google OAuth. Tus datos están protegidos.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💼</div>
+                    <h3>Para Equipos de Ventas</h3>
+                    <p>Diseñado específicamente para entrenar y mejorar las habilidades de vendedores.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="how-it-works">
+        <h2>Cómo Funciona</h2>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Configura tu Equipo</h3>
+                <p>Añade los miembros de tu equipo de ventas a la plataforma.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Indica Disponibilidad</h3>
+                <p>Cada miembro comparte su disponibilidad y zona horaria.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Matcher Coordina</h3>
+                <p>Nuestro algoritmo encuentra los mejores matches entre equipos.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">4</div>
+                <h3>¡A Practicar!</h3>
+                <p>Google Meet se crea automáticamente. ¡Comienza tu sesión!</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <h2>¿Listo para Mejorar tu Equipo?</h2>
+        <p>Únete a cientos de equipos de ventas que ya utilizan Sales Arena Matcher</p>
+        <a href="/app" class="cta-button">
+            Ingresar con Google
+        </a>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="/privacy-policy.html">Política de Privacidad</a>
+            <a href="/terms-of-service.html">Términos de Servicio</a>
+        </div>
+        <p>&copy; 2024 Sales Arena Matcher. Todos los derechos reservados.</p>
+    </footer>
+</body>
 </html>
