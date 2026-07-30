@@ -2,38 +2,208 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Términos de Servicio</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Términos de Servicio — Sales Arena Matcher</title>
+    <meta name="description" content="Términos de servicio de Sales Arena Matcher: condiciones de uso de la plataforma.">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; line-height: 1.6; }
-        h1 { color: #0a84ff; }
-        h2 { color: #333; margin-top: 20px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --primary: #4F46E5;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --bg-light: #F9FAFB;
+            --bg-white: #FFFFFF;
+            --border: #E5E7EB;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --text-dark: #F3F4F6;
+                --text-light: #D1D5DB;
+                --bg-light: #111827;
+                --bg-white: #1F2937;
+                --border: #374151;
+            }
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            color: var(--text-dark);
+            background-color: var(--bg-light);
+        }
+
+        header {
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-content {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .back-link {
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .back-link:hover {
+            color: var(--primary);
+        }
+
+        main {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem 4rem;
+        }
+
+        .doc-header {
+            margin-bottom: 2.5rem;
+        }
+
+        h1 {
+            font-size: 2.25rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            text-wrap: balance;
+        }
+
+        .updated-badge {
+            display: inline-block;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--text-light);
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            padding: 0.35rem 0.85rem;
+            border-radius: 9999px;
+        }
+
+        article {
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 2.5rem;
+        }
+
+        section + section {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: baseline;
+            gap: 0.6rem;
+        }
+
+        h2 .num {
+            color: var(--primary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        p {
+            color: var(--text-light);
+            font-size: 0.98rem;
+        }
+
+        strong {
+            color: var(--text-dark);
+            font-weight: 500;
+        }
+
+        a.inline-link {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
+        footer {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 0 1.5rem 3rem;
+            text-align: center;
+            color: var(--text-light);
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 640px) {
+            h1 { font-size: 1.75rem; }
+            article { padding: 1.75rem; }
+        }
     </style>
 </head>
 <body>
-    <h1>Términos de Servicio - Sales Arena Matcher</h1>
-    <p><strong>Última actualización:</strong> Julio 2026</p>
+    <header>
+        <div class="header-content">
+            <a href="/" class="logo">Sales Arena Matcher</a>
+            <a href="/" class="back-link">← Volver al inicio</a>
+        </div>
+    </header>
 
-    <h2>1. Aceptación de términos</h2>
-    <p>Al usar Sales Arena Matcher, aceptas estos términos.</p>
+    <main>
+        <div class="doc-header">
+            <h1>Términos de Servicio</h1>
+            <span class="updated-badge">Última actualización: julio de 2026</span>
+        </div>
 
-    <h2>2. Descripción del servicio</h2>
-    <p>Sales Arena Matcher conecta vendedores para practicar técnicas de cierre de ventas.</p>
+        <article>
+            <section>
+                <h2><span class="num">1.</span> Aceptación de términos</h2>
+                <p>Al usar Sales Arena Matcher, aceptás estos términos en su totalidad. Si no estás de acuerdo, no debés utilizar la plataforma.</p>
+            </section>
 
-    <h2>3. Edad mínima</h2>
-    <p>Debes tener al menos 18 años para usar esta plataforma.</p>
+            <section>
+                <h2><span class="num">2.</span> Descripción del servicio</h2>
+                <p>Sales Arena Matcher coordina automáticamente sesiones de práctica de ventas (role-plays) 1:1 entre los miembros de un equipo, cruzando disponibilidad horaria y creando la videollamada correspondiente en Google Meet.</p>
+            </section>
 
-    <h2>4. Uso aceptable</h2>
-    <p>No puedes usar la plataforma para actividades ilegales, acoso, spam o hackeo.</p>
+            <section>
+                <h2><span class="num">3.</span> Edad mínima</h2>
+                <p>Debés tener al menos <strong>18 años</strong> para usar esta plataforma.</p>
+            </section>
 
-    <h2>5. Cambios en el servicio</h2>
-    <p>Podemos cambiar o suspender el servicio en cualquier momento.</p>
+            <section>
+                <h2><span class="num">4.</span> Uso aceptable</h2>
+                <p>No está permitido usar la plataforma para actividades ilegales, acoso, spam o intentos de vulnerar la seguridad del sistema.</p>
+            </section>
 
-    <h2>6. Contacto</h2>
-    <p>Email: <strong>community.argen.manager@gmail.com</strong></p>
+            <section>
+                <h2><span class="num">5.</span> Cambios en el servicio</h2>
+                <p>Nos reservamos el derecho de modificar o suspender el servicio, total o parcialmente, en cualquier momento y sin previo aviso.</p>
+            </section>
 
-    <hr>
-    <p style="text-align: center; color: #666; font-size: 12px;">
-        &copy; 2026 Sales Arena Matcher. Todos los derechos reservados.
-    </p>
+            <section>
+                <h2><span class="num">6.</span> Contacto</h2>
+                <p>Para consultas sobre estos términos, escribinos a <a class="inline-link" href="mailto:community.argen.manager@gmail.com">community.argen.manager@gmail.com</a>.</p>
+            </section>
+        </article>
+    </main>
+
+    <footer>
+        <p>&copy; 2026 Sales Arena Matcher. Todos los derechos reservados.</p>
+    </footer>
 </body>
 </html>

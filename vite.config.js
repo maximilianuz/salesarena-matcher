@@ -7,11 +7,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: './index.html',
-        app: './src/main.jsx',
+        app: './app/index.html',
       },
     },
-  },
-  server: {
-    middlewareMode: false,
   },
 })
