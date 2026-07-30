@@ -140,6 +140,15 @@
             text-decoration: underline;
         }
 
+        code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            background: var(--bg-light);
+            border: 1px solid var(--border);
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.3rem;
+        }
+
         footer {
             max-width: 760px;
             margin: 0 auto;
@@ -172,31 +181,47 @@
         <article>
             <section>
                 <h2><span class="num">1.</span> Información que recopilamos</h2>
-                <p>Cuando te registrás con Google, recopilamos tu <strong>email</strong>, <strong>nombre</strong> y <strong>zona horaria</strong>. No accedemos a ningún otro dato de tu cuenta de Google.</p>
+                <p>Cuando te registrás con Google, recopilamos tu <strong>email</strong>, <strong>nombre</strong> y <strong>zona horaria</strong>. Además, con tu autorización explícita durante el inicio de sesión, solicitamos permiso de <strong>Google Calendar</strong> (scope <code>calendar.events</code>) para crear los eventos de las sesiones de práctica.</p>
             </section>
 
             <section>
-                <h2><span class="num">2.</span> Cómo usamos tu información</h2>
-                <p>Usamos tu información para crear y mantener tu cuenta, conectarte con otros miembros de tu equipo, y coordinar automáticamente tus sesiones de práctica de ventas (role-plays) según disponibilidad horaria.</p>
+                <h2><span class="num">2.</span> Acceso a tu Google Calendar</h2>
+                <p>Sales Arena Matcher solicita el permiso <strong>calendar.events</strong> exclusivamente para crear, en tu calendario y en el de tu compañero de práctica, el evento con la videollamada de Google Meet correspondiente a cada sesión coordinada.</p>
+                <p style="margin-top: 0.75rem;">No leemos, listamos ni analizamos el resto de los eventos de tu calendario, y no usamos este acceso para ningún fin publicitario. Solo creamos el evento puntual de la sesión que vos mismo coordinaste dentro de la plataforma.</p>
             </section>
 
             <section>
-                <h2><span class="num">3.</span> Seguridad</h2>
-                <p>Tus datos se almacenan en <strong>Supabase</strong> con encriptación de nivel empresarial, tanto en tránsito como en reposo.</p>
+                <h2><span class="num">3.</span> Cómo usamos tu información</h2>
+                <p>Usamos tu información para crear y mantener tu cuenta, conectarte con otros miembros de tu equipo, coordinar automáticamente tus sesiones de práctica de ventas (role-plays) según disponibilidad horaria, y generar la videollamada de Google Meet correspondiente en el calendario de ambos participantes.</p>
             </section>
 
             <section>
-                <h2><span class="num">4.</span> Compartir datos con terceros</h2>
-                <p>No vendemos ni compartimos tus datos con terceros con fines comerciales. Solo interactuamos con <strong>Google</strong> (para autenticación) y <strong>Supabase</strong> (para almacenamiento de datos).</p>
+                <h2><span class="num">4.</span> Cumplimiento con la Política de Google</h2>
+                <p>El uso y la transferencia a Sales Arena Matcher de información recibida de las API de Google se adhieren a la <a class="inline-link" href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Política de Datos de Usuario de los Servicios de API de Google</a>, incluidos los requisitos de Uso Limitado.</p>
             </section>
 
             <section>
-                <h2><span class="num">5.</span> Tus derechos</h2>
-                <p>Podés solicitar acceso, corrección o eliminación de tus datos personales en cualquier momento, escribiéndonos al contacto que figura abajo.</p>
+                <h2><span class="num">5.</span> Seguridad</h2>
+                <p>Tus datos se almacenan en <strong>Supabase</strong> con encriptación de nivel empresarial, tanto en tránsito como en reposo. Los tokens de acceso a Google se usan únicamente en el momento de crear el evento del calendario y no se comparten con terceros.</p>
             </section>
 
             <section>
-                <h2><span class="num">6.</span> Contacto</h2>
+                <h2><span class="num">6.</span> Compartir datos con terceros</h2>
+                <p>No vendemos ni compartimos tus datos con terceros con fines comerciales o publicitarios. Solo interactuamos con <strong>Google</strong> (para autenticación y creación de eventos de calendario) y <strong>Supabase</strong> (para almacenamiento de datos).</p>
+            </section>
+
+            <section>
+                <h2><span class="num">7.</span> Retención y eliminación de datos</h2>
+                <p>Conservamos tus datos mientras tu cuenta esté activa. Podés solicitar la eliminación total de tu cuenta y de los datos asociados en cualquier momento; procesamos estas solicitudes dentro de los 30 días.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">8.</span> Tus derechos</h2>
+                <p>Podés solicitar acceso, corrección o eliminación de tus datos personales, así como <strong>revocar el acceso a tu Google Calendar</strong> en cualquier momento desde la <a class="inline-link" href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">página de permisos de tu cuenta de Google</a>.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">9.</span> Contacto</h2>
                 <p>Para consultas sobre privacidad, escribinos a <a class="inline-link" href="mailto:community.argen.manager@gmail.com">community.argen.manager@gmail.com</a>.</p>
             </section>
         </article>
