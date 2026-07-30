@@ -2290,8 +2290,21 @@ export default function App() {
             </form>
           )}
 
+          {/* Legal links: required so the privacy policy is discoverable from
+              within the app interface, not only on the marketing homepage
+              (Google OAuth verification requirement). */}
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '12px' }}>
+            <a href="/privacy-policy.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+              Política de Privacidad
+            </a>
+            <span style={{ color: 'var(--border-color)' }}>·</span>
+            <a href="/terms-of-service.html" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>
+              Términos de Servicio
+            </a>
+          </div>
+
           {/* Elegant Footer to official portal */}
-          <div style={{ marginTop: '28px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ marginTop: '12px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center' }}>
             <a
               href="https://sales-arena.netlify.app/"
               target="_blank"
