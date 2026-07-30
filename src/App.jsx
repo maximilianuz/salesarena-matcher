@@ -735,18 +735,46 @@ export default function App() {
     a.memberEmail.toLowerCase() === currentUser.email.toLowerCase() && a.status === 'asistio'
   ).length;
 
-  // Ranking de confiabilidad de la sala (sin historial suficiente = al final).
-  const reliabilityRanking = [...members]
-    .map(m => ({ ...m, reliabilityPct: getReliability(m.email), monthlyFaltas: getMonthlyFaltas(m.email) }))
-    .sort((a, b) => {
-      if (a.reliabilityPct === null && b.reliabilityPct === null) return 0;
-      if (a.reliabilityPct === null) return 1;
-      if (b.reliabilityPct === null) return -1;
-      return b.reliabilityPct - a.reliabilityPct;
-    });
+  // --- PATRONES REPETIDOS: castiga la reincidencia, no el mes puntual ---
+  // Un mes malo (problemas de conexión, imprevistos) ya cuesta el emparejamiento
+  // de ESE mes vía isBlocked/getMonthlyFaltas, y se resetea solo al mes siguiente.
+  // Eso alcanza para un imprevisto. Lo que sigue existe para el caso distinto:
+  // alguien que deja a su compañero sin sesión mes tras mes. Solo en ese caso
+  // (3 meses distintos bloqueados) se le retira el acceso a esta sala.
+  const CHRONIC_BLOCK_THRESHOLD = 3;
 
-  const myRank = !currentUser ? null :
-    reliabilityRanking.findIndex(m => m.email.toLowerCase() === currentUser.email.toLowerCase()) + 1;
+  const getFaltasInMonth = (email, monthStart) => {
+    const monthEnd = Date.UTC(
+      new Date(monthStart).getUTCFullYear(),
+      new Date(monthStart).getUTCMonth() + 1,
+      1
+    );
+    return attendances.filter(a => {
+      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
+      if (a.status !== 'no_show' && a.status !== 'cancelado_tarde') return false;
+      const meeting = meetings.find(m => m.id === a.meetingId);
+      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
+      return !Number.isNaN(when) && when >= monthStart && when < monthEnd;
+    }).length;
+  };
+
+  // Cuenta en cuántos meses calendario distintos (con historial en esta sala)
+  // la persona llegó a 3+ faltas. Recorre solo los meses en los que de hecho
+  // tuvo sesiones, no todo el calendario.
+  const getChronicBlockedMonths = (email) => {
+    const monthsWithHistory = new Set();
+    attendances.forEach(a => {
+      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return;
+      const meeting = meetings.find(m => m.id === a.meetingId);
+      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
+      if (Number.isNaN(when)) return;
+      const d = new Date(when);
+      monthsWithHistory.add(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+    });
+    return [...monthsWithHistory].filter(monthStart => getFaltasInMonth(email, monthStart) >= 3).length;
+  };
+
+  const isChronicOffender = (email) => getChronicBlockedMonths(email) >= CHRONIC_BLOCK_THRESHOLD;
 
   // ¿El código provisto coincide con el de la sala?
   const hasValidInvite = (code) =>
@@ -2373,6 +2401,50 @@ export default function App() {
     );
   }
 
+  // Cuenta con patrón repetido de ausencias/cancelaciones tardías (bloqueada
+  // 3+ meses distintos en esta sala): se le retira el acceso en vez de dejarla
+  // seguir coordinando sesiones y dejando compañeros sin práctica.
+  if (isChronicOffender(currentUser.email)) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        backgroundColor: 'var(--bg-main)',
+        backgroundImage: 'var(--bg-glows)',
+        backgroundAttachment: 'fixed',
+        color: 'var(--text-main)',
+        fontFamily: 'var(--font-sans)',
+        padding: '20px',
+      }}>
+        <div className="glass" style={{ maxWidth: '440px', width: '100%', padding: '32px', textAlign: 'center' }}>
+          <div style={{
+            width: '52px', height: '52px', borderRadius: '50%', margin: '0 auto 18px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(255,59,48,0.1)', color: 'var(--color-danger)'
+          }}>
+            <Lock size={24} />
+          </div>
+          <h1 style={{ margin: '0 0 10px 0', fontSize: '19px', fontWeight: '800', letterSpacing: '-0.3px' }}>
+            Acceso retirado de esta sala
+          </h1>
+          <p style={{ margin: '0 0 16px 0', fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+            Detectamos ausencias o cancelaciones tardías reportadas en {CHRONIC_BLOCK_THRESHOLD} meses distintos con esta cuenta de Google, dejando a tu compañero de role-play sin sesión cada vez. Por eso <strong style={{ color: 'var(--text-main)' }}>{currentUser.email}</strong> ya no puede coordinar sesiones en <strong style={{ color: 'var(--text-main)' }}>{roomName}</strong>.
+          </p>
+          <p style={{ margin: '0 0 22px 0', fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
+            Si creés que esto es un error (por ejemplo, sesiones mal reportadas), escribinos a{' '}
+            <a href="mailto:community.argen.manager@gmail.com" style={{ color: 'var(--color-primary)' }}>community.argen.manager@gmail.com</a>{' '}
+            para revisarlo.
+          </p>
+          <button type="button" className="btn btn-outline" onClick={handleLogout} style={{ width: '100%' }}>
+            <LogOut size={15} /> Cerrar Sesión
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="layout-container">
 
@@ -2638,6 +2710,9 @@ export default function App() {
                   <Lock size={18} style={{ color: 'var(--color-danger)', flexShrink: 0 }} />
                   <div style={{ fontSize: '13px', color: 'var(--text-main)' }}>
                     <strong>Estás sin emparejamientos este mes.</strong> Acumulaste {getMonthlyFaltas(currentUser.email)} faltas (no presentarte o cancelar sobre la hora). Volverás a entrar en la rotación el 1ero del mes que viene.
+                    {getChronicBlockedMonths(currentUser.email) >= CHRONIC_BLOCK_THRESHOLD - 1 && (
+                      <> Ya sucedió en {getChronicBlockedMonths(currentUser.email)} meses distintos: si vuelve a pasar, esta cuenta de Google perderá el acceso a la sala.</>
+                    )}
                   </div>
                 </div>
               )}
@@ -3566,7 +3641,7 @@ export default function App() {
               <div className="glass" style={{ padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                 <BarChart3 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
                 <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                  Estas métricas se calculan a partir de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos automáticamente, no analizarlos.
+                  Estas métricas se calculan a partir de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos automáticamente, no analizarlos. Un mes puntual con problemas de conexión no te perjudica frente al resto de la sala: estos números son para tu propia referencia, no un ranking público.
                 </div>
               </div>
 
@@ -3603,23 +3678,14 @@ export default function App() {
                     <span className="kpi-label">Faltas Este Mes</span>
                   </div>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(255,149,0,0.12)', color: '#ff9500' }}>
-                    <Trophy size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{myRank ? `#${myRank}` : '—'}</span>
-                    <span className="kpi-label">Tu Puesto en la Sala</span>
-                  </div>
-                </div>
               </div>
 
-              {/* KPIs de la sala */}
+              {/* KPIs de la sala (agregados: no se nombra a nadie individualmente) */}
               <h4 className="section-title" style={{ marginBottom: '12px' }}>
                 <TrendingUp size={15} className="section-title-icon" />
                 Resumen de la Sala
               </h4>
-              <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+              <div className="metrics-grid" style={{ marginBottom: '8px' }}>
                 <div className="kpi-card glass glass-hover">
                   <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
                     <Video size={18} />
@@ -3639,15 +3705,6 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(255,59,48,0.1)' : 'rgba(120,120,120,0.08)', color: blockedMembersCount > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
-                    <Lock size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{blockedMembersCount}</span>
-                    <span className="kpi-label">Miembros Bloqueados</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
                   <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
                     <Users size={18} />
                   </div>
@@ -3656,45 +3713,19 @@ export default function App() {
                     <span className="kpi-label">Role-Players en la Sala</span>
                   </div>
                 </div>
-              </div>
-
-              {/* Ranking de confiabilidad */}
-              <div className="section-card glass">
-                <h4 className="section-title">
-                  <Trophy size={15} className="section-title-icon" />
-                  Ranking de Confiabilidad
-                </h4>
-                <p className="section-subtitle">
-                  Ordenado por % de asistencia reportada en los últimos 60 días. Quien no tiene historial suficiente aparece como "Nuevo".
-                </p>
-                <div className="members-list-card">
-                  {reliabilityRanking.map((m, idx) => {
-                    const isSelf = m.email.toLowerCase() === currentUser.email.toLowerCase();
-                    return (
-                      <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={m.email}>
-                        <div style={{ width: '22px', textAlign: 'center', fontWeight: '700', fontSize: '12.5px', color: 'var(--text-muted)', flexShrink: 0 }}>
-                          {idx + 1}
-                        </div>
-                        <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
-                          {getInitials(m.name)}
-                        </div>
-                        <div className="member-row-info">
-                          <span className="member-row-name">
-                            {m.name}
-                            {isSelf && <span className="member-badge-self">Tú</span>}
-                            <ReliabilityBadge pct={m.reliabilityPct} />
-                          </span>
-                          <span className="member-row-details">
-                            {m.monthlyFaltas > 0
-                              ? `${m.monthlyFaltas} falta${m.monthlyFaltas > 1 ? 's' : ''} este mes`
-                              : 'Sin faltas este mes'}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(255,149,0,0.12)' : 'rgba(120,120,120,0.08)', color: blockedMembersCount > 0 ? '#ff9500' : 'var(--text-muted)' }}>
+                    <Clock size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{blockedMembersCount}</span>
+                    <span className="kpi-label">Sin Emparejamiento Este Mes</span>
+                  </div>
                 </div>
               </div>
+              <p className="section-subtitle" style={{ margin: '0 0 24px' }}>
+                "Sin emparejamiento este mes" cuenta a quienes acumularon 3+ ausencias o cancelaciones tardías en el mes en curso: vuelven a la rotación automáticamente el mes que viene. Solo si ese patrón se repite en {CHRONIC_BLOCK_THRESHOLD} meses distintos, la cuenta pierde el acceso a esta sala.
+              </p>
 
             </div>
           )}
