@@ -2068,21 +2068,25 @@ export default function App() {
           </div>
         </div>
 
-        <div className="glass" style={{
+        <div className="glass login-card" style={{
           width: '100%',
           maxWidth: '440px',
           padding: '40px 30px',
           boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
           border: '1px solid var(--border-color)',
           textAlign: 'center',
-          boxSizing: 'border-box'
+          boxSizing: 'border-box',
+          position: 'relative',
+          overflow: 'hidden'
         }}>
+          <div className="login-card-accent" aria-hidden="true"></div>
+
           {/* Logo Brand Header */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '24px' }}>
-            <a 
-              href="https://sales-arena.netlify.app/" 
-              target="_blank" 
-              rel="noopener noreferrer" 
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '10px' }}>
+            <a
+              href="https://sales-arena.netlify.app/"
+              target="_blank"
+              rel="noopener noreferrer"
               title="Haz clic en el caballo para visitar el portal oficial de Sales Arena"
               className="brand-logo-interactive"
             >
@@ -2100,37 +2104,28 @@ export default function App() {
           {loginStep === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                <h1 style={{ margin: '0 0 12px 0', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Sales Arena Matcher</h1>
+                <p style={{ margin: '0 0 20px 0', fontSize: '14px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                  Coordina tu próxima sesión de práctica en un clic.
+                </p>
+                <div className="room-indicator-badge" style={{ marginBottom: '18px' }}>
+                  <span className="room-indicator-dot"></span>
+                  <span>Sala de coordinación: <strong>{roomName}</strong></span>
+                </div>
                 {/* Disclosure del uso de Google Calendar, visible antes de iniciar
                     sesión (requisito de verificación de la pantalla de consentimiento
                     OAuth de Google). La descripción general del producto ya vive en
                     la landing pública (/), no hace falta repetirla en este paso. */}
-                <div style={{
-                  textAlign: 'left',
-                  fontSize: '12.5px',
-                  color: 'var(--text-muted)',
-                  lineHeight: '1.5',
-                  backgroundColor: 'rgba(10,132,255,0.06)',
-                  border: '1px solid rgba(10,132,255,0.18)',
-                  borderRadius: '10px',
-                  padding: '12px 14px',
-                  marginBottom: '4px',
-                  display: 'flex',
-                  gap: '10px',
-                  alignItems: 'flex-start'
-                }}>
-                  <CalendarCheck size={16} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
+                <div className="login-disclosure">
+                  <div className="login-disclosure-icon">
+                    <CalendarCheck size={15} />
+                  </div>
                   <span>
                     Al iniciar sesión con Google, la app usa el acceso a tu <strong>Google Calendar</strong> con
                     un único fin: crear el evento con el enlace de <strong>Google Meet</strong> cuando
                     ambos integrantes de una dupla confirman la sesión. No se accede a otros datos de tu cuenta.
                   </span>
                 </div>
-                <div className="room-indicator-badge" style={{ marginTop: '8px' }}>
-                  <span className="room-indicator-dot"></span>
-                  <span>Sala de coordinación: <strong>{roomName}</strong></span>
-                </div>
-                <h2 style={{ margin: '14px 0 0 0', fontSize: '15px', fontWeight: '700', letterSpacing: '-0.3px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
+                <h2 style={{ margin: '20px 0 0 0', fontSize: '15px', fontWeight: '700', letterSpacing: '-0.3px', color: 'var(--text-main)' }}>Iniciar Sesión</h2>
               </div>
 
               {isInAppBrowserDetected && (

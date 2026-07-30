@@ -2,6 +2,20 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <script>
+        // Aplica la preferencia de tema guardada antes del primer paint para
+        // evitar el flash del tema equivocado. Comparte la clave de
+        // localStorage con la app (/app) para que el tema elegido sea el
+        // mismo en toda la plataforma.
+        (function () {
+            try {
+                var stored = localStorage.getItem('salesarena-theme');
+                if (stored === 'dark' || stored === 'light') {
+                    document.documentElement.setAttribute('data-theme', stored);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Arena Matcher - Coordina Sesiones de Práctica de Ventas</title>
     <meta name="description" content="Plataforma que automáticamente coordina sesiones de práctica de ventas 1:1 entre tu equipo. Cruza disponibilidades, maneja zonas horarias y crea videollamadas en Google Meet. Verificado y seguro.">
@@ -28,6 +42,7 @@
             --bg-light: #F9FAFB;
             --bg-white: #FFFFFF;
             --border: #E5E7EB;
+            --header-bg: rgba(255, 255, 255, 0.95);
         }
 
         @media (prefers-color-scheme: dark) {
@@ -37,7 +52,30 @@
                 --bg-light: #111827;
                 --bg-white: #1F2937;
                 --border: #374151;
+                --header-bg: rgba(31, 41, 55, 0.95);
             }
+        }
+
+        /* Preferencia explícita del usuario (toggle), tiene prioridad sobre el
+           sistema operativo en ambos sentidos. Comparte la clave de
+           localStorage con la app (/app), así que la elección de tema se
+           mantiene entre la landing y la app. */
+        :root[data-theme="dark"] {
+            --text-dark: #F3F4F6;
+            --text-light: #D1D5DB;
+            --bg-light: #111827;
+            --bg-white: #1F2937;
+            --border: #374151;
+            --header-bg: rgba(31, 41, 55, 0.95);
+        }
+
+        :root[data-theme="light"] {
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --bg-light: #F9FAFB;
+            --bg-white: #FFFFFF;
+            --border: #E5E7EB;
+            --header-bg: rgba(255, 255, 255, 0.95);
         }
 
         body {
@@ -53,16 +91,9 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            background: var(--bg-white);
+            background: var(--header-bg);
             border-bottom: 1px solid var(--border);
             backdrop-filter: blur(10px);
-            background: rgba(255, 255, 255, 0.95);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            header {
-                background: rgba(31, 41, 55, 0.95);
-            }
         }
 
         .header-content {
@@ -81,6 +112,51 @@
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--primary);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .theme-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px;
+            border-radius: 9999px;
+            background: var(--bg-light);
+            border: 1px solid var(--border);
+        }
+
+        .theme-toggle-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: none;
+            border-radius: 9999px;
+            background: transparent;
+            color: var(--text-light);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .theme-toggle-btn:hover {
+            color: var(--text-dark);
+        }
+
+        .theme-toggle-btn.active {
+            background: var(--bg-white);
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .theme-toggle-btn svg {
+            width: 14px;
+            height: 14px;
         }
 
         .logo-mark {
@@ -440,6 +516,15 @@
                 padding: 0.5rem 1rem;
                 font-size: 0.9rem;
             }
+
+            .header-actions {
+                gap: 0.5rem;
+            }
+
+            .theme-toggle-btn {
+                width: 24px;
+                height: 24px;
+            }
         }
     </style>
 </head>
@@ -451,9 +536,22 @@
                 <img src="/favicon.svg" alt="" class="logo-mark" width="34" height="34">
                 Sales Arena Matcher
             </div>
-            <a href="/app" class="cta-button">
-                Ingresar con Google
-            </a>
+            <div class="header-actions">
+                <div class="theme-toggle" role="group" aria-label="Selector de tema">
+                    <button type="button" class="theme-toggle-btn" data-theme-choice="light" title="Modo claro" aria-label="Modo claro">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+                    </button>
+                    <button type="button" class="theme-toggle-btn" data-theme-choice="dark" title="Modo oscuro" aria-label="Modo oscuro">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                    </button>
+                    <button type="button" class="theme-toggle-btn" data-theme-choice="system" title="Seguir sistema" aria-label="Seguir sistema">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+                    </button>
+                </div>
+                <a href="/app" class="cta-button">
+                    Ingresar con Google
+                </a>
+            </div>
         </div>
     </header>
 
@@ -584,5 +682,41 @@
         </div>
         <p>&copy; 2026 Sales Arena Matcher. Todos los derechos reservados.</p>
     </footer>
+
+    <script>
+        (function () {
+            var STORAGE_KEY = 'salesarena-theme';
+            var buttons = document.querySelectorAll('.theme-toggle-btn');
+
+            function applyTheme(choice) {
+                if (choice === 'dark' || choice === 'light') {
+                    document.documentElement.setAttribute('data-theme', choice);
+                } else {
+                    document.documentElement.removeAttribute('data-theme');
+                }
+                buttons.forEach(function (btn) {
+                    btn.classList.toggle('active', btn.dataset.themeChoice === choice);
+                });
+            }
+
+            var stored;
+            try {
+                stored = localStorage.getItem(STORAGE_KEY);
+            } catch (e) {
+                stored = null;
+            }
+            applyTheme(stored || 'system');
+
+            buttons.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var choice = btn.dataset.themeChoice;
+                    try {
+                        localStorage.setItem(STORAGE_KEY, choice);
+                    } catch (e) {}
+                    applyTheme(choice);
+                });
+            });
+        })();
+    </script>
 </body>
 </html>
