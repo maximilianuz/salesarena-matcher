@@ -5,22 +5,39 @@
 [build.environment]
   NODE_VERSION = "20"
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
+# Security Headers for Google OAuth Verification
 [[headers]]
   for = "/*"
   [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "geolocation=(self), microphone=(self), camera=(self)"
     Cache-Control = "public, max-age=3600"
 
+# Cache for HTML (landing page)
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
+    X-Frame-Options = "SAMEORIGIN"
 
+# Cache for assets (long-lived)
 [[headers]]
   for = "/assets/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# Landing page to App redirect rule
+[[redirects]]
+  from = "/app"
+  to = "/index.html"
+  status = 200
+
+# Catch-all for SPA routing
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  condition = "!{path:.js} !{path:.css} !{path:.svg} !{path:.png} !{path:.jpg} !{path:.gif} !{path:.woff} !{path:.woff2} !{path:.json}"
