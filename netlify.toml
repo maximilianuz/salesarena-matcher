@@ -29,15 +29,25 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Landing page to App redirect rule
+# App entry point (React) — must come before the landing catch-all
 [[redirects]]
   from = "/app"
-  to = "/index.html"
+  to = "/app/index.html"
   status = 200
 
-# Catch-all for SPA routing
+[[redirects]]
+  from = "/app/*"
+  to = "/app/index.html"
+  status = 200
+
+# The app owns /room/:slug (invite links, active sessions)
+[[redirects]]
+  from = "/room/*"
+  to = "/app/index.html"
+  status = 200
+
+# Everything else falls back to the landing page
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-  condition = "!{path:.js} !{path:.css} !{path:.svg} !{path:.png} !{path:.jpg} !{path:.gif} !{path:.woff} !{path:.woff2} !{path:.json}"
