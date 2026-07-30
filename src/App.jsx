@@ -2119,17 +2119,11 @@ export default function App() {
           {loginStep === 1 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                <h1 style={{ margin: '0 0 10px 0', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Sales Arena Matcher</h1>
-                {/* Propósito de la app: visible en la página principal SIN iniciar
+                <h1 style={{ margin: '0 0 12px 0', fontSize: '24px', fontWeight: '800', letterSpacing: '-0.5px', color: 'var(--text-main)' }}>Sales Arena Matcher</h1>
+                {/* Disclosure del uso de Google Calendar, visible antes de iniciar
                     sesión (requisito de verificación de la pantalla de consentimiento
-                    OAuth de Google). Explica qué hace la app y por qué usa Google. */}
-                <p style={{ margin: '0 0 12px 0', fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.55' }}>
-                  <strong style={{ color: 'var(--text-main)' }}>Sales Arena Matcher</strong> coordina automáticamente sesiones de práctica
-                  de ventas (<em>role-plays</em>) uno a uno entre los integrantes de un equipo.
-                  Cada persona carga su disponibilidad horaria una sola vez y la app cruza los
-                  horarios de todo el equipo —incluso entre distintas zonas horarias— para
-                  emparejar duplas y agendar la reunión en común.
-                </p>
+                    OAuth de Google). La descripción general del producto ya vive en
+                    la landing pública (/), no hace falta repetirla en este paso. */}
                 <div style={{
                   textAlign: 'left',
                   fontSize: '12.5px',
