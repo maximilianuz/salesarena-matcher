@@ -285,6 +285,80 @@
             font-size: 0.95rem;
         }
 
+        /* Permissions Disclosure */
+        .permissions {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem 4rem;
+        }
+
+        .permissions-panel {
+            background: var(--bg-light);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 2rem;
+        }
+
+        .permissions-panel h2 {
+            font-size: 1.15rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .permission-row {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+        }
+
+        .permission-icon {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            background: rgba(79, 70, 229, 0.1);
+            color: var(--primary);
+        }
+
+        .permission-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .permission-row h3 {
+            font-size: 1rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .permission-row code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.3rem;
+        }
+
+        .permission-row p {
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        .permissions-link {
+            display: inline-block;
+            margin-top: 1.25rem;
+            color: var(--primary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .permissions-link:hover {
+            text-decoration: underline;
+        }
+
         /* CTA Section */
         .cta-section {
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
@@ -463,6 +537,23 @@
                 <h3>¡A Practicar!</h3>
                 <p>Google Meet se crea automáticamente. ¡Comienza tu sesión!</p>
             </div>
+        </div>
+    </section>
+
+    <!-- Permissions Disclosure -->
+    <section class="permissions">
+        <div class="permissions-panel">
+            <h2>Qué permiso de Google usamos y por qué</h2>
+            <div class="permission-row">
+                <div class="permission-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </div>
+                <div>
+                    <h3>Google Calendar — <code>calendar.events</code></h3>
+                    <p>Lo usamos únicamente para crear, en tu calendario y en el de tu compañero, el evento con la videollamada de Google Meet de cada sesión que coordinás. No leemos ni analizamos el resto de tus eventos.</p>
+                </div>
+            </div>
+            <a href="/privacy-policy.html" class="permissions-link">Ver política de privacidad completa →</a>
         </div>
     </section>
 
