@@ -5,6 +5,15 @@ import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from 
 import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid } from './slots';
 import { isInAppBrowser, isMobile, friendlyAuthError } from './utils/supabaseAuth';
 import {
+  getReliability as reliabilityOf,
+  getRoomReliability,
+  getMonthlyFaltas as monthlyFaltasOf,
+  isBlocked as isBlockedOf,
+  getChronicBlockedMonths as chronicMonthsOf,
+  isChronicOffender as isChronicOffenderOf,
+  CHRONIC_BLOCK_THRESHOLD
+} from './reliability';
+import {
   LayoutDashboard,
   CalendarRange,
   Flame,
@@ -383,15 +392,21 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
 
-  // Guía disponible bajo demanda (no mostrar automáticamente en primer ingreso)
-  // Esto evita que nuevos usuarios se sientan como que necesitan "pedir permiso"
-  // o pasar por un tutorial obligatorio. La guía sigue disponible via Help button.
-  // useEffect(() => {
-  //   if (isLoggedIn && currentUser && !localStorage.getItem(`salesarena-guide-${currentUser.email.toLowerCase()}`)) {
-  //     setOnboardingStep(0);
-  //     setShowOnboarding(true);
-  //   }
-  // }, [isLoggedIn, currentUser?.email]);
+  // La guía se abre sola UNA sola vez, en el primer ingreso de cada cuenta.
+  //
+  // Estuvo desactivada un tiempo para no imponer un tutorial obligatorio, y esa
+  // preocupación sigue siendo válida: por eso el primer paso ofrece "Saltar
+  // guía" y, una vez cerrada, no vuelve a aparecer nunca (queda marcada en
+  // localStorage por cuenta). Pero era el único lugar donde se explica para qué
+  // sirve la app y cómo funciona el emparejamiento: sin esto, quien entra por
+  // un enlace de invitación no tenía forma de enterarse salvo descubriendo el
+  // botón "Guía" en el pie del menú.
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    if (localStorage.getItem(`salesarena-guide-${currentUser.email.toLowerCase()}`)) return;
+    setOnboardingStep(0);
+    setShowOnboarding(true);
+  }, [isLoggedIn, currentUser?.email]);
 
   // Detectar navegador in-app en el montaje inicial
   useEffect(() => {
@@ -635,41 +650,16 @@ export default function App() {
     })]);
   }, [members, availabilities, currentUser, proposals]);
 
-  // Score de confiabilidad (últimos 60 días), ponderado por puntualidad:
-  //   asistió a tiempo = 1 · asistió tarde = 0.5 · no-show = 0 ·
-  //   cancelado tarde = 0 · cancelado con aviso / sin reportar = no computa.
-  // null = sin historial suficiente. Debe coincidir con la Edge Function.
-  const scoreValue = (status, punctuality) => {
-    if (status === 'asistio') return punctuality === 'tarde' ? 0.5 : 1;
-    if (status === 'no_show' || status === 'cancelado_tarde') return 0;
-    return null;
-  };
-  const getReliability = (email) => {
-    const cutoff = Date.now() - 60 * 24 * 3600e3;
-    const vals = attendances.filter(a => {
-      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
-      const meeting = meetings.find(m => m.id === a.meetingId);
-      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
-      return !Number.isNaN(when) && when >= cutoff;
-    }).map(a => scoreValue(a.status, a.punctuality)).filter(v => v !== null);
-    if (vals.length === 0) return null;
-    return Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100);
-  };
+  // Quien administra: única cuenta habilitada para crear salas y para sacar
+  // miembros. Se calcula una vez porque lo consultan varias acciones y la UI.
+  const isAdmin = currentUser?.email?.toLowerCase() === ADMIN_EMAIL;
 
-  // Faltas del mes calendario (no_show + cancelado_tarde) y bloqueo (3+).
-  // Refleja en la UI lo que la Edge Function aplica en el emparejamiento.
-  const getMonthlyFaltas = (email) => {
-    const now = new Date();
-    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-    return attendances.filter(a => {
-      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
-      if (a.status !== 'no_show' && a.status !== 'cancelado_tarde') return false;
-      const meeting = meetings.find(m => m.id === a.meetingId);
-      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
-      return !Number.isNaN(when) && when >= monthStart;
-    }).length;
-  };
-  const isBlocked = (email) => getMonthlyFaltas(email) >= 3;
+  // Confiabilidad y sanciones: la lógica vive en src/reliability.js (módulo puro
+  // y testeado). Acá quedan solo los envoltorios que le pasan el estado actual
+  // de la sala, para no repetir attendances/meetings en cada punto de uso.
+  const getReliability = (email) => reliabilityOf(email, attendances, meetings);
+  const getMonthlyFaltas = (email) => monthlyFaltasOf(email, attendances, meetings);
+  const isBlocked = (email) => isBlockedOf(email, attendances, meetings);
 
   // Reportes pendientes del usuario actual: por cada sesión terminada en la que
   // participó, cada compañero que sigue en 'confirmado' (nadie reportó aún)
@@ -704,18 +694,10 @@ export default function App() {
 
   // Confiabilidad promedio de la sala: mismo cálculo que getReliability,
   // pero agregando los reportes de todos los miembros en vez de uno solo.
-  const roomReliability = (() => {
-    const cutoff = Date.now() - 60 * 24 * 3600e3;
-    const vals = attendances.filter(a => {
-      const meeting = meetings.find(m => m.id === a.meetingId);
-      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
-      return !Number.isNaN(when) && when >= cutoff;
-    }).map(a => scoreValue(a.status, a.punctuality)).filter(v => v !== null);
-    if (vals.length === 0) return null;
-    return Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100);
-  })();
+  const roomReliability = getRoomReliability(attendances, meetings);
 
   const blockedMembersCount = members.filter(m => isBlocked(m.email)).length;
+  const activeMembersCount = members.filter(m => m.active).length;
 
   const mySessionsCompleted = !currentUser ? 0 : attendances.filter(a =>
     a.memberEmail.toLowerCase() === currentUser.email.toLowerCase() && a.status === 'asistio'
@@ -724,43 +706,10 @@ export default function App() {
   // --- PATRONES REPETIDOS: castiga la reincidencia, no el mes puntual ---
   // Un mes malo (problemas de conexión, imprevistos) ya cuesta el emparejamiento
   // de ESE mes vía isBlocked/getMonthlyFaltas, y se resetea solo al mes siguiente.
-  // Eso alcanza para un imprevisto. Lo que sigue existe para el caso distinto:
-  // alguien que deja a su compañero sin sesión mes tras mes. Solo en ese caso
-  // (3 meses distintos bloqueados) se le retira el acceso a esta sala.
-  const CHRONIC_BLOCK_THRESHOLD = 3;
-
-  const getFaltasInMonth = (email, monthStart) => {
-    const monthEnd = Date.UTC(
-      new Date(monthStart).getUTCFullYear(),
-      new Date(monthStart).getUTCMonth() + 1,
-      1
-    );
-    return attendances.filter(a => {
-      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return false;
-      if (a.status !== 'no_show' && a.status !== 'cancelado_tarde') return false;
-      const meeting = meetings.find(m => m.id === a.meetingId);
-      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
-      return !Number.isNaN(when) && when >= monthStart && when < monthEnd;
-    }).length;
-  };
-
-  // Cuenta en cuántos meses calendario distintos (con historial en esta sala)
-  // la persona llegó a 3+ faltas. Recorre solo los meses en los que de hecho
-  // tuvo sesiones, no todo el calendario.
-  const getChronicBlockedMonths = (email) => {
-    const monthsWithHistory = new Set();
-    attendances.forEach(a => {
-      if (a.memberEmail.toLowerCase() !== email.toLowerCase()) return;
-      const meeting = meetings.find(m => m.id === a.meetingId);
-      const when = meeting?.startsAt ? Date.parse(meeting.startsAt) : (a.reportedAt ? Date.parse(a.reportedAt) : NaN);
-      if (Number.isNaN(when)) return;
-      const d = new Date(when);
-      monthsWithHistory.add(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-    });
-    return [...monthsWithHistory].filter(monthStart => getFaltasInMonth(email, monthStart) >= 3).length;
-  };
-
-  const isChronicOffender = (email) => getChronicBlockedMonths(email) >= CHRONIC_BLOCK_THRESHOLD;
+  // Eso alcanza para un imprevisto. El umbral crónico existe para el caso
+  // distinto: alguien que deja a su compañero sin sesión mes tras mes.
+  const getChronicBlockedMonths = (email) => chronicMonthsOf(email, attendances, meetings);
+  const isChronicOffender = (email) => isChronicOffenderOf(email, attendances, meetings);
 
   // --- REAL-TIME DATA SYNCHRONIZATION WITH SUPABASE ---
   useEffect(() => {
@@ -1064,6 +1013,10 @@ export default function App() {
         });
         setWizardGrid(gridSlots);
         setWizardStep(2);
+        // Se limpia el "Guardando tu estado..." antes de pasar a elegir horarios:
+        // si no, el spinner quedaba fijo arriba de la grilla durante toda la
+        // edición, como si la app estuviera guardando algo que ya terminó.
+        setWizardStatus(null);
       } else {
         // Borrar horarios semanales (también en la DB: antes solo se limpiaba
         // el estado local y las marcas "volvían" al recargar la página)
@@ -1547,7 +1500,11 @@ export default function App() {
       email: newMemberEmail,
       country: finalCountry,
       tz: finalTz,
-      active: true
+      // Se da de alta SIN participar: quien se agrega a mano todavía no entró a
+      // la app ni cargó horarios. Con active: true entraba al emparejamiento y
+      // podía tocarle una sesión que nunca supo que existía, dejando plantado a
+      // su compañero. Queda activo cuando entra y elige participar.
+      active: false
     };
 
     if (!useMockDb) {
@@ -1568,15 +1525,30 @@ export default function App() {
     setMembers([...members, newMember]);
     setNewMemberName('');
     setNewMemberEmail('');
-    showNotification('Miembro agregado correctamente.');
+    showNotification(`${newMember.name} quedó agregado a la sala. Va a entrar en los emparejamientos cuando inicie sesión y cargue su disponibilidad — pasale el enlace de invitación.`, 'success');
   };
 
   const deleteMember = async (emailToDelete) => {
     if (emailToDelete.toLowerCase() === currentUser.email.toLowerCase()) {
-      alert("No puedes eliminar al usuario logueado actualmente.");
+      showNotification('No podés eliminarte a vos mismo. Usá el interruptor de participación para dejar de entrar en los emparejamientos.', 'error');
       return;
     }
-    
+
+    // Sacar a alguien de la sala es una acción sobre OTRA persona y no se puede
+    // deshacer: queda reservada a quien administra. Antes cualquier miembro
+    // podía eliminar a cualquier otro con un solo clic y sin confirmación.
+    if (currentUser.email.toLowerCase() !== ADMIN_EMAIL) {
+      showNotification('Solo quien administra la sala puede eliminar miembros.', 'error');
+      return;
+    }
+
+    const memberObj = members.find(m => m.email.toLowerCase() === emailToDelete.toLowerCase());
+    const label = memberObj ? memberObj.name : emailToDelete;
+    const confirmed = await showConfirm(
+      `¿Eliminar a ${label} de "${roomName}"? Se borran también sus horarios y su plantilla. Esta acción no se puede deshacer.`
+    );
+    if (!confirmed) return;
+
     if (!useMockDb) {
       const { error } = await supabase.from('members')
         .delete()
@@ -1586,14 +1558,34 @@ export default function App() {
         showNotification('Error al eliminar de Supabase: ' + error.message);
         return;
       }
+      // availabilities y templates NO tienen clave foránea contra members (solo
+      // contra rooms), así que borrar el miembro dejaba sus horarios vivos en la
+      // base: volvían al recargar, inflaban el contador de bloques y los
+      // heredaba cualquiera que se registrara después con el mismo nombre.
+      if (memberObj) {
+        const orphanCleanup = [
+          supabase.from('availabilities').delete()
+            .eq('room_id', currentRoomId).ilike('user', escapeLikeLiteral(memberObj.name)),
+          supabase.from('templates').delete()
+            .eq('room_id', currentRoomId).ilike('user', escapeLikeLiteral(memberObj.name))
+        ];
+        const results = await Promise.all(orphanCleanup);
+        const failed = results.find(r => r.error);
+        if (failed) {
+          showNotification(
+            `${label} salió de la sala, pero sus horarios no pudieron borrarse: ${failed.error.message}`,
+            'error'
+          );
+        }
+      }
     }
 
-    const memberObj = members.find(m => m.email.toLowerCase() === emailToDelete.toLowerCase());
     setMembers(prev => prev.filter(m => m.email.toLowerCase() !== emailToDelete.toLowerCase()));
     if (memberObj) {
       setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== memberObj.name.toLowerCase()));
       setTemplates(prev => prev.filter(t => t.user.toLowerCase() !== memberObj.name.toLowerCase()));
     }
+    showNotification(`${label} fue eliminado de la sala.`, 'success');
   };
 
   // --- CAMBIAR ESTADO SEMANAL DEL USUARIO LOGUEADO ---
@@ -2484,10 +2476,10 @@ export default function App() {
           <div>
             <h2 className="view-title">
               {activeTab === 'dashboard' && 'Panel de Control Principal'}
-              {activeTab === 'wizard' && 'Asistente de Configuración'}
+              {activeTab === 'wizard' && 'Cargar Disponibilidad'}
               {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
               {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
-              {activeTab === 'members' && 'Miembros y Roles de la Sala'}
+              {activeTab === 'members' && 'Gestionar Equipo'}
               {activeTab === 'reportes' && 'Reportes y Análisis'}
             </h2>
             <p className="view-subtitle">
@@ -2654,8 +2646,8 @@ export default function App() {
                     <Users size={18} />
                   </div>
                   <div className="kpi-info">
-                    <span className="kpi-val">{members.filter(m => m.active).length}</span>
-                    <span className="kpi-label">Miembros Activos</span>
+                    <span className="kpi-val">{activeMembersCount}</span>
+                    <span className="kpi-label">{activeMembersCount === 1 ? 'Miembro Activo' : 'Miembros Activos'}</span>
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
@@ -2664,7 +2656,7 @@ export default function App() {
                   </div>
                   <div className="kpi-info">
                     <span className="kpi-val">{availabilities.length}</span>
-                    <span className="kpi-label">Bloques Semanales</span>
+                    <span className="kpi-label">{availabilities.length === 1 ? 'Bloque Semanal' : 'Bloques Semanales'}</span>
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
@@ -2682,7 +2674,7 @@ export default function App() {
                   </div>
                   <div className="kpi-info">
                     <span className="kpi-val">{upcomingMeetings.length}</span>
-                    <span className="kpi-label">Meets Próximos</span>
+                    <span className="kpi-label">{upcomingMeetings.length === 1 ? 'Meet Próximo' : 'Meets Próximos'}</span>
                   </div>
                 </div>
               </div>
@@ -2984,7 +2976,13 @@ export default function App() {
                   <div className="wizard-hero-icon">
                     <Target size={30} />
                   </div>
-                  <h3 className="wizard-title">¡Hola de nuevo, {currentUser.name}!</h3>
+                  {/* "de nuevo" solo si ya tenía horarios cargados: a alguien
+                      que acaba de registrarse le sonaba a error. */}
+                  <h3 className="wizard-title">
+                    {availabilities.some(a => a.user.toLowerCase() === currentUser.name.toLowerCase())
+                      ? `¡Hola de nuevo, ${currentUser.name}!`
+                      : `¡Hola, ${currentUser.name}!`}
+                  </h3>
                   <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
 
                   <div className="participation-choice">
@@ -3412,7 +3410,10 @@ export default function App() {
                             <Lock size={11} /> Solo {m.name.split(' ')[0]}
                           </span>
                         )}
-                        {!isSelf && (
+                        {/* El botón solo se muestra a quien administra: al resto
+                            no le sirve de nada verlo, porque la acción se
+                            rechaza igual. */}
+                        {!isSelf && isAdmin && (
                           <button
                             type="button"
                             className="btn-danger-icon"
@@ -3825,17 +3826,22 @@ export default function App() {
           {
             icon: <Check size={34} />,
             title: '3 · Confirmá (tu compromiso)',
-            desc: 'Cuando te asignan una dupla, confirmá que vas a asistir. El link de Google Meet se genera recién cuando AMBOS confirman: así la confirmación es una señal real de compromiso. Podés confirmar en cualquier momento… pero al menos 4 horas antes de la reunión.'
+            desc: 'Cuando te asignan una dupla, confirmá que vas a asistir. El link de Google Meet se genera recién cuando AMBOS confirman: así la confirmación es una señal real de compromiso. Cada propuesta te muestra hasta cuándo tenés tiempo de responder: el plazo es de 4 horas antes de la sesión, y se acorta (2 h, 1 h, 30 min) si te la asignaron con menos anticipación.'
           },
           {
             icon: <RefreshCw size={34} />,
             title: '4 · Si no confirmás, se reasigna',
-            desc: 'Si a menos de 4 horas del horario todavía no confirmaste, la propuesta se cancela sola y el sistema busca reasignarte otro compañero que esté libre y sin otra reunión ya aceptada. La idea: que nadie quede esperando a alguien que no iba a venir.'
+            desc: 'Si dejás vencer ese plazo sin responder, la propuesta se cancela sola y el sistema busca reasignarte otro compañero que esté libre y sin otra reunión ya aceptada. La idea: que nadie quede esperando a alguien que no iba a venir.'
           },
           {
             icon: <Handshake size={34} />,
             title: '5 · Cancelaciones y respeto mutuo',
-            desc: 'Todo esto es por respeto mutuo del tiempo y la predisposición de tus compañeros. Si no podés asistir, cancelá con +24 h de antelación: no pasa nada. Cancelar con menos de 24 h (o no presentarte) requiere un motivo y cuenta como falta. Con 3 faltas en el mes quedás bloqueado hasta el 1° del mes siguiente. Llegar puntual (tolerancia 10 min) suma a tu confiabilidad y te da prioridad en los próximos emparejamientos.'
+            desc: 'Todo esto es por respeto mutuo del tiempo y la predisposición de tus compañeros. Si no podés asistir, cancelá con +24 h de antelación: no pasa nada. Cancelar con menos de 24 h (o no presentarte) requiere un motivo y cuenta como falta. Con 3 faltas en el mes quedás fuera de la rotación hasta el 1° del mes siguiente, y volvés solo. Si ese patrón se repite en 3 meses distintos, la cuenta pierde el acceso a la sala. Llegar puntual (tolerancia 10 min) suma a tu confiabilidad y te da prioridad en los próximos emparejamientos.'
+          },
+          {
+            icon: <LayoutDashboard size={34} />,
+            title: '6 · Qué hay en cada sección',
+            desc: 'Panel de Control: tu propuesta de la semana y la agenda de toda la sala. Cargar Disponibilidad: tu grilla de horarios. Mapa de Calor: en qué franjas hay más gente libre, en tu hora local. Afinidad Horaria: cuánto se solapa tu horario con el de cada compañero. Gestionar Equipo: quiénes están en la sala y su estado. Reportes y Análisis: tu confiabilidad y la de la sala, según lo que se reporta después de cada sesión.'
           }
         ];
         const step = steps[onboardingStep];
