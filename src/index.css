@@ -276,14 +276,19 @@ html.dark .glass-hover:hover {
   overflow: hidden;
 }
 
-/* En modo claro, el fondo del rect del SVG se vuelve oscuro para contrastar */
-:root .chess-knight-svg .knight-bg {
+/* En modo claro, el fondo del rect del SVG se vuelve sólido oscuro para
+   contrastar contra fondos claros. Nota: :root selecciona <html> SIEMPRE,
+   con o sin la clase .dark — no es "modo claro" por sí solo. Por eso acá se
+   usa :not(.dark) explícito: sin esa exclusión, esta regla le gana en
+   especificidad a cualquier estilo aplicado en dark mode y el logo queda
+   negro en los dos temas.
+   En modo oscuro NO hay override: cada <ChessKnightIcon> genera su propio id
+   de degradé (useId) para poder repetirse varias veces en la misma página
+   sin id duplicados, así que ninguna regla puede apuntar a un id fijo — se
+   deja que el atributo fill inline del SVG (el degradé de marca) se aplique
+   tal cual. */
+html:not(.dark) .chess-knight-svg .knight-bg {
   fill: #1c1c1e;
-}
-
-/* En modo oscuro, restauramos el gradiente original (se ignora este CSS, el SVG attr tiene precedencia) */
-html.dark .chess-knight-svg .knight-bg {
-  fill: url(#salesArenaKnightBg);
 }
 
 .brand-title-stacked {

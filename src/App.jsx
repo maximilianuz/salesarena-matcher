@@ -62,25 +62,34 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-const ChessKnightIcon = ({ size = 26 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }} className="chess-knight-svg">
-    <defs>
-      <linearGradient id="salesArenaKnightBg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#0a84ff"/>
-        <stop offset="55%" stopColor="#5e5ce6"/>
-        <stop offset="100%" stopColor="#4d4ad9"/>
-      </linearGradient>
-    </defs>
-    <rect className="knight-bg" width="512" height="512" rx="115" fill="url(#salesArenaKnightBg)"/>
-    <g transform="translate(112, 112) scale(12)" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>
-      <path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/>
-      <path d="m15 5 1.425-1.425"/>
-      <path d="m17 8 1.53-1.53"/>
-      <path d="M9.713 12.185 7 18"/>
-    </g>
-  </svg>
-);
+// La app renderiza este ícono varias veces a la vez (header móvil + sidebar de
+// escritorio quedan ambos en el DOM; uno se oculta solo por CSS según el
+// viewport). Un id de gradiente fijo se duplicaba entonces en el documento, y
+// un id duplicado en SVG es inválido: el navegador podía resolver mal la
+// referencia fill="url(#...)" en alguna de las instancias y pintarla opaca en
+// vez del degradé de marca. useId() le da a cada instancia su propio id.
+const ChessKnightIcon = ({ size = 26 }) => {
+  const gradientId = `salesArenaKnightBg-${React.useId()}`;
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }} className="chess-knight-svg">
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0a84ff"/>
+          <stop offset="55%" stopColor="#5e5ce6"/>
+          <stop offset="100%" stopColor="#4d4ad9"/>
+        </linearGradient>
+      </defs>
+      <rect className="knight-bg" width="512" height="512" rx="115" fill={`url(#${gradientId})`}/>
+      <g transform="translate(112, 112) scale(12)" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>
+        <path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/>
+        <path d="m15 5 1.425-1.425"/>
+        <path d="m17 8 1.53-1.53"/>
+        <path d="M9.713 12.185 7 18"/>
+      </g>
+    </svg>
+  );
+};
 
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
