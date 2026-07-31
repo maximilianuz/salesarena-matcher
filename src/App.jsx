@@ -400,6 +400,43 @@ export default function App() {
     }
   }, []);
 
+  // Early OAuth hash processing: ensure Supabase captures tokens from URL immediately
+  useEffect(() => {
+    if (useMockDb) return;
+
+    const processOAuthHash = async () => {
+      // Check if URL has auth hash
+      if (!window.location.hash.includes('access_token')) {
+        console.log('No OAuth hash in URL');
+        return;
+      }
+
+      console.log('OAuth hash detected in URL, processing with Supabase...');
+
+      try {
+        // Force Supabase to process the hash by calling getSession
+        // This should extract and store the tokens from the URL
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('Error processing OAuth hash:', error);
+          return;
+        }
+
+        if (session?.user) {
+          console.log('✓ Session established from OAuth hash:', session.user.email);
+          // Clean up the hash from URL to avoid reprocessing
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        }
+      } catch (err) {
+        console.error('Failed to process OAuth hash:', err);
+      }
+    };
+
+    // Run immediately on mount
+    processOAuthHash();
+  }, [useMockDb]);
+
   const closeOnboarding = () => {
     if (currentUser) {
       localStorage.setItem(`salesarena-guide-${currentUser.email.toLowerCase()}`, 'true');
@@ -880,20 +917,39 @@ export default function App() {
   useEffect(() => {
     if (useMockDb) return;
 
+    let sessionProcessed = false;
+
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        handleOAuthSession(session);
+      try {
+        // First check if there's a session from URL hash (OAuth redirect)
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (session?.user) {
+          console.log('✓ Auth session found:', session.user.email);
+          sessionProcessed = true;
+          await handleOAuthSession(session);
+        } else {
+          console.log('No session found in auth state');
+        }
+      } catch (err) {
+        console.error('Error during auth initialization:', err);
       }
     };
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('Auth state changed:', _event, session?.user?.email);
+
       if (session?.user) {
-        handleOAuthSession(session);
+        if (!sessionProcessed) {
+          sessionProcessed = true;
+          await handleOAuthSession(session);
+        }
       } else if (!session) {
         setIsLoggedIn(false);
+        sessionProcessed = false;
       }
     });
 

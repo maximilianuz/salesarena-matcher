@@ -7,6 +7,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storage: localStorage,
+    storageKey: 'sb-auth-token'
   }
 });
+
+// Manually handle OAuth redirect callback if needed
+if (typeof window !== 'undefined' && window.location.hash) {
+  console.log('URL hash detected:', window.location.hash.substring(0, 50) + '...');
+}
