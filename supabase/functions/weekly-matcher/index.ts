@@ -426,8 +426,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar. El slot elegido siempre está a >= 4hs (MIN_LEAD_MS), y el
-      // plazo de confirmación es 4hs antes de la reunión. Por cada dupla: si ya
+      // Emparejar. El slot elegido siempre está a >= MIN_LEAD_MS (30 min, el
+      // escalón más chico), y el plazo de confirmación es escalonado: se
+      // resuelve abajo con respondByMs, no es fijo. Por cada dupla: si ya
       // existe una propuesta VENCIDA se REACTIVA (sin violar el UNIQUE); si no,
       // se INSERTA.
       const { pairs } = buildWeeklyPairs(

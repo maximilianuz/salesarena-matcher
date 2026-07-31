@@ -2243,6 +2243,31 @@ html.dark .dashboard-next-step--meeting-ready {
   width: fit-content;
 }
 
+/* Marca la sesión propia dentro de la agenda de la sala. Usa el índigo de
+   marca (--color-primary) para emparentarla con "Mi Role-Play de la Semana",
+   y así distinguirla del azul informativo de "Abierto a la sala". */
+.meeting-mine-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  background-color: rgba(94, 92, 230, 0.12);
+  color: var(--color-primary);
+  border: 1px solid rgba(94, 92, 230, 0.3);
+  white-space: nowrap;
+  width: fit-content;
+}
+
+html.dark .meeting-mine-badge {
+  background-color: rgba(94, 92, 230, 0.2);
+  color: #a5a3f5;
+  border-color: rgba(94, 92, 230, 0.45);
+}
+
 .meeting-live-badge {
   display: inline-flex;
   align-items: center;
