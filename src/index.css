@@ -276,20 +276,18 @@ html.dark .glass-hover:hover {
   overflow: hidden;
 }
 
-/* En modo claro, el fondo del rect del SVG se vuelve sólido oscuro para
-   contrastar contra fondos claros. Nota: :root selecciona <html> SIEMPRE,
-   con o sin la clase .dark — no es "modo claro" por sí solo. Por eso acá se
-   usa :not(.dark) explícito: sin esa exclusión, esta regla le gana en
-   especificidad a cualquier estilo aplicado en dark mode y el logo queda
-   negro en los dos temas.
-   En modo oscuro NO hay override: cada <ChessKnightIcon> genera su propio id
-   de degradé (useId) para poder repetirse varias veces en la misma página
-   sin id duplicados, así que ninguna regla puede apuntar a un id fijo — se
-   deja que el atributo fill inline del SVG (el degradé de marca) se aplique
-   tal cual. */
-html:not(.dark) .chess-knight-svg .knight-bg {
-  fill: #1c1c1e;
-}
+/* El logo usa siempre el degradé de marca (#0a84ff → #5e5ce6 → #4d4ad9), en
+   claro y en oscuro — el mismo que public/favicon.svg, que la landing usa
+   como <img> estático y por eso nunca cambia de color con el tema. Antes acá
+   se forzaba sólido negro en modo claro; se saca para que la identidad visual
+   sea consistente en toda la app, no solo en la landing.
+   Nota para quien retome esto: cada <ChessKnightIcon> genera su propio id de
+   degradé con useId() (ver App.jsx) porque el ícono se repite varias veces a
+   la vez en la misma página (header móvil + sidebar de escritorio quedan
+   ambos en el DOM), y un id de SVG fijo y duplicado hace que el navegador
+   resuelva mal el fill en algunas instancias. Si se necesita volver a un
+   override por CSS, hay que apuntar a la clase (.knight-bg), nunca a un id
+   fijo — con id fijo se reproduce ese bug. */
 
 .brand-title-stacked {
   display: flex;
