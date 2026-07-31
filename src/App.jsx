@@ -876,23 +876,50 @@ export default function App() {
     loadSupabaseData();
   }, [currentRoomId]);
 
+  // Fila de members → objeto de usuario de la app
+  const memberFromRow = (row) => ({
+    name: row.name,
+    email: row.email,
+    country: row.country,
+    tz: row.timezone,
+    active: row.active
+  });
+
+  // Deja la sesión iniciada y la persiste localmente. Centraliza el estado que
+  // antes se repetía en cada camino de login (OAuth, alta nueva y mock).
+  const applyLoggedInUser = (userObj) => {
+    setCurrentUser(userObj);
+    setIsLoggedIn(true);
+    localStorage.setItem('salesarena-logged', 'true');
+    localStorage.setItem('salesarena-user', JSON.stringify(userObj));
+  };
+
+  // Sesión OAuth ya resuelta ("<sala>:<user id>"). Evita que getSession() y
+  // onAuthStateChange procesen la misma sesión a la vez: ambos consultaban
+  // members, ninguno encontraba la fila todavía y los dos intentaban el alta,
+  // así que el segundo insert chocaba contra la constraint (room_id, email).
+  const handledSessionRef = React.useRef(null);
+
   // --- REAL GOOGLE OAUTH CALLBACK LISTENERS ---
   useEffect(() => {
     if (useMockDb) return;
 
+    // La marca se escribe de forma SÍNCRONA, antes de cualquier await: la
+    // ventana de carrera se abre justo en esos awaits.
+    const processSession = async (session) => {
+      const key = `${currentRoomId}:${session.user.id}`;
+      if (handledSessionRef.current === key) return;
+      handledSessionRef.current = key;
+      await handleOAuthSession(session);
+    };
+
     // getSession() resuelve el #access_token del callback de Google antes de
     // devolver la sesión, así que sirve tanto al volver del OAuth como al
-    // recargar con una sesión ya persistida. sessionProcessed evita que el
-    // listener vuelva a correr el alta cuando emite la misma sesión.
-    let sessionProcessed = false;
-
+    // recargar con una sesión ya persistida.
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          sessionProcessed = true;
-          await handleOAuthSession(session);
-        }
+        if (session?.user) await processSession(session);
       } catch (err) {
         console.error('Error inicializando la sesión:', err);
       }
@@ -902,13 +929,10 @@ export default function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        if (!sessionProcessed) {
-          sessionProcessed = true;
-          await handleOAuthSession(session);
-        }
+        await processSession(session);
       } else if (!session) {
         setIsLoggedIn(false);
-        sessionProcessed = false;
+        handledSessionRef.current = null;
       }
     });
 
@@ -920,25 +944,18 @@ export default function App() {
     setLoginEmail(email);
 
     try {
+      // ilike y no eq: el alta guarda el email en minúsculas, así que un
+      // .eq() contra el email crudo de Google no encontraría la fila y se
+      // intentaría registrar de nuevo a alguien que ya es miembro.
       const { data: existing } = await supabase
         .from('members')
         .select('*')
         .eq('room_id', currentRoomId)
-        .eq('email', email)
+        .ilike('email', escapeLikeLiteral(email))
         .maybeSingle();
 
       if (existing) {
-        const userObj = {
-          name: existing.name,
-          email: existing.email,
-          country: existing.country,
-          tz: existing.timezone,
-          active: existing.active
-        };
-        setCurrentUser(userObj);
-        setIsLoggedIn(true);
-        localStorage.setItem('salesarena-logged', 'true');
-        localStorage.setItem('salesarena-user', JSON.stringify(userObj));
+        applyLoggedInUser(memberFromRow(existing));
       } else {
         // Usuario nuevo: verificar primero si la sala existe. Ninguna sala se
         // crea por el simple hecho de que alguien visite su URL: solo se
@@ -1294,10 +1311,7 @@ export default function App() {
     const existing = members.find(m => m.email.toLowerCase() === emailToUse.toLowerCase());
 
     if (existing) {
-      setCurrentUser(existing);
-      setIsLoggedIn(true);
-      localStorage.setItem('salesarena-logged', 'true');
-      localStorage.setItem('salesarena-user', JSON.stringify(existing));
+      applyLoggedInUser(existing);
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
       await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
@@ -1329,6 +1343,26 @@ export default function App() {
         active: newUser.active
       });
       if (error) {
+        // 23505 = unique_violation sobre (room_id, email): la persona YA es
+        // miembro de la sala (otra pestaña, un doble callback de OAuth). No es
+        // un alta fallida: se recupera la fila existente y se sigue con el
+        // login en vez de mostrar el error crudo de Postgres.
+        if (error.code === '23505') {
+          const { data: existing } = await supabase
+            .from('members')
+            .select('*')
+            .eq('room_id', currentRoomId)
+            .ilike('email', escapeLikeLiteral(newUser.email))
+            .maybeSingle();
+          if (existing) {
+            const existingUser = memberFromRow(existing);
+            setMembers(prev => prev.some(m => m.email.toLowerCase() === existingUser.email.toLowerCase())
+              ? prev.map(m => m.email.toLowerCase() === existingUser.email.toLowerCase() ? existingUser : m)
+              : [...prev, existingUser]);
+            applyLoggedInUser(existingUser);
+            return true;
+          }
+        }
         showNotification('Error al registrar perfil en Supabase: ' + error.message);
         return false;
       }
@@ -1341,10 +1375,7 @@ export default function App() {
       return [...prev, newUser];
     });
 
-    setCurrentUser(newUser);
-    setIsLoggedIn(true);
-    localStorage.setItem('salesarena-logged', 'true');
-    localStorage.setItem('salesarena-user', JSON.stringify(newUser));
+    applyLoggedInUser(newUser);
 
     showNotification(`¡Bienvenido a Sales Arena Matcher, ${newUser.name}!`);
     return true;
