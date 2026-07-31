@@ -880,14 +880,17 @@ export default function App() {
   useEffect(() => {
     if (useMockDb) return;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && session.user) {
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
         handleOAuthSession(session);
       }
-    });
+    };
+
+    initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && session.user) {
+      if (session?.user) {
         handleOAuthSession(session);
       } else if (!session) {
         setIsLoggedIn(false);
