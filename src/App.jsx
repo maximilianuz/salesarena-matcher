@@ -405,31 +405,61 @@ export default function App() {
     if (useMockDb) return;
 
     const processOAuthHash = async () => {
+      const hash = window.location.hash;
+
       // Check if URL has auth hash
-      if (!window.location.hash.includes('access_token')) {
-        console.log('No OAuth hash in URL');
+      if (!hash.includes('access_token')) {
+        console.log('ℹ No OAuth hash in URL');
         return;
       }
 
-      console.log('OAuth hash detected in URL, processing with Supabase...');
+      console.log('🔐 OAuth hash detected, processing...');
 
       try {
-        // Force Supabase to process the hash by calling getSession
-        // This should extract and store the tokens from the URL
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Try standard Supabase session detection first
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
 
-        if (error) {
-          console.error('Error processing OAuth hash:', error);
+        if (existingSession?.user) {
+          console.log('✓ Session already established:', existingSession.user.email);
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
           return;
         }
 
-        if (session?.user) {
-          console.log('✓ Session established from OAuth hash:', session.user.email);
-          // Clean up the hash from URL to avoid reprocessing
-          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+        // If no session yet, manually parse and set the OAuth tokens
+        console.log('📍 No session in localStorage, parsing hash manually...');
+
+        const hashParams = new URLSearchParams(hash.substring(1));
+        const access_token = hashParams.get('access_token');
+        const refresh_token = hashParams.get('refresh_token');
+        const expires_in = hashParams.get('expires_in');
+
+        if (!access_token) {
+          console.log('⚠ No access_token in hash');
+          return;
         }
+
+        console.log('🔑 Found tokens in hash, setting session...');
+
+        // Calculate expiration
+        const expiresAt = new Date(Date.now() + (parseInt(expires_in) || 3600) * 1000).toISOString();
+
+        // Try to set session using Supabase's setSession method
+        const { error: setSessionError } = await supabase.auth.setSession({
+          access_token,
+          refresh_token: refresh_token || ''
+        });
+
+        if (setSessionError) {
+          console.error('❌ Error setting session:', setSessionError);
+          return;
+        }
+
+        console.log('✓ Session set successfully from OAuth hash');
+
+        // Clean up the hash from URL
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
       } catch (err) {
-        console.error('Failed to process OAuth hash:', err);
+        console.error('❌ Failed to process OAuth hash:', err);
       }
     };
 
