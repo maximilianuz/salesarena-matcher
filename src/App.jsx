@@ -880,17 +880,35 @@ export default function App() {
   useEffect(() => {
     if (useMockDb) return;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && session.user) {
-        handleOAuthSession(session);
-      }
-    });
+    // getSession() resuelve el #access_token del callback de Google antes de
+    // devolver la sesión, así que sirve tanto al volver del OAuth como al
+    // recargar con una sesión ya persistida. sessionProcessed evita que el
+    // listener vuelva a correr el alta cuando emite la misma sesión.
+    let sessionProcessed = false;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && session.user) {
-        handleOAuthSession(session);
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          sessionProcessed = true;
+          await handleOAuthSession(session);
+        }
+      } catch (err) {
+        console.error('Error inicializando la sesión:', err);
+      }
+    };
+
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        if (!sessionProcessed) {
+          sessionProcessed = true;
+          await handleOAuthSession(session);
+        }
       } else if (!session) {
         setIsLoggedIn(false);
+        sessionProcessed = false;
       }
     });
 
