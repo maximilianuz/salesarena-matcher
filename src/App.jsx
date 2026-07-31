@@ -2866,14 +2866,17 @@ export default function App() {
                   })()}
                 </div>
 
-                {/* Right Col: Historial / Meets */}
+                {/* Right Col: agenda de TODA la sala (no solo la propia). El
+                    título nombra el alcance —de quién son— porque es lo que lo
+                    distingue del panel de la izquierda, que es la propuesta
+                    privada de quien mira. */}
                 <div className="section-card glass">
                   <h4 className="section-title">
                     <CalendarCheck size={15} className="section-title-icon" />
-                    Próximos Role-Plays Agendados
+                    Agenda de la Sala
                   </h4>
                   <p className="section-subtitle">
-                    Estos links son visibles para toda la sala: si querés mirar o sumarte como observador a un role-play de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
+                    Todos los role-plays confirmados de la sala. Si querés mirar o sumarte como observador al de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
                   </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
@@ -2885,8 +2888,8 @@ export default function App() {
                     ) : upcomingMeetings.length === 0 ? (
                       <div className="empty-state">
                         <CalendarDays size={30} />
-                        <span className="empty-state-title">Todavía no hay reuniones confirmadas.</span>
-                        <span className="empty-state-desc">Cuando una propuesta sea aceptada por ambas personas, el enlace aparecerá aquí.</span>
+                        <span className="empty-state-title">Nadie de la sala tiene role-plays agendados.</span>
+                        <span className="empty-state-desc">Cuando una propuesta sea aceptada por ambas personas —la tuya o la de cualquier compañero— el enlace aparecerá acá.</span>
                       </div>
                     ) : (
                       upcomingMeetings
@@ -2909,6 +2912,15 @@ export default function App() {
                                     <span className="meeting-live-badge" role="status">
                                       <span className="meeting-live-dot" aria-hidden="true"></span>
                                       En vivo ahora
+                                    </span>
+                                  )}
+                                  {/* La agenda lista toda la sala, así que la sesión
+                                      propia también aparece acá además de en "Mi
+                                      Role-Play". Se marca para que no se lea como
+                                      una reunión duplicada. */}
+                                  {myRow && (
+                                    <span className="meeting-mine-badge" title="Sos participante de este role-play: también lo ves en «Mi Role-Play de la Semana»">
+                                      <UserCheck size={10} /> Tuyo
                                     </span>
                                   )}
                                   <span className="meeting-open-badge" title="Cualquier miembro de la sala puede sumarse a este Meet como observador, con el micrófono apagado">
