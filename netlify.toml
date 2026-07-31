@@ -16,14 +16,32 @@
     Permissions-Policy = "geolocation=(self), microphone=(self), camera=(self)"
     Cache-Control = "public, max-age=3600"
 
-# Cache for HTML (landing page)
+# Los HTML nunca se cachean: son los que apuntan a los bundles con hash.
+# Si se cachean, el navegador sigue pidiendo el bundle viejo (que además es
+# immutable) y los deploys nuevos no se ven nunca.
 [[headers]]
   for = "/index.html"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
     X-Frame-Options = "SAMEORIGIN"
 
-# Cache for assets (long-lived)
+[[headers]]
+  for = "/app/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Frame-Options = "SAMEORIGIN"
+
+[[headers]]
+  for = "/app/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/room/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+# Los assets sí llevan hash en el nombre, así que se pueden cachear a largo plazo
 [[headers]]
   for = "/assets/*"
   [headers.values]
