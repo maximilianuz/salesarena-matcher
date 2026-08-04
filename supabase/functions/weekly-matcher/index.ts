@@ -335,19 +335,21 @@ Deno.serve(async (req) => {
       const blocked = new Set<string>();
       for (const [email, count] of faltasMes) if (count >= 3) blocked.add(email);
 
-      // Miembros con propuesta viva (propuesto/confirmado) quedan fuera del pool
-      const busy = new Set(
+      // Parejas con propuesta viva (propuesto/confirmado): no se pueden emparejar de nuevo esta semana
+      // PERO un miembro puede tener múltiples propuestas con DIFERENTES personas.
+      const existingPairs = new Set<string>(
         (weekProposals || [])
           .filter(p => p.status === 'propuesto' || p.status === 'confirmado')
-          .flatMap(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()])
+          .map(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()].sort().join('|'))
       );
-      // Parejas RECHAZADAS esta semana: exclusión DURA (se respeta el "no").
-      // Las CANCELADAS también: si uno canceló la sesión, no se re-ofrece la
-      // misma dupla esta semana, pero cada integrante queda libre en el pool
-      // para ser emparejado con OTRO compañero disponible.
+      // Parejas que NO se pueden repetir esta semana:
+      // - RECHAZADO: exclusión DURA (se respeta el "no")
+      // - CANCELADO: no se re-ofrece esta semana
+      // - PROPUESTO/CONFIRMADO: ya tienen propuesta viva con esta persona
       const excluded = new Set<string>(
         (weekProposals || [])
-          .filter(p => p.status === 'rechazado' || p.status === 'cancelado')
+          .filter(p => p.status === 'rechazado' || p.status === 'cancelado' ||
+                        p.status === 'propuesto' || p.status === 'confirmado')
           .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
       // Parejas EXPIRADAS (nadie confirmó con 4hs de antelación): exclusión
@@ -364,8 +366,10 @@ Deno.serve(async (req) => {
         }
       }
 
+      // Pool inicial: miembros no bloqueados (sin importar si tienen propuestas)
+      // Múltiples propuestas están permitidas siempre que sean con personas diferentes
       const pool: Member[] = members
-        .filter(m => !busy.has(m.email.toLowerCase()) && !blocked.has(m.email.toLowerCase()))
+        .filter(m => !blocked.has(m.email.toLowerCase()))
         .map(m => ({ email: m.email, name: m.name, tz: m.timezone }));
       if (pool.length < 2) continue;
 
@@ -426,13 +430,27 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar. El slot elegido siempre está a >= 4hs (MIN_LEAD_MS), y el
-      // plazo de confirmación es 4hs antes de la reunión. Por cada dupla: si ya
-      // existe una propuesta VENCIDA se REACTIVA (sin violar el UNIQUE); si no,
-      // se INSERTA.
-      const { pairs } = buildWeeklyPairs(
-        pool, slotSets, scores, excluded, pairCounts, now, softExcluded, MIN_LEAD_MS
-      );
+      // Emparejar en rondas: permitir múltiples propuestas por miembro (con personas diferentes).
+      // Cada ronda busca nuevas parejas y las agrega a `excluded` para que no se repita la dupla.
+      // Las rondas terminan cuando no hay más parejas posibles o el pool queda muy pequeño.
+      const allPairs: Pair[] = [];
+      let roundExcluded = new Set(excluded);
+      const maxRounds = Math.floor(pool.length / 2); // límite de seguridad
+
+      for (let round = 0; round < maxRounds; round++) {
+        const { pairs } = buildWeeklyPairs(
+          pool, slotSets, scores, roundExcluded, pairCounts, now, softExcluded, MIN_LEAD_MS
+        );
+        if (pairs.length === 0) break; // No hay más parejas posibles
+
+        allPairs.push(...pairs);
+        // Agrega los nuevos pares a excluded para que no se repitan en la siguiente ronda
+        for (const p of pairs) {
+          roundExcluded.add(pairKeyOf(p.a.email, p.b.email));
+        }
+      }
+
+      const pairs = allPairs;
       if (pairs.length === 0) continue;
 
       const toInsert: Record<string, unknown>[] = [];

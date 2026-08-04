@@ -58,8 +58,8 @@ export const soonestSlot = (slots, now = new Date(), minLeadMs = 0) =>
 export const slotDateMs = (slot, now = new Date(), minLeadMs = 0) =>
   nextSlotOccurrenceMs(slot, now, minLeadMs);
 
-// Empareja 1:1 a los miembros priorizando por score de confiabilidad:
-// mayor score elige primero y obtiene el mejor compañero disponible.
+// Motor base: empareja 1:1 a los miembros priorizando por score de confiabilidad.
+// Mayor score elige primero y obtiene el mejor compañero disponible.
 //
 //   members:  [{ email, name }]
 //   slotSets: Map(email -> Set<int>) slots UTC de la semana (0..167) en que está libre
@@ -74,6 +74,8 @@ export const slotDateMs = (slot, now = new Date(), minLeadMs = 0) =>
 //   minLeadMs: antelación mínima de la reunión respecto de `now`
 //
 // Devuelve { pairs: [{ a, b, slot }], unmatched: [email] }.
+// NOTA: Este motor empareja cada miembro UNA SOLA VEZ. Para múltiples
+// emparejamientos por semana, usar buildWeeklyPairsMultiRound().
 export const buildWeeklyPairs = (
   members,
   slotSets,
@@ -144,6 +146,40 @@ export const buildWeeklyPairs = (
     .map(m => m.email);
 
   return { pairs, unmatched };
+};
+
+// Empareja en múltiples rondas para permitir que cada miembro tenga varias
+// propuestas en la misma semana (con personas diferentes).
+// Devuelve un array de todos los pares encontrados en todas las rondas.
+export const buildWeeklyPairsMultiRound = (
+  members,
+  slotSets,
+  scores,
+  excludedPairs = new Set(),
+  pairCounts = new Map(),
+  now = new Date(),
+  softExcludedPairs = new Set(),
+  minLeadMs = 0
+) => {
+  const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
+  const allPairs = [];
+  let roundExcluded = new Set(excludedPairs);
+  const maxRounds = Math.floor(members.length / 2); // límite de seguridad
+
+  for (let round = 0; round < maxRounds; round++) {
+    const { pairs } = buildWeeklyPairs(
+      members, slotSets, scores, roundExcluded, pairCounts, now, softExcludedPairs, minLeadMs
+    );
+    if (pairs.length === 0) break; // No hay más parejas posibles
+
+    allPairs.push(...pairs);
+    // Agrega los nuevos pares a excluded para que no se repitan
+    for (const p of pairs) {
+      roundExcluded.add(pairKey(p.a.email, p.b.email));
+    }
+  }
+
+  return allPairs;
 };
 
 // Lunes (UTC) de la semana actual en formato YYYY-MM-DD
