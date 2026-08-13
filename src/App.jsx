@@ -240,6 +240,13 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Único usuario habilitado para crear salas nuevas, por el momento.
 const ADMIN_EMAIL = 'community.argen.manager@gmail.com';
 
+// El permiso que Google concede para escribir en Calendar dura ~1 hora y
+// Supabase no lo renueva (solo refresca su propio JWT, no los tokens de
+// terceros). Cuando vence, la única salida es volver a entrar con Google, así
+// que todos los caminos que lo detectan dicen exactamente eso.
+const GOOGLE_REAUTH_MESSAGE =
+  'Tu permiso de Google Calendar venció (dura alrededor de una hora). Cerrá sesión y volvé a entrar con Google para agendar la reunión; la propuesta queda confirmada mientras tanto.';
+
 // Fecha/hora UTC real de la próxima ocurrencia del match.
 // match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
 // minLeadMs: piso de antelación. Debe coincidir con nextSlotOccurrenceMs
@@ -1150,11 +1157,23 @@ export default function App() {
         return;
       }
 
-      const response = await fetch(`${url}/functions/v1/weekly-matcher`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
+      // Corrida dirigida a ESTA sala, con la sesión del usuario: la Edge
+      // Function exige sesión válida para ?room=, así nadie de afuera puede
+      // forzar corridas sobre una sala ajena.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const response = await fetch(
+        `${url}/functions/v1/weekly-matcher?room=${encodeURIComponent(currentRoomId)}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({})
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -1840,7 +1859,7 @@ export default function App() {
         const providerToken = sessionData.session?.provider_token; // Token de Google OAuth
 
         if (!providerToken) {
-          throw new Error('Tu sesión de Google expiró o no otorgó permisos de Calendar. Cierra sesión y vuelve a ingresar con Google.');
+          throw new Error(GOOGLE_REAUTH_MESSAGE);
         }
 
         const eventPayload = {
@@ -1871,6 +1890,14 @@ export default function App() {
         );
 
         if (!response.ok) {
+          // 401/403 = el permiso de Google venció. Dura alrededor de una hora y
+          // Supabase no lo renueva solo (solo refresca su propio JWT, no los
+          // tokens de terceros), así que a una sesión larga le caduca en
+          // silencio. Se traduce a la única acción que lo resuelve, en vez de
+          // devolver el mensaje técnico de Google.
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(GOOGLE_REAUTH_MESSAGE);
+          }
           const errBody = await response.json().catch(() => null);
           throw new Error(errBody?.error?.message || `Google Calendar respondió con error ${response.status}.`);
         }

@@ -176,14 +176,45 @@ const buildWeeklyPairs = (
 
 Deno.serve(async (req) => {
   try {
-    // Secreto compartido OPCIONAL. La función es idempotente y el cliente la
-    // dispara legítimamente al activar participación (sin secreto), así que
-    // solo se exige el header cuando CRON_SECRET está configurado. Si se
-    // configura, hay que enviarlo también desde el cron y el cliente.
+    // --- AUTORIZACIÓN ---
+    // Hay dos llamadores legítimos y se tratan distinto:
+    //
+    //   1. El cron cada 10 min. Corre la pasada GLOBAL: expira propuestas
+    //      vencidas, resuelve asistencias y empareja todas las salas. Es
+    //      idempotente y no acepta parámetros, así que dispararla de más no
+    //      cambia ningún resultado. Se admite sin credencial para no repetir
+    //      el incidente de 20260718170000, donde exigir un secreto que el cron
+    //      no podía construir dejó el emparejador caído al 100%.
+    //
+    //   2. El cliente, al cambiar la disponibilidad, con ?room=<id>. Esa forma
+    //      SÍ es dirigida (elige sobre qué sala actuar) y por eso exige sesión
+    //      válida: antes cualquiera podía forzar corridas sobre una sala ajena.
+    //
+    // Si CRON_SECRET está configurado, vale como credencial para ambas formas.
     const cronSecret = Deno.env.get('CRON_SECRET');
-    if (cronSecret && req.headers.get('x-cron-secret') !== cronSecret) {
-      console.warn('Rejected request: invalid or missing x-cron-secret header');
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
+    const hasCronSecret = !!cronSecret && req.headers.get('x-cron-secret') === cronSecret;
+
+    const url = new URL(req.url);
+    const onlyRoom = url.searchParams.get('room');
+
+    if (onlyRoom && !hasCronSecret) {
+      // El token del usuario viaja en Authorization: Bearer <jwt>. getUser lo
+      // valida contra Supabase; un token ausente, vencido o falso no pasa.
+      const authHeader = req.headers.get('Authorization') || '';
+      const token = authHeader.toLowerCase().startsWith('bearer ')
+        ? authHeader.slice(7).trim()
+        : '';
+      const { data: userData } = token
+        ? await supabase.auth.getUser(token)
+        : { data: { user: null } };
+
+      if (!userData?.user) {
+        console.warn('Rejected targeted run: missing or invalid user session');
+        return new Response(
+          JSON.stringify({ error: 'Unauthorized' }),
+          { status: 401, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     const now = new Date();
@@ -259,9 +290,7 @@ Deno.serve(async (req) => {
       // se omite sin frenar el emparejamiento.
     }
 
-    // 2. Salas a procesar (opcional: ?room=<id> para una sola)
-    const url = new URL(req.url);
-    const onlyRoom = url.searchParams.get('room');
+    // 2. Salas a procesar (?room=<id> limita a una sola; ya validado arriba)
     const { data: rooms } = onlyRoom
       ? { data: [{ id: onlyRoom }] }
       : await supabase.from('rooms').select('id');
