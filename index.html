@@ -720,7 +720,7 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-bg" aria-hidden="true">
-            <video class="hero-video" autoplay muted loop playsinline poster="/hero-poster.jpg">
+            <video class="hero-video" id="hero-video" muted loop playsinline preload="none" poster="/hero-poster.jpg">
                 <source src="/videos/hero-bg.mp4" type="video/mp4">
             </video>
             <div class="hero-overlay"></div>
@@ -918,6 +918,39 @@
                     observer.observe(el);
                 });
             });
+        })();
+    </script>
+
+    <script>
+        (function () {
+            var video = document.getElementById('hero-video');
+            if (!video) {
+                return;
+            }
+
+            var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (prefersReducedMotion) {
+                return;
+            }
+
+            video.preload = 'auto';
+
+            if (!('IntersectionObserver' in window)) {
+                video.play().catch(function () {});
+                return;
+            }
+
+            var observer = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    if (entry.isIntersecting) {
+                        video.play().catch(function () {});
+                    } else {
+                        video.pause();
+                    }
+                });
+            }, { threshold: 0.1 });
+
+            observer.observe(video);
         })();
     </script>
 </body>
