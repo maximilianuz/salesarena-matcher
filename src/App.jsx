@@ -62,182 +62,20 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-// La app renderiza este ícono varias veces a la vez (header móvil + sidebar de
-// escritorio quedan ambos en el DOM; uno se oculta solo por CSS según el
-// viewport). Un id de gradiente fijo se duplicaba entonces en el documento, y
-// un id duplicado en SVG es inválido: el navegador podía resolver mal la
-// referencia fill="url(#...)" en alguna de las instancias y pintarla opaca en
-// vez del degradé de marca. useId() le da a cada instancia su propio id.
-const ChessKnightIcon = ({ size = 26 }) => {
-  const gradientId = `salesArenaKnightBg-${React.useId()}`;
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 512 512" style={{ display: 'block' }} className="chess-knight-svg">
-      <defs>
-        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#0a84ff"/>
-          <stop offset="55%" stopColor="#5e5ce6"/>
-          <stop offset="100%" stopColor="#4d4ad9"/>
-        </linearGradient>
-      </defs>
-      <rect className="knight-bg" width="512" height="512" rx="115" fill={`url(#${gradientId})`}/>
-      <g transform="translate(112, 112) scale(12)" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M5 20a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/>
-        <path d="M16.5 18c1-2 2.5-5 2.5-9a7 7 0 0 0-7-7H6.635a1 1 0 0 0-.768 1.64L7 5l-2.32 5.802a2 2 0 0 0 .95 2.526l2.87 1.456"/>
-        <path d="m15 5 1.425-1.425"/>
-        <path d="m17 8 1.53-1.53"/>
-        <path d="M9.713 12.185 7 18"/>
-      </g>
-    </svg>
-  );
-};
+import { ChessKnightIcon, GoogleMark, ReliabilityBadge } from './components/Brand';
+import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
+import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
+import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
+import {
+  getInitials,
+  getAvatarColor,
+  escapeLikeLiteral,
+  nameFromEmail,
+  sleep,
+  slugifyRoomName
+} from './utils/format';
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-
-// Paises y Zonas Horarias
-const ZONAS = [
-  // América
-  { country: 'Argentina', tz: 'America/Argentina/Buenos_Aires', flag: '🇦🇷' },
-  { country: 'Chile', tz: 'America/Santiago', flag: '🇨🇱' },
-  { country: 'Colombia', tz: 'America/Bogota', flag: '🇨🇴' },
-  { country: 'México', tz: 'America/Mexico_City', flag: '🇲🇽' },
-  { country: 'Estados Unidos (Este)', tz: 'America/New_York', flag: '🇺🇸' },
-  { country: 'Estados Unidos (Pacífico)', tz: 'America/Los_Angeles', flag: '🇺🇸' },
-  { country: 'Perú', tz: 'America/Lima', flag: '🇵🇪' },
-  { country: 'Uruguay', tz: 'America/Montevideo', flag: '🇺🇾' },
-  { country: 'Ecuador', tz: 'America/Guayaquil', flag: '🇪🇨' },
-  { country: 'Paraguay', tz: 'America/Asuncion', flag: '🇵🇾' },
-  { country: 'Bolivia', tz: 'America/La_Paz', flag: '🇧🇴' },
-  { country: 'Costa Rica', tz: 'America/Costa_Rica', flag: '🇨🇷' },
-  { country: 'Panamá', tz: 'America/Panama', flag: '🇵🇦' },
-  { country: 'Venezuela', tz: 'America/Caracas', flag: '🇻🇪' },
-
-  // Europa Central / Occidental
-  { country: 'España', tz: 'Europe/Madrid', flag: '🇪🇸' },
-  { country: 'Alemania', tz: 'Europe/Berlin', flag: '🇩🇪' },
-  { country: 'Francia', tz: 'Europe/Paris', flag: '🇫🇷' },
-  { country: 'Italia', tz: 'Europe/Rome', flag: '🇮🇹' },
-  { country: 'Reino Unido', tz: 'Europe/London', flag: '🇬🇧' },
-  { country: 'Suiza', tz: 'Europe/Zurich', flag: '🇨🇭' },
-  { country: 'Austria', tz: 'Europe/Vienna', flag: '🇦🇹' },
-  { country: 'Polonia', tz: 'Europe/Warsaw', flag: '🇵🇱' },
-  { country: 'Países Bajos', tz: 'Europe/Amsterdam', flag: '🇳🇱' },
-  { country: 'Bélgica', tz: 'Europe/Brussels', flag: '🇧🇪' },
-  { country: 'República Checa', tz: 'Europe/Prague', flag: '🇨🇿' }
-];
-
-// Bandera del país (fallback a globo si no está en la lista)
-const getCountryFlag = (countryName) => {
-  if (!countryName) return '🌐';
-  const cleanName = countryName.trim().toLowerCase();
-  const matched = ZONAS.find(z =>
-    z.country.toLowerCase().includes(cleanName) ||
-    cleanName.includes(z.country.toLowerCase())
-  );
-  return matched ? matched.flag : '🌐';
-};
-
-// Iniciales para avatares (máx. 2 letras)
-const getInitials = (name) => {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
-};
-
-// Color de avatar estable por nombre
-const AVATAR_COLORS = ['#5e5ce6', '#0a84ff', '#30d158', '#ff9f0a', '#ff375f', '#bf5af2', '#64d2ff', '#ffd60a'];
-const getAvatarColor = (name) => {
-  if (!name) return AVATAR_COLORS[0];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-};
-
-// Nombre corto de la zona horaria (ciudad)
-const tzCity = (tz) => (tz || 'UTC').split('/').pop().replace(/_/g, ' ');
-
-// Isotipo oficial de Google para el botón de inicio de sesión
-const GoogleMark = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-  </svg>
-);
-
-// Badge de confiabilidad: % de asistencia en sesiones reportadas (60 días)
-const ReliabilityBadge = ({ pct }) => {
-  if (pct === null || pct === undefined) {
-    return (
-      <span className="reliability-badge reliability-new" title="Sin historial de sesiones reportadas en los últimos 60 días">
-        Nuevo
-      </span>
-    );
-  }
-  const tier = pct >= 80 ? 'high' : pct >= 50 ? 'mid' : 'low';
-  return (
-    <span
-      className={`reliability-badge reliability-${tier}`}
-      title={`Confiabilidad: ${pct}% de asistencia sobre sesiones reportadas en los últimos 60 días`}
-    >
-      <ShieldCheck size={10} /> {pct}%
-    </span>
-  );
-};
-
-// Patrón LIKE/ILIKE seguro para un valor literal (escapa %, _ y \).
-// Se usa para borrar/actualizar filas por nombre de usuario sin distinguir
-// mayúsculas: la tabla availabilities guarda "user" como texto libre y un
-// .eq() estricto dejaba filas viejas huérfanas si el nombre cambió de casing.
-const escapeLikeLiteral = (value) => value.replace(/[\\%_]/g, '\\$&');
-
-const resolveTimezone = (countryName) => {
-  if (!countryName) return 'UTC';
-  const cleanName = countryName.trim().toLowerCase();
-  
-  // Buscar en las ZONAS predefinidas
-  const matched = ZONAS.find(z => 
-    z.country.toLowerCase().includes(cleanName) || 
-    cleanName.includes(z.country.toLowerCase())
-  );
-  if (matched) return matched.tz;
-  
-  // Como fallback, usar la zona horaria real del navegador del usuario
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch {
-    return 'UTC';
-  }
-};
-
-// Deriva un nombre presentable del email cuando la cuenta de Google no
-// trae nombre (ej. "carlos.mendoza@gmail.com" → "Carlos Mendoza").
-const nameFromEmail = (email) => {
-  const base = (email || '').split('@')[0];
-  const pretty = base
-    .replace(/[._\-+]+/g, ' ')
-    .split(' ')
-    .filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
-  return pretty || 'Invitado';
-};
-
-// Adivina el país del usuario a partir de la zona horaria que reporta su
-// navegador, para poder registrarlo sin pedirle que lo elija a mano.
-const guessCountryFromBrowserTz = () => {
-  try {
-    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const matched = ZONAS.find(z => z.tz === browserTz);
-    return matched ? matched.country : 'Argentina';
-  } catch {
-    return 'Argentina';
-  }
-};
-
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Único usuario habilitado para crear salas nuevas, por el momento.
+// Unico usuario habilitado para crear salas nuevas, por el momento.
 const ADMIN_EMAIL = 'community.argen.manager@gmail.com';
 
 // El permiso que Google concede para escribir en Calendar dura ~1 hora y
@@ -247,103 +85,12 @@ const ADMIN_EMAIL = 'community.argen.manager@gmail.com';
 const GOOGLE_REAUTH_MESSAGE =
   'Tu permiso de Google Calendar venció (dura alrededor de una hora). Cerrá sesión y volvé a entrar con Google para agendar la reunión; la propuesta queda confirmada mientras tanto.';
 
-// Fecha/hora UTC real de la próxima ocurrencia del match.
-// match.startSlot codifica día (0=Lunes) y hora UTC dentro de la semana.
-// minLeadMs: piso de antelación. Debe coincidir con nextSlotOccurrenceMs
-// (src/matcher.js / la Edge Function): el emparejador elige el turno y calcula
-// respond_by respetando ese piso, así que mostrar/agendar la reunión con otra
-// regla haría que el plazo y la fecha visibles no coincidan con lo planificado.
-const getNextMatchDateUtc = (match, minLeadMs = 0) => {
-  const dayIdx = Math.floor(match.startSlot / 24); // 0 = Lunes ... 6 = Domingo
-  const hourUtc = match.startSlot % 24;
-  const now = new Date();
-  const start = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0
-  ));
-  // getUTCDay(): 0=Domingo..6=Sábado → convertir a 0=Lunes..6=Domingo
-  const todayIdx = (start.getUTCDay() + 6) % 7;
-  const delta = (dayIdx - todayIdx + 7) % 7;
-  start.setUTCDate(start.getUTCDate() + delta);
-  // Rodar a la semana siguiente hasta respetar el piso de antelación (con
-  // minLeadMs=0 equivale a "si ya pasó hoy, va a la semana próxima").
-  const floor = now.getTime() + minLeadMs;
-  while (start.getTime() < floor) start.setUTCDate(start.getUTCDate() + 7);
-  return start;
-};
-
-const formatMeetingDateUtc = (date, dayName) => {
-  const dd = String(date.getUTCDate()).padStart(2, '0');
-  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const hh = String(date.getUTCHours()).padStart(2, '0');
-  return `${dayName} ${dd}/${mm} · ${hh}:00 UTC`;
-};
-
 const useMockDb = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
 
 const getRoomIdFromUrl = () => {
   const path = window.location.pathname;
   const match = path.match(/\/room\/([^/]+)/);
   return match ? match[1] : null;
-};
-
-// Nombre de sala → slug de la URL. Vivía duplicado carácter por carácter en
-// handleRenameRoom y handleCreateRoom: si las dos copias se desincronizaban,
-// crear y renombrar generaban enlaces distintos para el mismo nombre.
-const slugifyRoomName = (name) =>
-  name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // quita tildes
-    .replace(/[^a-z0-9\s-]/g, '')    // quita símbolos
-    .trim()
-    .replace(/\s+/g, '-');
-
-// Fila de availabilities/templates → regla horaria de la app. Ambas tablas
-// tienen la misma forma, así que comparten mapeo. memberEmail es el vínculo
-// real con el miembro; `user` (el nombre) se conserva para las etiquetas del
-// mapa de calor y como respaldo de las filas anteriores a esa columna.
-const scheduleRuleFromRow = (row) => ({
-  memberEmail: row.member_email || null,
-  user: row.user,
-  dayIdx: row.day_idx,
-  startHour: row.start_hour,
-  endHour: row.end_hour
-});
-
-// Fila de meeting_attendees → objeto de asistencia de la app. Este mapeo de
-// nueve campos estaba escrito tres veces (carga inicial y creación de reunión);
-// agregar una columna obligaba a acordarse de tocar todas las copias.
-const attendanceFromRow = (row) => ({
-  id: row.id,
-  meetingId: row.meeting_id,
-  memberEmail: row.member_email,
-  memberName: row.member_name,
-  status: row.status,
-  punctuality: row.punctuality,
-  cancelReason: row.cancel_reason,
-  reportedBy: row.reported_by,
-  reportedAt: row.reported_at,
-  joinedAt: row.joined_at
-});
-
-// join_room señala cada motivo de rechazo con un código propio. Se traducen a
-// un mensaje que le diga a la persona qué hacer, en vez de mostrarle el texto
-// crudo de Postgres.
-const joinRoomErrorMessage = (error) => {
-  const raw = `${error?.message || ''} ${error?.details || ''}`;
-  if (raw.includes('INVALID_CODE')) {
-    return 'El enlace de invitación no es válido o fue renovado. Pedile a quien administra la sala que te comparta el enlace actual.';
-  }
-  if (raw.includes('ROOM_CLOSED')) {
-    return 'Esta sala todavía no tiene invitaciones habilitadas. Pedile el enlace a quien la administra.';
-  }
-  if (raw.includes('ROOM_NOT_FOUND')) {
-    return 'Esta sala todavía no fue creada. Pedile el enlace correcto a quien administra la plataforma.';
-  }
-  if (raw.includes('AUTH_REQUIRED')) {
-    return 'Tu sesión venció antes de completar el registro. Volvé a iniciar sesión con Google.';
-  }
-  return 'No pudimos completar tu registro. Volvé a intentarlo en un momento.';
 };
 
 export default function App() {
