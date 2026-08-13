@@ -452,8 +452,14 @@ export default function App() {
     if (!linked) return true;
     return !meetingWasCancelled(linked) && !meetingHasEnded(linked);
   };
-  const myProposal = myWeekProposals.find(proposalIsLive) || null;
-  const myLastClosedProposal = myProposal ? null : myWeekProposals.sort((x, y) => (y.id || 0) - (x.id || 0))[0] || null;
+  // Puede haber varias a la vez (multi-match semanal): se listan todas, no
+  // solo la primera que aparezca en el array.
+  const myLiveProposals = myWeekProposals.filter(proposalIsLive)
+    .sort((a, b) => a.slot - b.slot);
+  const myProposal = myLiveProposals[0] || null;
+  const myLastClosedProposal = myLiveProposals.length > 0
+    ? null
+    : myWeekProposals.sort((x, y) => (y.id || 0) - (x.id || 0))[0] || null;
 
   // Modo demo: correr el emparejador localmente (en producción lo hace la
   // Edge Function semanal weekly-matcher; el cliente solo lee su propuesta)
@@ -2652,8 +2658,8 @@ export default function App() {
                     <Sparkles size={18} />
                   </div>
                   <div className="kpi-info">
-                    <span className="kpi-val">{myProposal ? 1 : 0}</span>
-                    <span className="kpi-label">Mi Propuesta Activa</span>
+                    <span className="kpi-val">{myLiveProposals.length}</span>
+                    <span className="kpi-label">{myLiveProposals.length === 1 ? 'Mi Propuesta Activa' : 'Mis Propuestas Activas'}</span>
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
@@ -2685,7 +2691,7 @@ export default function App() {
                         <span className="dashboard-status-loading-text">Cargando tu propuesta semanal…</span>
                       </div>
                     </div>
-                  ) : !myProposal ? (
+                  ) : myLiveProposals.length === 0 ? (
                     (() => {
                       const hasAvailability = availabilities.some(a => ruleBelongsTo(a, currentUser));
                       const emptyState = !currentUser.active
@@ -2715,15 +2721,17 @@ export default function App() {
                         </div>
                       );
                     })()
-                  ) : (() => {
-                    const meIsA = myProposal.aEmail.toLowerCase() === myEmailLower;
-                    const partnerName = meIsA ? myProposal.bName : myProposal.aName;
-                    const partnerEmail = meIsA ? myProposal.bEmail : myProposal.aEmail;
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {myLiveProposals.map((proposal) => {
+                    const meIsA = proposal.aEmail.toLowerCase() === myEmailLower;
+                    const partnerName = meIsA ? proposal.bName : proposal.aName;
+                    const partnerEmail = meIsA ? proposal.bEmail : proposal.aEmail;
                     const partnerMember = members.find(m => m.email.toLowerCase() === partnerEmail.toLowerCase());
-                    const mySide = meIsA ? myProposal.statusA : myProposal.statusB;
-                    const otherSide = meIsA ? myProposal.statusB : myProposal.statusA;
-                    const linkedMeeting = meetings.find(mm => mm.id === myProposal.meetingId);
-                    const isConfirmed = myProposal.status === 'confirmado';
+                    const mySide = meIsA ? proposal.statusA : proposal.statusB;
+                    const otherSide = meIsA ? proposal.statusB : proposal.statusA;
+                    const linkedMeeting = meetings.find(mm => mm.id === proposal.meetingId);
+                    const isConfirmed = proposal.status === 'confirmado';
                     const statusPresentation = isConfirmed && linkedMeeting
                       ? {
                           variant: 'meeting-ready',
@@ -2756,12 +2764,12 @@ export default function App() {
                     // El plazo de confirmación jamás puede quedar DESPUÉS de esa
                     // sesión: se acota al menor de ambos para evitar mostrar
                     // "Respondé en 3 h" cuando la sesión visible es en 1 h.
-                    const sessionStartMs = getNextMatchDateUtc({ startSlot: myProposal.slot }).getTime();
-                    const rawDeadlineMs = myProposal.respondBy ? new Date(myProposal.respondBy).getTime() : sessionStartMs;
+                    const sessionStartMs = getNextMatchDateUtc({ startSlot: proposal.slot }).getTime();
+                    const rawDeadlineMs = proposal.respondBy ? new Date(proposal.respondBy).getTime() : sessionStartMs;
                     const effectiveDeadline = new Date(Math.min(rawDeadlineMs, sessionStartMs)).toISOString();
 
                     return (
-                      <div className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
+                      <div key={proposal.id} className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
                           <div className="match-card-identity" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                             <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
@@ -2788,7 +2796,7 @@ export default function App() {
                           <div className="match-time-compare">
                             <div className="match-time-side">
                               <span className="match-time-side-label">Tú</span>
-                              <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, currentUser.tz)}</span>
+                              <span className="match-time-side-value">{slotToLocalLabel(proposal.slot, currentUser.tz)}</span>
                             </div>
                             <div className="match-time-divider" aria-hidden="true">
                               <Clock size={12} />
@@ -2796,7 +2804,7 @@ export default function App() {
                             {partnerMember && (
                               <div className="match-time-side match-time-side-right">
                                 <span className="match-time-side-label">{partnerName.split(' ')[0]}</span>
-                                <span className="match-time-side-value">{slotToLocalLabel(myProposal.slot, partnerMember.tz)}</span>
+                                <span className="match-time-side-value">{slotToLocalLabel(proposal.slot, partnerMember.tz)}</span>
                               </div>
                             )}
                           </div>
@@ -2819,16 +2827,16 @@ export default function App() {
                                 <Video size={14} /> Abrir Google Meet
                               </a>
                             ) : (
-                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => createProposalMeeting(myProposal)}>
+                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => createProposalMeeting(proposal)}>
                                 <Video size={14} /> Crear Meet de la dupla
                               </button>
                             )
                           ) : mySide === 'pendiente' ? (
                             <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className="attendance-btn attendance-btn-yes" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(myProposal, true)}>
+                              <button className="attendance-btn attendance-btn-yes" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(proposal, true)}>
                                 <Check size={14} /> Aceptar
                               </button>
-                              <button className="attendance-btn attendance-btn-no" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(myProposal, false)}>
+                              <button className="attendance-btn attendance-btn-no" style={{ flex: 1, justifyContent: 'center' }} onClick={() => respondToProposal(proposal, false)}>
                                 <X size={14} /> Rechazar
                               </button>
                             </div>
@@ -2841,7 +2849,9 @@ export default function App() {
                         </div>
                       </div>
                     );
-                  })()}
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Right Col: agenda de TODA la sala (no solo la propia). El
