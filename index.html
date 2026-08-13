@@ -277,6 +277,53 @@
             animation-play-state: paused;
         }
 
+        /* "Ingresar con Google" — pill shape + punto que pulsa/hace ripple
+           al hover, adaptado del efecto de botón sutil de 21st.dev a la
+           paleta de marca en vez de negro/ámbar. */
+        .btn-google {
+            border-radius: 9999px;
+            gap: 0.65rem;
+        }
+
+        .btn-google:active {
+            transform: scale(0.96);
+        }
+
+        .btn-google .btn-dot {
+            position: relative;
+            z-index: 2;
+            display: block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #ffffff;
+            transition: transform 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .btn-google:hover .btn-dot {
+            transform: scale(1.15);
+            box-shadow: 0 0 12px 2px rgba(255, 255, 255, 0.65);
+        }
+
+        .btn-google .btn-dot::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.55);
+            opacity: 0;
+            transform: scale(0.6);
+        }
+
+        .btn-google:hover .btn-dot::before {
+            animation: btnDotPing 1.6s ease-out infinite;
+        }
+
+        @keyframes btnDotPing {
+            0% { opacity: 0.55; transform: scale(0.6); }
+            75%, 100% { opacity: 0; transform: scale(1.9); }
+        }
+
         /* Hero Section */
         .hero {
             position: relative;
@@ -1105,9 +1152,10 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
                     </button>
                 </div>
-                <a href="/app" class="cta-button">
+                <a href="/app" class="cta-button btn-google">
                     <span class="cta-label-full">Ingresar con Google</span>
                     <span class="cta-label-short">Ingresar</span>
+                    <span class="btn-dot" aria-hidden="true"></span>
                 </a>
             </div>
         </div>
