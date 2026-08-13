@@ -174,7 +174,29 @@ const buildWeeklyPairs = (
 
 // --- Corrida principal ---
 
+// CORS: el cliente llama a esta función directo desde el navegador
+// (triggerWeeklyMatcher en App.jsx, con ?room= y Authorization: Bearer). Al
+// llevar un header custom, el navegador manda antes un preflight OPTIONS; sin
+// responderlo con estos headers, el fetch fallaba SIEMPRE de forma silenciosa
+// (quedaba tapado por el try/catch de triggerWeeklyMatcher) y solo el cron
+// cada 10 min terminaba emparejando. Solo se admite el origen de producción:
+// reflejar cualquier Origin sería tan abierto como no tener CORS.
+const ALLOWED_ORIGINS = new Set([
+  'https://sales-arena-matcher.com',
+  'https://www.sales-arena-matcher.com'
+]);
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  'Access-Control-Allow-Origin': origin && ALLOWED_ORIGINS.has(origin) ? origin : '',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-cron-secret',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Vary': 'Origin'
+});
+
 Deno.serve(async (req) => {
+  const cors = corsHeaders(req.headers.get('Origin'));
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: cors });
+  }
   try {
     // --- AUTORIZACIÓN ---
     // Hay dos llamadores legítimos y se tratan distinto:
@@ -205,7 +227,7 @@ Deno.serve(async (req) => {
       console.warn(`Rejected weekly-matcher run: ${reason}`);
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        { status: 401, headers: { 'Content-Type': 'application/json', ...cors } }
       );
     };
 
@@ -552,12 +574,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ ok: true, week, created: summary }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...cors }
     });
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err) }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...cors }
     });
   }
 });
