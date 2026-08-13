@@ -279,6 +279,38 @@ const getRoomIdFromUrl = () => {
   return match ? match[1] : null;
 };
 
+// Nombre de sala → slug de la URL. Vivía duplicado carácter por carácter en
+// handleRenameRoom y handleCreateRoom: si las dos copias se desincronizaban,
+// crear y renombrar generaban enlaces distintos para el mismo nombre.
+const slugifyRoomName = (name) =>
+  name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // quita tildes
+    .replace(/[^a-z0-9\s-]/g, '')    // quita símbolos
+    .trim()
+    .replace(/\s+/g, '-');
+
+// join_room señala cada motivo de rechazo con un código propio. Se traducen a
+// un mensaje que le diga a la persona qué hacer, en vez de mostrarle el texto
+// crudo de Postgres.
+const joinRoomErrorMessage = (error) => {
+  const raw = `${error?.message || ''} ${error?.details || ''}`;
+  if (raw.includes('INVALID_CODE')) {
+    return 'El enlace de invitación no es válido o fue renovado. Pedile a quien administra la sala que te comparta el enlace actual.';
+  }
+  if (raw.includes('ROOM_CLOSED')) {
+    return 'Esta sala todavía no tiene invitaciones habilitadas. Pedile el enlace a quien la administra.';
+  }
+  if (raw.includes('ROOM_NOT_FOUND')) {
+    return 'Esta sala todavía no fue creada. Pedile el enlace correcto a quien administra la plataforma.';
+  }
+  if (raw.includes('AUTH_REQUIRED')) {
+    return 'Tu sesión venció antes de completar el registro. Volvé a iniciar sesión con Google.';
+  }
+  return 'No pudimos completar tu registro. Volvé a intentarlo en un momento.';
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -290,7 +322,28 @@ export default function App() {
     }
     return roomId;
   });
-  
+
+  // Código de acceso que venía en el enlace de invitación (?code=...). Se lee
+  // una sola vez, al abrir la página, y se guarda en sessionStorage porque el
+  // login con Google sale del sitio y vuelve a una URL limpia: sin persistirlo,
+  // el código se perdería justo antes de necesitarlo para el alta.
+  const [inviteCode] = useState(() => {
+    const storageKey = `salesarena-invite:${getRoomIdFromUrl() || 'grupo-a'}`;
+    const fromUrl = new URLSearchParams(window.location.search).get('code');
+    if (fromUrl) {
+      const clean = fromUrl.trim().toUpperCase();
+      try { sessionStorage.setItem(storageKey, clean); } catch { /* modo privado */ }
+      // Se saca de la barra de direcciones para que no quede a la vista ni se
+      // comparta por accidente al copiar la URL.
+      const url = new URL(window.location.href);
+      url.searchParams.delete('code');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+      return clean;
+    }
+    try { return sessionStorage.getItem(storageKey) || ''; } catch { return ''; }
+  });
+
+
   // Tema (light | dark | system)
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('salesarena-theme') || 'system';
@@ -322,6 +375,14 @@ export default function App() {
   const [newRoomNameInput, setNewRoomNameInput] = useState('');
   const [renameRoomInput, setRenameRoomInput] = useState('');
 
+  // Dueño de la sala (rooms.founder_email), en minúsculas. Define quién ve los
+  // controles de administración; la autorización real la hace RLS.
+  const [roomFounderEmail, setRoomFounderEmail] = useState(null);
+
+  // Código de acceso de la sala. Solo se pide a la base cuando quien mira la
+  // administra: get_room_access_code() rechaza a cualquier otro.
+  const [roomAccessCode, setRoomAccessCode] = useState('');
+
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('salesarena-user');
@@ -351,6 +412,20 @@ export default function App() {
   // true mientras se hace el fetch inicial a Supabase (members/proposals/meetings) de la sala.
   // Evita mostrar "Aún sin compañero asignado" como si fuera un hecho antes de que llegue el dato real.
   const [isRoomDataLoading, setIsRoomDataLoading] = useState(!useMockDb);
+
+  // Email de la sesión de Supabase ya confirmada, o null si todavía no hay
+  // ninguna. Los datos de la sala solo son legibles para miembros autenticados
+  // (RLS), así que el fetch tiene que esperar a que el JWT exista: si se
+  // dispara antes, las consultas vuelven vacías y la sala se ve como si no
+  // tuviera miembros. No alcanza con `currentUser`, que se rehidrata de
+  // localStorage antes de que Supabase restaure la sesión.
+  const [sessionEmail, setSessionEmail] = useState(null);
+
+  // Se incrementa cuando el alta de un miembro nuevo termina. Recién en ese
+  // momento la persona pasa a ser miembro de la sala, y por lo tanto recién
+  // entonces las políticas RLS le dejan leer los datos: sin este disparo, quien
+  // se registra por primera vez vería la sala vacía hasta recargar la página.
+  const [roomDataVersion, setRoomDataVersion] = useState(0);
 
   // Tick por minuto: hace aparecer el prompt de asistencia cuando una sesión
   // termina con la página abierta, sin necesidad de recargar
@@ -659,9 +734,15 @@ export default function App() {
     })]);
   }, [members, availabilities, currentUser, proposals]);
 
-  // Quien administra: única cuenta habilitada para crear salas y para sacar
-  // miembros. Se calcula una vez porque lo consultan varias acciones y la UI.
+  // Administrador de la plataforma: única cuenta habilitada para crear salas.
   const isAdmin = currentUser?.email?.toLowerCase() === ADMIN_EMAIL;
+
+  // Quien administra ESTA sala: el admin de plataforma o quien la creó
+  // (rooms.founder_email). Es el mismo criterio que aplica la base de datos en
+  // is_room_admin(); acá se replica solo para mostrar u ocultar los controles,
+  // porque la autorización real la hace la política RLS, no la pantalla.
+  const isRoomAdmin = isAdmin ||
+    (!!roomFounderEmail && roomFounderEmail === currentUser?.email?.toLowerCase());
 
   // Confiabilidad y sanciones: la lógica vive en src/reliability.js (módulo puro
   // y testeado). Acá quedan solo los envoltorios que le pasan el estado actual
@@ -724,6 +805,20 @@ export default function App() {
   useEffect(() => {
     if (useMockDb) return;
 
+    // Sin sesión no hay nada que traer: las políticas RLS solo abren los datos
+    // de la sala a sus miembros autenticados, y la pantalla de login no muestra
+    // ninguno de estos datos. Se limpia lo que hubiera quedado en memoria de
+    // una sesión anterior para no mostrar datos ajenos tras cerrar sesión.
+    if (!sessionEmail) {
+      setMembers([]);
+      setAvailabilities([]);
+      setTemplates([]);
+      setMeetings([]);
+      setAttendances([]);
+      setIsRoomDataLoading(false);
+      return;
+    }
+
     const loadSupabaseData = async () => {
       setIsRoomDataLoading(true);
       // 1. Fetch Room. Esta consulta es solo de lectura: ninguna sala se crea
@@ -740,9 +835,11 @@ export default function App() {
         const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
         setRoomName(defaultName);
         setRenameRoomInput(defaultName);
+        setRoomFounderEmail(null);
       } else {
         setRoomName(roomData.name);
         setRenameRoomInput(roomData.name);
+        setRoomFounderEmail(roomData.founder_email?.toLowerCase() || null);
       }
 
       // 2. Fetch Members
@@ -832,7 +929,7 @@ export default function App() {
     };
 
     loadSupabaseData();
-  }, [currentRoomId]);
+  }, [currentRoomId, sessionEmail, roomDataVersion]);
 
   // Fila de members → objeto de usuario de la app
   const memberFromRow = (row) => ({
@@ -877,15 +974,18 @@ export default function App() {
     const initAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        setSessionEmail(session?.user?.email ?? null);
         if (session?.user) await processSession(session);
       } catch (err) {
         console.error('Error inicializando la sesión:', err);
+        setSessionEmail(null);
       }
     };
 
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSessionEmail(session?.user?.email ?? null);
       if (session?.user) {
         await processSession(session);
       } else if (!session) {
@@ -915,33 +1015,28 @@ export default function App() {
       if (existing) {
         applyLoggedInUser(memberFromRow(existing));
       } else {
-        // Usuario nuevo: verificar primero si la sala existe. Ninguna sala se
-        // crea por el simple hecho de que alguien visite su URL: solo se
-        // crea acá si quien inicia sesión es el administrador (bootstrap de
-        // una sala nueva); cualquier otra persona recibe un aviso en vez de
-        // quedar registrada en una sala que nadie creó.
-        const { data: roomRow } = await supabase
-          .from('rooms')
-          .select('id')
-          .eq('id', currentRoomId)
-          .maybeSingle();
+        // Bootstrap de sala nueva: solo el administrador puede crear una sala
+        // por el hecho de visitar su URL. Para cualquier otra persona, si la
+        // sala no existe join_room corta el alta con ROOM_NOT_FOUND.
+        if (email.toLowerCase() === ADMIN_EMAIL) {
+          const { data: roomRow } = await supabase
+            .from('rooms')
+            .select('id')
+            .eq('id', currentRoomId)
+            .maybeSingle();
 
-        if (!roomRow && email.toLowerCase() !== ADMIN_EMAIL) {
-          setLoginError('Esta sala todavía no fue creada. Pedile el enlace correcto a quien administra la plataforma.');
-          setIsLoggedIn(false);
-          await supabase.auth.signOut();
-          return;
+          if (!roomRow) {
+            const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
+            await supabase.from('rooms')
+              .insert({ id: currentRoomId, name: defaultName, founder_email: email.toLowerCase() });
+            setRoomName(defaultName);
+            setRenameRoomInput(defaultName);
+          }
         }
 
-        if (!roomRow) {
-          const defaultName = `Sala ${currentRoomId.charAt(0).toUpperCase() + currentRoomId.slice(1)}`;
-          await supabase.from('rooms').insert({ id: currentRoomId, name: defaultName });
-          setRoomName(defaultName);
-          setRenameRoomInput(defaultName);
-        }
-
-        // Auto-registro directo: nombre de la cuenta de Google (o derivado del
-        // email si Google no lo trae) y país/zona horaria del navegador.
+        // Alta validada contra el código de acceso de la sala (ver join_room).
+        // Nombre de la cuenta de Google —o derivado del email si Google no lo
+        // trae— y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
           session.user.user_metadata?.name || nameFromEmail(email)).trim();
         await registerMember(googleName, guessCountryFromBrowserTz(), email);
@@ -1296,38 +1391,35 @@ export default function App() {
     };
 
     if (!useMockDb) {
-      const { error } = await supabase.from('members').insert({
-        room_id: currentRoomId,
-        email: newUser.email,
-        name: newUser.name,
-        country: newUser.country,
-        timezone: newUser.tz,
-        active: newUser.active
+      // El alta pasa por join_room y no por un INSERT directo: la función
+      // valida el código de acceso de la sala antes de dar de alta a nadie, y
+      // es idempotente si la persona ya era miembro (doble callback de OAuth,
+      // dos pestañas abiertas).
+      const { data, error } = await supabase.rpc('join_room', {
+        p_room_id: currentRoomId,
+        p_access_code: inviteCode || null,
+        p_name: newUser.name,
+        p_country: newUser.country,
+        p_timezone: newUser.tz
       });
+
       if (error) {
-        // 23505 = unique_violation sobre (room_id, email): la persona YA es
-        // miembro de la sala (otra pestaña, un doble callback de OAuth). No es
-        // un alta fallida: se recupera la fila existente y se sigue con el
-        // login en vez de mostrar el error crudo de Postgres.
-        if (error.code === '23505') {
-          const { data: existing } = await supabase
-            .from('members')
-            .select('*')
-            .eq('room_id', currentRoomId)
-            .ilike('email', escapeLikeLiteral(newUser.email))
-            .maybeSingle();
-          if (existing) {
-            const existingUser = memberFromRow(existing);
-            setMembers(prev => prev.some(m => m.email.toLowerCase() === existingUser.email.toLowerCase())
-              ? prev.map(m => m.email.toLowerCase() === existingUser.email.toLowerCase() ? existingUser : m)
-              : [...prev, existingUser]);
-            applyLoggedInUser(existingUser);
-            return true;
-          }
-        }
-        showNotification('Error al registrar perfil en Supabase: ' + error.message);
+        setLoginError(joinRoomErrorMessage(error));
+        setIsLoggedIn(false);
+        await supabase.auth.signOut();
         return false;
       }
+
+      // join_room devuelve la fila real de members (la recién creada o la que
+      // ya existía), así que es la fuente de verdad del perfil.
+      const joined = data ? memberFromRow(data) : newUser;
+      setMembers(prev => prev.some(m => m.email.toLowerCase() === joined.email.toLowerCase())
+        ? prev.map(m => m.email.toLowerCase() === joined.email.toLowerCase() ? joined : m)
+        : [...prev, joined]);
+      applyLoggedInUser(joined);
+      setRoomDataVersion(v => v + 1);
+      showNotification(`¡Bienvenido a Sales Arena Matcher, ${joined.name}!`);
+      return true;
     }
 
     setMembers(prev => {
@@ -1359,47 +1451,43 @@ export default function App() {
     e.preventDefault();
     if (!renameRoomInput.trim()) return;
 
-    const nextName = renameRoomInput.trim();
-    const newSlug = nextName.toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // remove accents
-      .replace(/[^a-z0-9\s-]/g, '') // remove special chars
-      .trim()
-      .replace(/\s+/g, '-');
-
-    if (!newSlug) {
-      showNotification('Nombre de sala inválido.');
+    if (!isRoomAdmin) {
+      showNotification('Solo quien administra la sala puede renombrarla.', 'error');
       return;
     }
 
+    const nextName = renameRoomInput.trim();
+    const newSlug = slugifyRoomName(nextName);
+
+    if (!newSlug) {
+      showNotification('Ese nombre no genera un enlace válido. Usá al menos una letra o un número.', 'error');
+      return;
+    }
+
+    const previousName = roomName;
     setRoomName(nextName);
 
     if (!useMockDb) {
-      if (newSlug !== currentRoomId) {
-        // El nuevo slug no puede pisar una sala existente y distinta: si ya
-        // hay una sala con ese nombre, renombrar fusionaría ambas sin avisar.
-        const { data: collision } = await supabase.from('rooms').select('id').eq('id', newSlug).maybeSingle();
-        if (collision) {
+      // Renombrar mueve la sala entera a un slug nuevo (miembros, horarios,
+      // plantillas, reuniones, asistencia y propuestas). Va por rename_room
+      // para que ocurra en UNA transacción: antes eran seis escrituras sueltas
+      // y un corte de red a mitad de camino partía la sala entre dos slugs.
+      const { error } = await supabase.rpc('rename_room', {
+        p_room_id: currentRoomId,
+        p_new_slug: newSlug,
+        p_new_name: nextName
+      });
+      if (error) {
+        const raw = `${error.message || ''} ${error.details || ''}`;
+        setRoomName(previousName);
+        if (raw.includes('SLUG_TAKEN')) {
           showNotification(`Ya existe una sala con el nombre "${nextName}". Elegí otro nombre.`, 'error');
-          setRoomName(roomName);
-          return;
+        } else if (raw.includes('NOT_ROOM_ADMIN')) {
+          showNotification('Solo quien administra la sala puede renombrarla.', 'error');
+        } else {
+          showNotification('No pudimos renombrar la sala. Intentá de nuevo en un momento.', 'error');
         }
-        // 1. Crear la nueva sala con el slug correcto
-        await supabase.from('rooms').insert({ id: newSlug, name: nextName });
-        // 2. Migrar los registros vinculados a la nueva sala. members va
-        //    PRIMERO: las políticas RLS de escritura exigen ser miembro de la
-        //    sala destino, así que la membresía debe migrar antes que el resto.
-        await supabase.from('members').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        await supabase.from('availabilities').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        await supabase.from('templates').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        await supabase.from('meetings').update({ room_id: newSlug }).eq('room_id', currentRoomId);
-        // 3. Eliminar la sala antigua si no es la sala por defecto (la política
-        //    permite borrar salas que quedaron sin miembros)
-        if (currentRoomId !== 'grupo-a') {
-          await supabase.from('rooms').delete().eq('id', currentRoomId);
-        }
-      } else {
-        await supabase.from('rooms').update({ name: nextName }).eq('id', currentRoomId);
+        return;
       }
     }
 
@@ -1422,12 +1510,7 @@ export default function App() {
     if (!newRoomNameInput.trim()) return;
 
     const rawName = newRoomNameInput.trim();
-    const slug = rawName.toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // remove accents
-      .replace(/[^a-z0-9\s-]/g, '') // remove special chars
-      .trim()
-      .replace(/\s+/g, '-'); // replace spaces with hyphens
+    const slug = slugifyRoomName(rawName);
 
     if (!slug) {
       showNotification('Nombre de sala inválido.');
@@ -1441,9 +1524,16 @@ export default function App() {
         showNotification(`Ya existe una sala con el nombre "${rawName}". Elegí otro nombre.`, 'error');
         return;
       }
-      const { error } = await supabase.from('rooms').insert({ id: slug, name: rawName });
+      // founder_email deja registrado quién administra la sala: es lo que leen
+      // las políticas RLS para autorizar renombrarla, eliminarla o sacar
+      // miembros. Sin esto, la sala nueva no tendría dueño.
+      const { error } = await supabase.from('rooms').insert({
+        id: slug,
+        name: rawName,
+        founder_email: currentUser.email.toLowerCase()
+      });
       if (error) {
-        showNotification('Error al crear sala en base de datos: ' + error.message);
+        showNotification('No pudimos crear la sala. Revisá el nombre e intentá de nuevo.', 'error');
         return;
       }
     }
@@ -1461,13 +1551,18 @@ export default function App() {
       return;
     }
 
+    if (!isRoomAdmin) {
+      showNotification('Solo quien administra la sala puede eliminarla.', 'error');
+      return;
+    }
+
     const confirmed = await showConfirm(`¿Eliminar la sala "${roomName}"? Se borrarán todos los miembros, disponibilidades y reuniones guardadas en ella. Esta acción no se puede deshacer.`);
     if (!confirmed) return;
 
     if (!useMockDb) {
       const { error } = await supabase.from('rooms').delete().eq('id', currentRoomId);
       if (error) {
-        showNotification('Error al eliminar sala: ' + error.message);
+        showNotification('No pudimos eliminar la sala. Intentá de nuevo en un momento.', 'error');
         return;
       }
     }
@@ -1479,21 +1574,56 @@ export default function App() {
   };
 
   // El enlace de invitación apunta SIEMPRE al id real de la sala (no al nombre
-  // slugificado, que puede diferir en salas con nombre por defecto)
+  // slugificado, que puede diferir en salas con nombre por defecto) y lleva el
+  // código de acceso: sin él, quien lo reciba no puede darse de alta (join_room
+  // lo exige). Por eso este enlace es lo único que hay que compartir.
   const buildInviteUrl = () => {
-    return `${window.location.origin}/room/${currentRoomId}`;
+    const base = `${window.location.origin}/room/${currentRoomId}`;
+    return roomAccessCode ? `${base}?code=${encodeURIComponent(roomAccessCode)}` : base;
   };
 
-  const handleCopyRoomInvite = () => {
-    const inviteUrl = buildInviteUrl();
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(inviteUrl).then(() => {
-        showNotification(`Enlace de la sala "${roomName}" copiado:\n\n${inviteUrl}\n\nQuien entre con este link va directo al registro de esta sala.`, 'success');
-      }).catch(() => {
-        prompt('Copia el enlace para compartir tu sala:', inviteUrl);
+  // Trae el código de acceso al abrir la administración de la sala. Solo lo
+  // devuelve a quien administra; para el resto la función falla y el bloque
+  // queda oculto.
+  useEffect(() => {
+    if (useMockDb || !isRoomModalOpen || !isRoomAdmin) return;
+    let cancelled = false;
+    supabase.rpc('get_room_access_code', { p_room_id: currentRoomId })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setRoomAccessCode(error ? '' : (data || ''));
       });
-    } else {
-      prompt('Copia el enlace para compartir tu sala:', inviteUrl);
+    return () => { cancelled = true; };
+  }, [isRoomModalOpen, isRoomAdmin, currentRoomId]);
+
+  const handleRegenerateAccessCode = async () => {
+    const confirmed = await showConfirm(
+      'Al generar un código nuevo, los enlaces de invitación que ya compartiste dejan de funcionar. Quienes ya son miembros de la sala no se ven afectados. ¿Continuar?'
+    );
+    if (!confirmed) return;
+
+    const { data, error } = await supabase.rpc('rotate_room_access_code', { p_room_id: currentRoomId });
+    if (error) {
+      showNotification('No pudimos generar un código nuevo. Intentá de nuevo en un momento.', 'error');
+      return;
+    }
+    setRoomAccessCode(data || '');
+    showNotification('Código de acceso renovado. Compartí el enlace nuevo con quien quieras invitar.', 'success');
+  };
+
+  const handleCopyRoomInvite = async () => {
+    const inviteUrl = buildInviteUrl();
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      showNotification(
+        `Enlace de invitación de "${roomName}" copiado. Incluye el código de acceso, así que quien lo reciba entra directo; sin ese enlace nadie puede sumarse.`,
+        'success'
+      );
+    } catch {
+      // Sin permiso de portapapeles (o navegador viejo): se muestra el enlace
+      // con el resto de los avisos de la app, en vez de un prompt() nativo que
+      // rompía la consistencia visual del resto de los diálogos.
+      showNotification(`Copiá este enlace para invitar a tu equipo:\n\n${inviteUrl}`, 'info');
     }
   };
 
@@ -1501,6 +1631,21 @@ export default function App() {
   const handleAddMember = async (e) => {
     e.preventDefault();
     if (!newMemberName || !newMemberEmail) return;
+
+    // Dar de alta a otra persona a mano es una acción de administración: la
+    // política de INSERT de members la restringe a quien administra la sala.
+    if (!isRoomAdmin) {
+      showNotification('Solo quien administra la sala puede agregar miembros a mano. Compartí el enlace de invitación para que se registren.', 'error');
+      return;
+    }
+
+    const alreadyMember = members.some(
+      m => m.email.toLowerCase() === newMemberEmail.trim().toLowerCase()
+    );
+    if (alreadyMember) {
+      showNotification(`${newMemberEmail.trim()} ya forma parte de esta sala.`, 'error');
+      return;
+    }
 
     const finalCountry = newMemberCountry === 'Otro' ? customNewMemberCountry.trim() : newMemberCountry;
     const finalTz = resolveTimezone(finalCountry);
@@ -1526,7 +1671,12 @@ export default function App() {
         active: newMember.active
       });
       if (error) {
-        showNotification('Error al agregar en Supabase: ' + error.message);
+        showNotification(
+          error.code === '23505'
+            ? `${newMember.email} ya forma parte de esta sala.`
+            : 'No pudimos agregar a esa persona. Revisá el email e intentá de nuevo.',
+          'error'
+        );
         return;
       }
     }
@@ -1544,9 +1694,10 @@ export default function App() {
     }
 
     // Sacar a alguien de la sala es una acción sobre OTRA persona y no se puede
-    // deshacer: queda reservada a quien administra. Antes cualquier miembro
-    // podía eliminar a cualquier otro con un solo clic y sin confirmación.
-    if (currentUser.email.toLowerCase() !== ADMIN_EMAIL) {
+    // deshacer: queda reservada a quien administra. La base de datos aplica el
+    // mismo criterio (política "Admins remove members, members can leave"), así
+    // que este chequeo solo sirve para dar un mensaje claro antes de intentarlo.
+    if (!isRoomAdmin) {
       showNotification('Solo quien administra la sala puede eliminar miembros.', 'error');
       return;
     }
@@ -3714,12 +3865,14 @@ export default function App() {
                 <Share2 size={14} /> Compartir Enlace de la Sala
               </label>
               <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                Al enviar este enlace, cualquier nuevo integrante accederá al registro inicial específicamente vinculado a la sala <strong>{roomName}</strong>.
+                Este enlace lleva incluido el código de acceso de <strong>{roomName}</strong>: quien lo reciba entra directo.
+                Sin él, nadie puede sumarse aunque conozca la dirección de la sala.
               </p>
               <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                 <input
                   type="text"
                   readOnly
+                  aria-label="Enlace de invitación de la sala"
                   className="form-input"
                   value={buildInviteUrl()}
                   style={{ flex: 1, padding: '8px 12px', fontSize: '12px', color: 'var(--text-muted)', background: 'var(--bg-card)' }}
@@ -3730,10 +3883,32 @@ export default function App() {
                   className="btn btn-indigo"
                   style={{ padding: '8px 16px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <Copy size={14} />
+                  <Copy size={14} aria-hidden="true" />
                   Copiar
                 </button>
               </div>
+
+              {/* Código de acceso: solo lo ve quien administra la sala. */}
+              {isRoomAdmin && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Lock size={12} aria-hidden="true" />
+                    Código de acceso:
+                    <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
+                      {roomAccessCode || '········'}
+                    </strong>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-small"
+                    onClick={handleRegenerateAccessCode}
+                    title="Genera un código nuevo e invalida los enlaces ya compartidos"
+                    style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                  >
+                    <RefreshCw size={12} aria-hidden="true" /> Renovar
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Formulario 1: Renombrar Sala */}
