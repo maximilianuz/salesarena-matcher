@@ -335,13 +335,6 @@ Deno.serve(async (req) => {
       const blocked = new Set<string>();
       for (const [email, count] of faltasMes) if (count >= 3) blocked.add(email);
 
-      // Parejas con propuesta viva (propuesto/confirmado): no se pueden emparejar de nuevo esta semana
-      // PERO un miembro puede tener múltiples propuestas con DIFERENTES personas.
-      const existingPairs = new Set<string>(
-        (weekProposals || [])
-          .filter(p => p.status === 'propuesto' || p.status === 'confirmado')
-          .map(p => [p.member_a_email.toLowerCase(), p.member_b_email.toLowerCase()].sort().join('|'))
-      );
       // Parejas que NO se pueden repetir esta semana:
       // - RECHAZADO: exclusión DURA (se respeta el "no")
       // - CANCELADO: no se re-ofrece esta semana
