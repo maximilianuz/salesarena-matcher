@@ -105,6 +105,28 @@ test('computeSlotSets: el email manda sobre el nombre cuando difieren', () => {
   assert.deepEqual([...sets.get('ana@x.com')], [24 + 8]);
 });
 
+test('computeSlotSets: filas sin dueño ante homónimos no se atribuyen a uno solo', () => {
+  // Caso que deja el backfill conservador: dos personas con el mismo nombre y
+  // filas viejas sin member_email. Resolver por nombre se las adjudica a AMBAS,
+  // que es lo que hace que una vea horarios de la otra. El código que borra por
+  // nombre debe abstenerse en este caso (hasHomonymInRoom en App.jsx); acá se
+  // fija la consecuencia visible: la fila ambigua no pertenece a nadie en
+  // exclusiva y quien ya tiene email conserva SOLO lo suyo.
+  const members = [
+    { email: 'ana1@x.com', name: 'Ana Pérez', tz: 'UTC' },
+    { email: 'ana2@y.com', name: 'Ana Pérez', tz: 'UTC' }
+  ];
+  const avails = [
+    { memberEmail: 'ana1@x.com', user: 'Ana Pérez', dayIdx: 0, startHour: 9, endHour: 10 },
+    { memberEmail: null, user: 'Ana Pérez', dayIdx: 5, startHour: 20, endHour: 21 }
+  ];
+  const sets = computeSlotSets(members, avails);
+  // ana1 tiene su bloque propio y además hereda el ambiguo (resuelto por nombre)
+  assert.deepEqual([...sets.get('ana1@x.com')].sort((a, b) => a - b), [9, 5 * 24 + 20]);
+  // ana2 solo ve el ambiguo: no se quedó con el bloque que es de ana1
+  assert.deepEqual([...sets.get('ana2@y.com')], [5 * 24 + 20]);
+});
+
 test('computeSlotSets: sin memberEmail se sigue resolviendo por nombre', () => {
   // Compatibilidad con las filas anteriores a la columna: mientras no tengan
   // dueño resuelto, el nombre sigue siendo el único vínculo disponible.

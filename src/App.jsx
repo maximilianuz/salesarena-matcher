@@ -884,7 +884,11 @@ export default function App() {
       } else {
         // Borrar horarios semanales (también en la DB: antes solo se limpiaba
         // el estado local y las marcas "volvían" al recargar la página)
-        await replaceMyAvailability([]);
+        const clearError = await replaceMyAvailability([]);
+        if (clearError) {
+          setWizardStatus({ type: 'error', msg: clearError });
+          return;
+        }
         const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
         setAvailabilities(cleanAvail);
         setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
@@ -894,6 +898,19 @@ export default function App() {
         }, 2000);
       }
     }, 1000);
+  };
+
+  // ¿Hay otra persona en la sala que se llame igual que esta? Mientras existan
+  // filas de horarios sin dueño resuelto (las anteriores a member_email), el
+  // nombre no alcanza para saber de quién son, así que las operaciones que
+  // borran por nombre tienen que abstenerse.
+  const hasHomonymInRoom = (member) => {
+    if (!member?.name) return false;
+    const name = member.name.toLowerCase();
+    const email = (member.email || '').toLowerCase();
+    return members.some(m =>
+      m.email.toLowerCase() !== email && (m.name || '').toLowerCase() === name
+    );
   };
 
   // Reemplaza en la base TODA la disponibilidad de quien está logueado por el
@@ -921,12 +938,20 @@ export default function App() {
     // 2) Las filas anteriores a member_email, que solo se pueden reconocer por
     //    nombre. Sin este paso quedarían duplicando los bloques nuevos y
     //    seguirían pintando el mapa de calor.
-    const { error: delLegacy } = await supabase.from('availabilities')
-      .delete()
-      .eq('room_id', currentRoomId)
-      .is('member_email', null)
-      .ilike('user', escapeLikeLiteral(currentUser.name));
-    if (delLegacy) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
+    //
+    //    Se omite si hay un homónimo en la sala: esas filas sin dueño podrían
+    //    ser de cualquiera de los dos y borrarlas por nombre le vaciaría la
+    //    agenda al otro, que es exactamente el problema que se vino a resolver.
+    //    Quedan como están y se resuelven solas cuando cada quien guarde: desde
+    //    ese momento sus filas llevan email y dejan de ser ambiguas.
+    if (!hasHomonymInRoom(currentUser)) {
+      const { error: delLegacy } = await supabase.from('availabilities')
+        .delete()
+        .eq('room_id', currentRoomId)
+        .is('member_email', null)
+        .ilike('user', escapeLikeLiteral(currentUser.name));
+      if (delLegacy) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
+    }
 
     if (rules.length === 0) return null;
 
@@ -1048,6 +1073,11 @@ export default function App() {
         const current = hours[k];
         if (current === undefined || current !== prev + 1) {
           newRules.push({
+            // memberEmail acompaña a la regla desde que se crea, no solo al
+            // guardarla: el estado local se arma con estos mismos objetos y sin
+            // el email volvería a resolverse por nombre, reintroduciendo el
+            // cruce entre homónimos hasta la próxima recarga.
+            memberEmail: currentUser.email.toLowerCase(),
             user: currentUser.name,
             dayIdx: d,
             startHour: start,
@@ -1074,17 +1104,20 @@ export default function App() {
     if (saveAsTemplate) {
       if (!useMockDb) {
         const myEmail = currentUser.email.toLowerCase();
-        // Mismos dos pasos que en replaceMyAvailability: por email para lo
-        // nuevo, por nombre para las filas anteriores a member_email.
+        // Mismos dos pasos que en replaceMyAvailability, incluida la salvedad
+        // del homónimo: las filas sin dueño resuelto no se borran por nombre si
+        // hay otra persona en la sala que se llama igual.
         await supabase.from('templates')
           .delete()
           .eq('room_id', currentRoomId)
           .eq('member_email', myEmail);
-        await supabase.from('templates')
-          .delete()
-          .eq('room_id', currentRoomId)
-          .is('member_email', null)
-          .ilike('user', escapeLikeLiteral(currentUser.name));
+        if (!hasHomonymInRoom(currentUser)) {
+          await supabase.from('templates')
+            .delete()
+            .eq('room_id', currentRoomId)
+            .is('member_email', null)
+            .ilike('user', escapeLikeLiteral(currentUser.name));
+        }
         if (newRules.length > 0) {
           const { error: tplError } = await supabase.from('templates').insert(
             newRules.map(r => ({
@@ -1508,23 +1541,28 @@ export default function App() {
       // base: volvían al recargar, inflaban el contador de bloques y los
       // heredaba cualquiera que se registrara después con el mismo nombre.
       if (memberObj) {
-        // Se limpia por email (vínculo estable) y también por nombre para las
-        // filas anteriores a member_email. Antes solo se borraba por nombre, así
-        // que los horarios de un homónimo podían irse junto con los de esta
-        // persona.
+        // Se limpia por email, que es el vínculo estable. Las filas anteriores
+        // a member_email solo se pueden reconocer por nombre, así que se
+        // barren únicamente cuando nadie más en la sala se llama igual: si hay
+        // un homónimo, esas filas podrían ser suyas y borrarlas le vaciaría la
+        // agenda a alguien que sigue en la sala.
         const targetEmail = emailToDelete.toLowerCase();
         const orphanCleanup = [
           supabase.from('availabilities').delete()
             .eq('room_id', currentRoomId).eq('member_email', targetEmail),
           supabase.from('templates').delete()
-            .eq('room_id', currentRoomId).eq('member_email', targetEmail),
-          supabase.from('availabilities').delete()
-            .eq('room_id', currentRoomId).is('member_email', null)
-            .ilike('user', escapeLikeLiteral(memberObj.name)),
-          supabase.from('templates').delete()
-            .eq('room_id', currentRoomId).is('member_email', null)
-            .ilike('user', escapeLikeLiteral(memberObj.name))
+            .eq('room_id', currentRoomId).eq('member_email', targetEmail)
         ];
+        if (!hasHomonymInRoom(memberObj)) {
+          orphanCleanup.push(
+            supabase.from('availabilities').delete()
+              .eq('room_id', currentRoomId).is('member_email', null)
+              .ilike('user', escapeLikeLiteral(memberObj.name)),
+            supabase.from('templates').delete()
+              .eq('room_id', currentRoomId).is('member_email', null)
+              .ilike('user', escapeLikeLiteral(memberObj.name))
+          );
+        }
         const results = await Promise.all(orphanCleanup);
         const failed = results.find(r => r.error);
         if (failed) {
@@ -1569,14 +1607,25 @@ export default function App() {
 
     if (!nextActiveState) {
       // Limpiar horarios semanales (evitar falsos positivos de reuniones vacías)
-      await replaceMyAvailability([]);
+      const clearError = await replaceMyAvailability([]);
+      if (clearError) {
+        showNotification(clearError, 'error');
+        return;
+      }
       setAvailabilities(prev => prev.filter(a => !ruleBelongsTo(a, currentUser)));
       showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
     } else {
       // Cargar disponibilidad desde la plantilla habitual
       const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
 
-      await replaceMyAvailability(userTemplateRules);
+      // Si el guardado falla no se puede avisar "participación activada": el
+      // borrado ya corrió, así que la persona quedaría activa y sin ningún
+      // horario cargado, viendo en pantalla una agenda que no existe en la base.
+      const activateError = await replaceMyAvailability(userTemplateRules);
+      if (activateError) {
+        showNotification(activateError, 'error');
+        return;
+      }
 
       setAvailabilities(prev => [...prev, ...userTemplateRules]);
       showNotification('¡Participación activada! Hemos cargado tus horarios semanales desde tu plantilla base.');
@@ -3636,7 +3685,13 @@ export default function App() {
               </button>
             </div>
 
-            {/* Sección de Compartir Enlace de la Sala */}
+            {/* Compartir enlace: solo para quien administra la sala. El enlace
+                sirve porque lleva el código de acceso, y ese código únicamente
+                se le entrega a quien administra (get_room_access_code). Si el
+                bloque estuviera visible para cualquier miembro, copiaría un
+                enlace sin código y quien lo recibiera sería rechazado, mientras
+                el texto le asegura lo contrario. */}
+            {isRoomAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '18px' }}>
               <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Share2 size={14} /> Compartir Enlace de la Sala
@@ -3665,28 +3720,26 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Código de acceso: solo lo ve quien administra la sala. */}
-              {isRoomAdmin && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Lock size={12} aria-hidden="true" />
-                    Código de acceso:
-                    <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
-                      {roomAccessCode || '········'}
-                    </strong>
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-small"
-                    onClick={handleRegenerateAccessCode}
-                    title="Genera un código nuevo e invalida los enlaces ya compartidos"
-                    style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
-                  >
-                    <RefreshCw size={12} aria-hidden="true" /> Renovar
-                  </button>
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
+                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Lock size={12} aria-hidden="true" />
+                  Código de acceso:
+                  <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
+                    {roomAccessCode || '········'}
+                  </strong>
+                </span>
+                <button
+                  type="button"
+                  className="btn-small"
+                  onClick={handleRegenerateAccessCode}
+                  title="Genera un código nuevo e invalida los enlaces ya compartidos"
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <RefreshCw size={12} aria-hidden="true" /> Renovar
+                </button>
+              </div>
             </div>
+            )}
 
             {/* Formulario 1: Renombrar Sala */}
             <form onSubmit={handleRenameRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>

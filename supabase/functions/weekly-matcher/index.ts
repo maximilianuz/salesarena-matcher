@@ -188,33 +188,62 @@ Deno.serve(async (req) => {
     //
     //   2. El cliente, al cambiar la disponibilidad, con ?room=<id>. Esa forma
     //      SÍ es dirigida (elige sobre qué sala actuar) y por eso exige sesión
-    //      válida: antes cualquiera podía forzar corridas sobre una sala ajena.
+    //      válida Y pertenencia a esa sala: no alcanza con estar logueado, o
+    //      cualquier usuario podría forzar corridas sobre una sala ajena.
     //
-    // Si CRON_SECRET está configurado, vale como credencial para ambas formas.
+    // Si CRON_SECRET está configurado, vale como credencial para ambas formas y
+    // ADEMÁS pasa a exigirse en la pasada global. Mientras no se configure, la
+    // global queda abierta (comportamiento actual). Si se configura, hay que
+    // agregar el header x-cron-secret al cron o dejará de correr.
     const cronSecret = Deno.env.get('CRON_SECRET');
     const hasCronSecret = !!cronSecret && req.headers.get('x-cron-secret') === cronSecret;
 
     const url = new URL(req.url);
     const onlyRoom = url.searchParams.get('room');
 
-    if (onlyRoom && !hasCronSecret) {
-      // El token del usuario viaja en Authorization: Bearer <jwt>. getUser lo
-      // valida contra Supabase; un token ausente, vencido o falso no pasa.
-      const authHeader = req.headers.get('Authorization') || '';
-      const token = authHeader.toLowerCase().startsWith('bearer ')
-        ? authHeader.slice(7).trim()
-        : '';
-      const { data: userData } = token
-        ? await supabase.auth.getUser(token)
-        : { data: { user: null } };
+    const unauthorized = (reason: string) => {
+      console.warn(`Rejected weekly-matcher run: ${reason}`);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    };
 
-      if (!userData?.user) {
-        console.warn('Rejected targeted run: missing or invalid user session');
-        return new Response(
-          JSON.stringify({ error: 'Unauthorized' }),
-          { status: 401, headers: { 'Content-Type': 'application/json' } }
-        );
+    // El token del usuario viaja en Authorization: Bearer <jwt>. getUser lo
+    // valida contra Supabase; un token ausente, vencido o falso no pasa.
+    const authHeader = req.headers.get('Authorization') || '';
+    const bearer = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : '';
+    const { data: userData } = bearer
+      ? await supabase.auth.getUser(bearer)
+      : { data: { user: null } };
+    const callerEmail = userData?.user?.email?.toLowerCase() || null;
+
+    if (onlyRoom) {
+      if (!hasCronSecret) {
+        if (!callerEmail) return unauthorized('targeted run without a valid session');
+
+        // Estar logueado no basta: hay que ser miembro de ESA sala.
+        // El email se compara sin distinguir mayúsculas porque el alta manual
+        // lo guarda tal cual se escribió, y se escapan los comodines de LIKE:
+        // el guion bajo es válido en un email y en ILIKE significa "cualquier
+        // carácter", así que sin escapar podría dar por buena a otra persona.
+        const { data: membership } = await supabase
+          .from('members')
+          .select('email')
+          .eq('room_id', onlyRoom)
+          .ilike('email', callerEmail.replace(/[\\%_]/g, '\\$&'))
+          .maybeSingle();
+
+        if (!membership) {
+          return unauthorized(`caller is not a member of room ${onlyRoom}`);
+        }
       }
+    } else if (cronSecret && !hasCronSecret && !callerEmail) {
+      // Pasada global con secreto configurado: se exige el secreto (cron) o una
+      // sesión válida (cliente).
+      return unauthorized('global run without cron secret or session');
     }
 
     const now = new Date();
