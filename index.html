@@ -638,56 +638,233 @@
         }
 
         .how-it-works h2 {
-            text-align: center;
             font-size: 2.25rem;
-            margin-bottom: 3rem;
+            margin-bottom: 0.35rem;
         }
 
-        .steps {
+        .vtabs-eyebrow {
+            display: block;
+            font-size: 0.65rem;
+            font-weight: 600;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: var(--text-light);
+            margin-bottom: 2.5rem;
+        }
+
+        .vtabs {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 2rem;
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+            align-items: start;
         }
 
-        .step {
-            text-align: center;
-            padding: 2rem;
-            border-radius: 1rem;
-            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        .vtabs-list {
+            order: 2;
         }
 
-        .step:hover {
-            transform: translateY(-4px);
+        .vtabs-gallery-col {
+            order: 1;
         }
 
-        .step-number {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 50px;
-            height: 50px;
+        @media (min-width: 1024px) {
+            .vtabs {
+                grid-template-columns: 5fr 7fr;
+                gap: 3.5rem;
+            }
+
+            .vtabs-list,
+            .vtabs-gallery-col {
+                order: 0;
+            }
+        }
+
+        .vtabs-tabs {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .vtabs-tab {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border: none;
+            border-top: 1px solid var(--border);
+            padding: 1.5rem 0 1.5rem 1.25rem;
+            cursor: pointer;
+            color: var(--text-light);
+            font-family: inherit;
+        }
+
+        .vtabs-tabs > .vtabs-tab:first-child {
+            border-top: none;
+        }
+
+        .vtabs-tab.is-active {
+            color: var(--text-dark);
+        }
+
+        .vtabs-progress-track {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border);
+        }
+
+        .vtabs-progress-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 0%;
             background: var(--primary);
-            color: white;
-            border-radius: 50%;
+        }
+
+        .vtabs-progress-fill.is-filling {
+            animation: vtabsFill 5s linear forwards;
+        }
+
+        .vtabs-tabs--paused .vtabs-progress-fill.is-filling {
+            animation-play-state: paused;
+        }
+
+        @keyframes vtabsFill {
+            from { height: 0%; }
+            to { height: 100%; }
+        }
+
+        .vtabs-tab-number {
+            font-size: 0.7rem;
+            font-weight: 600;
+            opacity: 0.55;
+            margin-top: 0.2rem;
+            flex-shrink: 0;
+        }
+
+        .vtabs-tab-body {
+            flex: 1;
+        }
+
+        .vtabs-tab-title {
+            display: block;
+            font-family: 'Inter', 'Roboto', sans-serif;
+            font-size: 1.35rem;
             font-weight: 700;
-            font-size: 1.5rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.25);
-            transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+            color: inherit;
         }
 
-        .step:hover .step-number {
-            transform: scale(1.08);
-        }
-
-        .step h3 {
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-        }
-
-        .step p {
+        .vtabs-tab-desc {
+            display: block;
+            overflow: hidden;
+            max-height: 0;
+            opacity: 0;
             color: var(--text-light);
             font-size: 0.95rem;
+            line-height: 1.6;
+            transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.35s ease;
+        }
+
+        .vtabs-tab.is-active .vtabs-tab-desc {
+            max-height: 4rem;
+            opacity: 1;
+            margin-top: 0.5rem;
+        }
+
+        .vtabs-gallery {
+            position: relative;
+            aspect-ratio: 4 / 5;
+            border-radius: 1.75rem;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
+        }
+
+        @media (min-width: 1024px) {
+            .vtabs-gallery {
+                aspect-ratio: 16 / 11;
+            }
+        }
+
+        .vtabs-panel {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transform: translateY(100%);
+            transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+            background:
+                radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.35), transparent 55%),
+                linear-gradient(135deg, var(--panel-a), var(--panel-b));
+        }
+
+        .vtabs-panel.is-active {
+            opacity: 1;
+            transform: translateY(0);
+            z-index: 2;
+        }
+
+        .vtabs-panel-icon {
+            width: 108px;
+            height: 108px;
+            color: white;
+            opacity: 0.92;
+            filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.2));
+        }
+
+        .vtabs-panel-tag {
+            position: absolute;
+            left: 1.5rem;
+            bottom: 1.5rem;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+            background: rgba(0, 0, 0, 0.18);
+            padding: 0.4rem 0.9rem;
+            border-radius: 9999px;
+            backdrop-filter: blur(6px);
+        }
+
+        .vtabs-gallery-nav {
+            position: absolute;
+            right: 1.25rem;
+            bottom: 1.25rem;
+            display: flex;
+            gap: 0.6rem;
+            z-index: 10;
+        }
+
+        .vtabs-gallery-nav button {
+            width: 42px;
+            height: 42px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            background: rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(8px);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .vtabs-gallery-nav button:hover {
+            background: rgba(255, 255, 255, 0.32);
+            transform: scale(1.05);
+        }
+
+        .vtabs-gallery-nav svg {
+            width: 20px;
+            height: 20px;
         }
 
         /* Permissions Disclosure */
@@ -1034,27 +1211,72 @@
 
     <!-- How It Works Section -->
     <section class="how-it-works">
-        <h2>Cómo Funciona</h2>
-        <div class="steps">
-            <div class="step">
-                <div class="step-number">1</div>
-                <h3>Configura tu Equipo</h3>
-                <p>Añade los miembros de tu equipo de ventas a la plataforma.</p>
+        <div class="vtabs" role="region" aria-label="Cómo funciona Sales Arena Matcher">
+            <div class="vtabs-list">
+                <h2>Cómo Funciona</h2>
+                <span class="vtabs-eyebrow">(Proceso)</span>
+                <div class="vtabs-tabs" id="vtabs-tabs">
+                    <button type="button" class="vtabs-tab is-active" data-index="0">
+                        <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
+                        <span class="vtabs-tab-number">/01</span>
+                        <span class="vtabs-tab-body">
+                            <span class="vtabs-tab-title">Configura tu Equipo</span>
+                            <span class="vtabs-tab-desc">Añade los miembros de tu equipo de ventas a la plataforma.</span>
+                        </span>
+                    </button>
+                    <button type="button" class="vtabs-tab" data-index="1">
+                        <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
+                        <span class="vtabs-tab-number">/02</span>
+                        <span class="vtabs-tab-body">
+                            <span class="vtabs-tab-title">Indica Disponibilidad</span>
+                            <span class="vtabs-tab-desc">Cada miembro comparte su disponibilidad y zona horaria.</span>
+                        </span>
+                    </button>
+                    <button type="button" class="vtabs-tab" data-index="2">
+                        <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
+                        <span class="vtabs-tab-number">/03</span>
+                        <span class="vtabs-tab-body">
+                            <span class="vtabs-tab-title">Matcher Coordina</span>
+                            <span class="vtabs-tab-desc">Nuestro algoritmo encuentra los mejores matches entre equipos.</span>
+                        </span>
+                    </button>
+                    <button type="button" class="vtabs-tab" data-index="3">
+                        <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
+                        <span class="vtabs-tab-number">/04</span>
+                        <span class="vtabs-tab-body">
+                            <span class="vtabs-tab-title">¡A Practicar!</span>
+                            <span class="vtabs-tab-desc">Google Meet se crea automáticamente. ¡Comienza tu sesión!</span>
+                        </span>
+                    </button>
+                </div>
             </div>
-            <div class="step">
-                <div class="step-number">2</div>
-                <h3>Indica Disponibilidad</h3>
-                <p>Cada miembro comparte su disponibilidad y zona horaria.</p>
-            </div>
-            <div class="step">
-                <div class="step-number">3</div>
-                <h3>Matcher Coordina</h3>
-                <p>Nuestro algoritmo encuentra los mejores matches entre equipos.</p>
-            </div>
-            <div class="step">
-                <div class="step-number">4</div>
-                <h3>¡A Practicar!</h3>
-                <p>Google Meet se crea automáticamente. ¡Comienza tu sesión!</p>
+            <div class="vtabs-gallery-col">
+                <div class="vtabs-gallery" id="vtabs-gallery">
+                    <div class="vtabs-panel is-active" style="--panel-a: var(--primary); --panel-b: var(--accent-purple);">
+                        <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        <span class="vtabs-panel-tag">01 · Configura tu Equipo</span>
+                    </div>
+                    <div class="vtabs-panel" style="--panel-a: var(--accent-cyan); --panel-b: var(--primary);">
+                        <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span class="vtabs-panel-tag">02 · Indica Disponibilidad</span>
+                    </div>
+                    <div class="vtabs-panel" style="--panel-a: var(--accent-purple); --panel-b: var(--secondary);">
+                        <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        <span class="vtabs-panel-tag">03 · Matcher Coordina</span>
+                    </div>
+                    <div class="vtabs-panel" style="--panel-a: var(--secondary); --panel-b: var(--accent-cyan);">
+                        <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
+                        <span class="vtabs-panel-tag">04 · ¡A Practicar!</span>
+                    </div>
+                    <div class="vtabs-gallery-nav">
+                        <button type="button" id="vtabs-prev" aria-label="Paso anterior">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <button type="button" id="vtabs-next" aria-label="Paso siguiente">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
@@ -1143,7 +1365,7 @@
 
             var groups = [
                 document.querySelectorAll('.feature-card'),
-                document.querySelectorAll('.step'),
+                document.querySelectorAll('.vtabs-tab'),
                 document.querySelectorAll('.permissions-panel')
             ];
 
@@ -1234,5 +1456,6 @@
 
     <script src="/js/hero-shader.js"></script>
     <script src="/js/features-coverflow.js"></script>
+    <script src="/js/how-it-works-tabs.js"></script>
 </body>
 </html>
