@@ -233,6 +233,8 @@
         }
 
         .cta-button {
+            position: relative;
+            overflow: hidden;
             background: var(--primary);
             color: white;
             padding: 0.75rem 1.5rem;
@@ -246,6 +248,23 @@
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+        }
+
+        .cta-button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -75%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+            transform: skewX(-20deg);
+            transition: left 0.6s ease;
+            pointer-events: none;
+        }
+
+        .cta-button:hover::after {
+            left: 125%;
         }
 
         .cta-button:hover {
@@ -269,31 +288,87 @@
 
         .hero-bg {
             position: absolute;
-            inset: 0;
+            inset: -6%;
             z-index: 0;
+            will-change: transform;
         }
 
         .hero-video {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            opacity: 0.3;
+            opacity: 0.55;
+        }
+
+        .hero-orbs {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .hero-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(70px);
+            opacity: 0.55;
+            mix-blend-mode: screen;
+            animation: orbDrift 18s ease-in-out infinite alternate;
+        }
+
+        .hero-orb-1 {
+            width: 420px;
+            height: 420px;
+            top: -140px;
+            left: -100px;
+            background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+        }
+
+        .hero-orb-2 {
+            width: 380px;
+            height: 380px;
+            bottom: -160px;
+            right: -80px;
+            background: radial-gradient(circle, var(--secondary) 0%, transparent 70%);
+            animation-delay: -6s;
+        }
+
+        .hero-orb-3 {
+            width: 300px;
+            height: 300px;
+            top: 20%;
+            right: 12%;
+            background: radial-gradient(circle, var(--accent-purple) 0%, transparent 70%);
+            animation-delay: -12s;
+        }
+
+        @keyframes orbDrift {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(30px, -22px) scale(1.08); }
+            100% { transform: translate(-24px, 26px) scale(0.95); }
         }
 
         .hero-overlay {
             position: absolute;
             inset: 0;
-            background:
-                linear-gradient(180deg, var(--bg-white) 0%, transparent 22%, transparent 78%, var(--bg-white) 100%),
-                var(--bg-gradient);
-            opacity: 0.82;
+            z-index: 2;
+            background: linear-gradient(180deg, var(--bg-white) 0%, transparent 32%, transparent 68%, var(--bg-white) 100%);
+            opacity: 0.4;
         }
 
         .hero-content {
             position: relative;
-            z-index: 1;
-            max-width: 1200px;
+            z-index: 3;
+            max-width: 860px;
             margin: 0 auto;
+            padding: 3rem 2.5rem;
+            border-radius: 1.5rem;
+            background: var(--card-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-lg);
         }
 
         h1 {
@@ -301,15 +376,27 @@
             font-weight: 800;
             line-height: 1.15;
             margin-bottom: 1.5rem;
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            background: linear-gradient(120deg, var(--primary), var(--secondary), var(--primary));
+            background-size: 200% auto;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            animation: shimmerText 7s linear infinite;
+        }
+
+        @keyframes shimmerText {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
         }
 
         @media (max-width: 768px) {
             h1 {
                 font-size: 2rem;
+            }
+
+            .hero-content {
+                padding: 2rem 1.5rem;
+                border-radius: 1.25rem;
             }
         }
 
@@ -586,6 +673,10 @@
             background: var(--bg-light);
         }
 
+        .cta-section .cta-button::after {
+            background: linear-gradient(120deg, transparent, rgba(79, 70, 229, 0.2), transparent);
+        }
+
         /* Scroll reveal animations */
         .reveal {
             opacity: 0;
@@ -719,12 +810,17 @@
 
     <!-- Hero Section -->
     <section class="hero">
-        <div class="hero-bg" aria-hidden="true">
+        <div class="hero-bg" id="hero-bg" aria-hidden="true">
             <video class="hero-video" id="hero-video" muted loop playsinline preload="none" poster="/hero-poster.jpg">
                 <source src="/videos/hero-bg.mp4" type="video/mp4">
             </video>
-            <div class="hero-overlay"></div>
         </div>
+        <div class="hero-orbs" aria-hidden="true">
+            <span class="hero-orb hero-orb-1"></span>
+            <span class="hero-orb hero-orb-2"></span>
+            <span class="hero-orb hero-orb-3"></span>
+        </div>
+        <div class="hero-overlay" aria-hidden="true"></div>
         <div class="hero-content">
             <h1>Coordina Automáticamente tus Sesiones de Práctica de Ventas</h1>
             <p class="subtitle">
@@ -951,6 +1047,39 @@
             }, { threshold: 0.1 });
 
             observer.observe(video);
+        })();
+    </script>
+
+    <script>
+        (function () {
+            var heroBg = document.getElementById('hero-bg');
+            var hero = document.querySelector('.hero');
+            if (!heroBg || !hero) {
+                return;
+            }
+
+            var prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (prefersReducedMotion) {
+                return;
+            }
+
+            var ticking = false;
+
+            function updateParallax() {
+                var rect = hero.getBoundingClientRect();
+                var offset = rect.top * 0.12;
+                heroBg.style.transform = 'translateY(' + offset.toFixed(1) + 'px)';
+                ticking = false;
+            }
+
+            window.addEventListener('scroll', function () {
+                if (!ticking) {
+                    window.requestAnimationFrame(updateParallax);
+                    ticking = true;
+                }
+            }, { passive: true });
+
+            updateParallax();
         })();
     </script>
 </body>
