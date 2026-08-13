@@ -3,7 +3,7 @@ import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
 import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid } from './slots';
-import { isInAppBrowser, isMobile, friendlyAuthError } from './utils/supabaseAuth';
+import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
   getReliability as reliabilityOf,
   getRoomReliability,
@@ -205,7 +205,7 @@ const resolveTimezone = (countryName) => {
   // Como fallback, usar la zona horaria real del navegador del usuario
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  } catch (e) {
+  } catch {
     return 'UTC';
   }
 };
@@ -230,7 +230,7 @@ const guessCountryFromBrowserTz = () => {
     const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const matched = ZONAS.find(z => z.tz === browserTz);
     return matched ? matched.country : 'Argentina';
-  } catch (e) {
+  } catch {
     return 'Argentina';
   }
 };
@@ -298,6 +298,22 @@ const slugifyRoomName = (name) =>
     .trim()
     .replace(/\s+/g, '-');
 
+// Fila de meeting_attendees → objeto de asistencia de la app. Este mapeo de
+// nueve campos estaba escrito tres veces (carga inicial y creación de reunión);
+// agregar una columna obligaba a acordarse de tocar todas las copias.
+const attendanceFromRow = (row) => ({
+  id: row.id,
+  meetingId: row.meeting_id,
+  memberEmail: row.member_email,
+  memberName: row.member_name,
+  status: row.status,
+  punctuality: row.punctuality,
+  cancelReason: row.cancel_reason,
+  reportedBy: row.reported_by,
+  reportedAt: row.reported_at,
+  joinedAt: row.joined_at
+});
+
 // join_room señala cada motivo de rechazo con un código propio. Se traducen a
 // un mensaje que le diga a la persona qué hacer, en vez de mostrarle el texto
 // crudo de Postgres.
@@ -321,7 +337,8 @@ const joinRoomErrorMessage = (error) => {
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  const [currentRoomId, setCurrentRoomId] = useState(() => {
+  // Sin setter: la sala solo cambia navegando a otra URL, lo que remonta la app.
+  const [currentRoomId] = useState(() => {
     const roomId = getRoomIdFromUrl();
     if (!roomId) {
       window.history.replaceState(null, '', '/room/grupo-a');
@@ -370,8 +387,6 @@ export default function App() {
   const [isInAppBrowserDetected, setIsInAppBrowserDetected] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  const [loginCountry, setLoginCountry] = useState('Argentina');
-  const [customLoginCountry, setCustomLoginCountry] = useState('');
   const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
 
   const [roomName, setRoomName] = useState(() => {
@@ -918,18 +933,7 @@ export default function App() {
         .select('*')
         .eq('room_id', currentRoomId);
       if (!attError && attData) {
-        setAttendances(attData.map(d => ({
-          id: d.id,
-          meetingId: d.meeting_id,
-          memberEmail: d.member_email,
-          memberName: d.member_name,
-          status: d.status,
-          punctuality: d.punctuality,
-          cancelReason: d.cancel_reason,
-          reportedBy: d.reported_by,
-          reportedAt: d.reported_at,
-          joinedAt: d.joined_at
-        })));
+        setAttendances(attData.map(attendanceFromRow));
       }
 
       setIsRoomDataLoading(false);
@@ -1131,12 +1135,7 @@ export default function App() {
       } else {
         // Borrar horarios semanales (también en la DB: antes solo se limpiaba
         // el estado local y las marcas "volvían" al recargar la página)
-        if (!useMockDb) {
-          await supabase.from('availabilities')
-            .delete()
-            .eq('room_id', currentRoomId)
-            .ilike('user', escapeLikeLiteral(currentUser.name));
-        }
+        await replaceMyAvailability([]);
         const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
         setAvailabilities(cleanAvail);
         setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
@@ -1146,6 +1145,36 @@ export default function App() {
         }, 2000);
       }
     }, 1000);
+  };
+
+  // Reemplaza en la base TODA la disponibilidad de quien está logueado por el
+  // conjunto de reglas que se le pase (borrar + insertar). Los cuatro caminos
+  // que tocan horarios —activar/desactivar participación, aplicar plantilla y
+  // guardar la grilla— hacían exactamente esto con el código copiado, así que
+  // cualquier corrección había que acordarse de aplicarla cuatro veces.
+  // Devuelve null si salió bien, o un texto explicando qué falló.
+  const replaceMyAvailability = async (rules) => {
+    if (useMockDb) return null;
+
+    const { error: delError } = await supabase.from('availabilities')
+      .delete()
+      .eq('room_id', currentRoomId)
+      .ilike('user', escapeLikeLiteral(currentUser.name));
+    if (delError) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
+
+    if (rules.length === 0) return null;
+
+    const { error: insError } = await supabase.from('availabilities').insert(
+      rules.map(r => ({
+        room_id: currentRoomId,
+        user: r.user,
+        day_idx: r.dayIdx,
+        start_hour: r.startHour,
+        end_hour: r.endHour
+      }))
+    );
+    if (insError) return 'No pudimos guardar tus horarios. Intentá de nuevo en un momento.';
+    return null;
   };
 
   // Dispara el weekly-matcher al instante cuando hay un cambio de disponibilidad
@@ -1207,28 +1236,10 @@ export default function App() {
 
       // Reemplazar horarios en la DB (antes solo se cambiaba el estado local
       // y el heatmap/matcher de los demás nunca veían el cambio)
-      if (!useMockDb) {
-        const { error: delError } = await supabase.from('availabilities')
-          .delete()
-          .eq('room_id', currentRoomId)
-          .ilike('user', escapeLikeLiteral(currentUser.name));
-        if (delError) {
-          setWizardStatus({ type: 'error', msg: 'Error al actualizar horarios en Supabase.' });
-          return;
-        }
-        const { error: insError } = await supabase.from('availabilities').insert(
-          userTemplateRules.map(r => ({
-            room_id: currentRoomId,
-            user: r.user,
-            day_idx: r.dayIdx,
-            start_hour: r.startHour,
-            end_hour: r.endHour
-          }))
-        );
-        if (insError) {
-          setWizardStatus({ type: 'error', msg: 'Error al insertar horarios en Supabase.' });
-          return;
-        }
+      const templateError = await replaceMyAvailability(userTemplateRules);
+      if (templateError) {
+        setWizardStatus({ type: 'error', msg: templateError });
+        return;
       }
 
       const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
@@ -1281,35 +1292,10 @@ export default function App() {
       }
     }
 
-    if (!useMockDb) {
-      // Borrar antiguos bloques en Supabase (case-insensitive: un .eq estricto
-      // dejaba filas viejas si el nombre cambió de mayúsculas/minúsculas, y
-      // esas filas fantasma seguían pintando el heatmap)
-      const { error: delError } = await supabase.from('availabilities')
-        .delete()
-        .eq('room_id', currentRoomId)
-        .ilike('user', escapeLikeLiteral(currentUser.name));
-
-      if (delError) {
-        setWizardStatus({ type: 'error', msg: 'Error al actualizar horarios en Supabase.' });
-        return;
-      }
-
-      // Insertar nuevos bloques
-      if (newRules.length > 0) {
-        const toInsert = newRules.map(r => ({
-          room_id: currentRoomId,
-          user: r.user,
-          day_idx: r.dayIdx,
-          start_hour: r.startHour,
-          end_hour: r.endHour
-        }));
-        const { error: insError } = await supabase.from('availabilities').insert(toInsert);
-        if (insError) {
-          setWizardStatus({ type: 'error', msg: 'Error al insertar horarios en Supabase.' });
-          return;
-        }
-      }
+    const gridError = await replaceMyAvailability(newRules);
+    if (gridError) {
+      setWizardStatus({ type: 'error', msg: gridError });
+      return;
     }
 
     // 3. Escribir a disponibilidad local
@@ -1399,7 +1385,11 @@ export default function App() {
   // código de invitación.
   const registerMember = async (rawName, rawCountry, emailOverride) => {
     const email = (emailOverride || loginEmail).trim().toLowerCase();
-    const finalCountry = rawCountry === 'Otro' ? customLoginCountry.trim() : rawCountry;
+    // El país siempre llega resuelto por guessCountryFromBrowserTz (un país de
+    // ZONAS o Argentina como fallback). Antes había una rama para el valor
+    // 'Otro' que leía un estado que ya nadie escribía: si alguna vez se
+    // alcanzaba, registraba a la persona con el país en blanco.
+    const finalCountry = rawCountry;
     const finalTz = resolveTimezone(finalCountry);
     const newUser = {
       name: rawName.trim(),
@@ -1734,7 +1724,7 @@ export default function App() {
         .eq('room_id', currentRoomId)
         .eq('email', emailToDelete);
       if (error) {
-        showNotification('Error al eliminar de Supabase: ' + error.message);
+        showNotification('No pudimos eliminar a esa persona. Intentá de nuevo en un momento.', 'error');
         return;
       }
       // availabilities y templates NO tienen clave foránea contra members (solo
@@ -1752,7 +1742,7 @@ export default function App() {
         const failed = results.find(r => r.error);
         if (failed) {
           showNotification(
-            `${label} salió de la sala, pero sus horarios no pudieron borrarse: ${failed.error.message}`,
+            `${label} salió de la sala, pero quedaron horarios suyos sin borrar. Volvé a intentarlo para limpiarlos.`,
             'error'
           );
         }
@@ -1792,29 +1782,15 @@ export default function App() {
 
     if (!nextActiveState) {
       // Limpiar horarios semanales (evitar falsos positivos de reuniones vacías)
-      if (!useMockDb) {
-        await supabase.from('availabilities')
-          .delete()
-          .eq('room_id', currentRoomId)
-          .ilike('user', escapeLikeLiteral(currentUser.name));
-      }
+      await replaceMyAvailability([]);
       setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase()));
       showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
     } else {
       // Cargar disponibilidad desde la plantilla habitual
       const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
-      
-      if (!useMockDb && userTemplateRules.length > 0) {
-        const toInsert = userTemplateRules.map(r => ({
-          room_id: currentRoomId,
-          user: r.user,
-          day_idx: r.dayIdx,
-          start_hour: r.startHour,
-          end_hour: r.endHour
-        }));
-        await supabase.from('availabilities').insert(toInsert);
-      }
-      
+
+      await replaceMyAvailability(userTemplateRules);
+
       setAvailabilities(prev => [...prev, ...userTemplateRules]);
       showNotification('¡Participación activada! Hemos cargado tus horarios semanales desde tu plantilla base.');
 
@@ -1910,7 +1886,7 @@ export default function App() {
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
-        showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. Usá "Crear Meet" para reintentar. ${err.message}`, 'error');
+        showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. ${err.message}`, 'error');
         return;
       }
     }
@@ -1960,20 +1936,9 @@ export default function App() {
           })))
           .select();
         if (attError) {
-          showNotification('La reunión se guardó, pero no se pudo registrar el compromiso de asistencia: ' + attError.message, 'error');
+          showNotification('La reunión quedó agendada, pero no pudimos registrar el compromiso de asistencia. Avisale a tu compañero por las dudas.', 'error');
         } else if (attInserted) {
-          setAttendances(prev => [...prev, ...attInserted.map(d => ({
-            id: d.id,
-            meetingId: d.meeting_id,
-            memberEmail: d.member_email,
-            memberName: d.member_name,
-            status: d.status,
-            punctuality: d.punctuality,
-            cancelReason: d.cancel_reason,
-            reportedBy: d.reported_by,
-            reportedAt: d.reported_at,
-            joinedAt: d.joined_at
-          }))]);
+          setAttendances(prev => [...prev, ...attInserted.map(attendanceFromRow)]);
         }
       }
     } else {
@@ -2028,7 +1993,7 @@ export default function App() {
       if (!accept) dbPatch.status = 'rechazado';
       const { error } = await supabase.from('match_proposals').update(dbPatch).eq('id', proposal.id);
       if (error) {
-        showNotification('No pudimos guardar tu respuesta. Revisá la conexión e intentá nuevamente. ' + error.message, 'error');
+        showNotification('No pudimos guardar tu respuesta. Revisá la conexión e intentá nuevamente.', 'error');
         return;
       }
 
@@ -2117,7 +2082,7 @@ export default function App() {
         .update({ status: newStatus, punctuality, reported_by: currentUser.email, reported_at: reportedAt })
         .eq('id', attendance.id);
       if (error) {
-        showNotification('No pudimos registrar la asistencia. Intentá nuevamente antes de cerrar esta pantalla. ' + error.message, 'error');
+        showNotification('No pudimos registrar la asistencia. Intentá nuevamente antes de cerrar esta pantalla.', 'error');
         return;
       }
     }
@@ -2174,7 +2139,7 @@ export default function App() {
         .update({ status: newStatus, cancel_reason: cancelReason, reported_by: currentUser.email, reported_at: reportedAt })
         .eq('id', mine.id);
       if (error) {
-        showNotification('No se pudo cancelar: ' + error.message, 'error');
+        showNotification('No pudimos registrar la cancelación. Intentá de nuevo en un momento.', 'error');
         return;
       }
     }

@@ -285,9 +285,11 @@ Deno.serve(async (req) => {
           }
         }
       }
-    } catch (_e) {
+    } catch (sweepError) {
       // Si la columna joined_at aún no existe (migración sin aplicar), el barrido
-      // se omite sin frenar el emparejamiento.
+      // se omite sin frenar el emparejamiento. Se deja registro para poder
+      // distinguir ese caso esperado de una falla real al revisar los logs.
+      console.warn('Barrido de asistencia omitido:', String(sweepError));
     }
 
     // 2. Salas a procesar (?room=<id> limita a una sola; ya validado arriba)
