@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
-import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid } from './slots';
+import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
   getReliability as reliabilityOf,
@@ -297,6 +297,18 @@ const slugifyRoomName = (name) =>
     .replace(/[^a-z0-9\s-]/g, '')    // quita símbolos
     .trim()
     .replace(/\s+/g, '-');
+
+// Fila de availabilities/templates → regla horaria de la app. Ambas tablas
+// tienen la misma forma, así que comparten mapeo. memberEmail es el vínculo
+// real con el miembro; `user` (el nombre) se conserva para las etiquetas del
+// mapa de calor y como respaldo de las filas anteriores a esa columna.
+const scheduleRuleFromRow = (row) => ({
+  memberEmail: row.member_email || null,
+  user: row.user,
+  dayIdx: row.day_idx,
+  startHour: row.start_hour,
+  endHour: row.end_hour
+});
 
 // Fila de meeting_attendees → objeto de asistencia de la app. Este mapeo de
 // nueve campos estaba escrito tres veces (carga inicial y creación de reunión);
@@ -885,12 +897,7 @@ export default function App() {
         .select('*')
         .eq('room_id', currentRoomId);
       if (availData) {
-        setAvailabilities(availData.map(d => ({
-          user: d.user,
-          dayIdx: d.day_idx,
-          startHour: d.start_hour,
-          endHour: d.end_hour
-        })));
+        setAvailabilities(availData.map(scheduleRuleFromRow));
       }
 
       // 3b. Fetch Plantillas base (horario habitual). Antes vivían solo en el
@@ -901,12 +908,7 @@ export default function App() {
         .select('*')
         .eq('room_id', currentRoomId);
       if (!tplError && tplData) {
-        setTemplates(tplData.filter(d => d.day_idx != null).map(d => ({
-          user: d.user,
-          dayIdx: d.day_idx,
-          startHour: d.start_hour,
-          endHour: d.end_hour
-        })));
+        setTemplates(tplData.filter(d => d.day_idx != null).map(scheduleRuleFromRow));
       }
 
       // 4. Fetch Meetings
@@ -1119,7 +1121,7 @@ export default function App() {
 
       if (participate) {
         // Cargar horarios del usuario activo en la grilla visual
-        const userRules = availabilities.filter(a => a.user.toLowerCase() === currentUser.name.toLowerCase());
+        const userRules = availabilities.filter(a => ruleBelongsTo(a, currentUser));
         const gridSlots = [];
         userRules.forEach(rule => {
           for (let h = rule.startHour; h < rule.endHour; h++) {
@@ -1136,7 +1138,7 @@ export default function App() {
         // Borrar horarios semanales (también en la DB: antes solo se limpiaba
         // el estado local y las marcas "volvían" al recargar la página)
         await replaceMyAvailability([]);
-        const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+        const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
         setAvailabilities(cleanAvail);
         setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
         setTimeout(() => {
@@ -1156,17 +1158,35 @@ export default function App() {
   const replaceMyAvailability = async (rules) => {
     if (useMockDb) return null;
 
-    const { error: delError } = await supabase.from('availabilities')
+    const myEmail = currentUser.email.toLowerCase();
+
+    // Se borra en dos pasos y no con un .or() combinado: la sintaxis de filtros
+    // de PostgREST usa comas y paréntesis como separadores, así que un nombre
+    // que los contenga rompería la consulta.
+    //
+    // 1) Las filas ya vinculadas por email (el caso normal desde ahora).
+    const { error: delByEmail } = await supabase.from('availabilities')
       .delete()
       .eq('room_id', currentRoomId)
+      .eq('member_email', myEmail);
+    if (delByEmail) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
+
+    // 2) Las filas anteriores a member_email, que solo se pueden reconocer por
+    //    nombre. Sin este paso quedarían duplicando los bloques nuevos y
+    //    seguirían pintando el mapa de calor.
+    const { error: delLegacy } = await supabase.from('availabilities')
+      .delete()
+      .eq('room_id', currentRoomId)
+      .is('member_email', null)
       .ilike('user', escapeLikeLiteral(currentUser.name));
-    if (delError) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
+    if (delLegacy) return 'No pudimos actualizar tus horarios. Intentá de nuevo en un momento.';
 
     if (rules.length === 0) return null;
 
     const { error: insError } = await supabase.from('availabilities').insert(
       rules.map(r => ({
         room_id: currentRoomId,
+        member_email: myEmail,
         user: r.user,
         day_idx: r.dayIdx,
         start_hour: r.startHour,
@@ -1221,7 +1241,7 @@ export default function App() {
   const handleUseTemplate = () => {
     setWizardStatus({ type: 'loading', msg: 'Aplicando horarios base de tu plantilla...' });
     setTimeout(async () => {
-      const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+      const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
 
       // Sin plantilla guardada no hay nada que aplicar: antes este camino
       // BORRABA la disponibilidad ya cargada (la plantilla vivía solo en
@@ -1242,7 +1262,7 @@ export default function App() {
         return;
       }
 
-      const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+      const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
       setAvailabilities([...cleanAvail, ...userTemplateRules]);
 
       setWizardStatus({ type: 'success', msg: '¡Horario base cargado con éxito para esta semana!' });
@@ -1299,21 +1319,30 @@ export default function App() {
     }
 
     // 3. Escribir a disponibilidad local
-    const cleanAvail = availabilities.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase());
+    const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
     setAvailabilities([...cleanAvail, ...newRules]);
 
     // 4. Si se guarda como plantilla (también en la DB: antes la plantilla
     // vivía solo en memoria y desaparecía al recargar la página)
     if (saveAsTemplate) {
       if (!useMockDb) {
+        const myEmail = currentUser.email.toLowerCase();
+        // Mismos dos pasos que en replaceMyAvailability: por email para lo
+        // nuevo, por nombre para las filas anteriores a member_email.
         await supabase.from('templates')
           .delete()
           .eq('room_id', currentRoomId)
+          .eq('member_email', myEmail);
+        await supabase.from('templates')
+          .delete()
+          .eq('room_id', currentRoomId)
+          .is('member_email', null)
           .ilike('user', escapeLikeLiteral(currentUser.name));
         if (newRules.length > 0) {
           const { error: tplError } = await supabase.from('templates').insert(
             newRules.map(r => ({
               room_id: currentRoomId,
+              member_email: myEmail,
               user: r.user,
               day_idx: r.dayIdx,
               start_hour: r.startHour,
@@ -1321,11 +1350,11 @@ export default function App() {
             }))
           );
           if (tplError) {
-            showNotification('Tus horarios se guardaron, pero la plantilla base no pudo guardarse: ' + tplError.message, 'error');
+            showNotification('Tus horarios se guardaron, pero no pudimos guardar la plantilla base. Volvé a intentarlo desde el asistente.', 'error');
           }
         }
       }
-      const cleanTemplate = templates.filter(t => t.user.toLowerCase() !== currentUser.name.toLowerCase());
+      const cleanTemplate = templates.filter(t => !ruleBelongsTo(t, currentUser));
       setTemplates([...cleanTemplate, ...newRules]);
     }
 
@@ -1732,11 +1761,22 @@ export default function App() {
       // base: volvían al recargar, inflaban el contador de bloques y los
       // heredaba cualquiera que se registrara después con el mismo nombre.
       if (memberObj) {
+        // Se limpia por email (vínculo estable) y también por nombre para las
+        // filas anteriores a member_email. Antes solo se borraba por nombre, así
+        // que los horarios de un homónimo podían irse junto con los de esta
+        // persona.
+        const targetEmail = emailToDelete.toLowerCase();
         const orphanCleanup = [
           supabase.from('availabilities').delete()
-            .eq('room_id', currentRoomId).ilike('user', escapeLikeLiteral(memberObj.name)),
+            .eq('room_id', currentRoomId).eq('member_email', targetEmail),
           supabase.from('templates').delete()
-            .eq('room_id', currentRoomId).ilike('user', escapeLikeLiteral(memberObj.name))
+            .eq('room_id', currentRoomId).eq('member_email', targetEmail),
+          supabase.from('availabilities').delete()
+            .eq('room_id', currentRoomId).is('member_email', null)
+            .ilike('user', escapeLikeLiteral(memberObj.name)),
+          supabase.from('templates').delete()
+            .eq('room_id', currentRoomId).is('member_email', null)
+            .ilike('user', escapeLikeLiteral(memberObj.name))
         ];
         const results = await Promise.all(orphanCleanup);
         const failed = results.find(r => r.error);
@@ -1751,8 +1791,8 @@ export default function App() {
 
     setMembers(prev => prev.filter(m => m.email.toLowerCase() !== emailToDelete.toLowerCase()));
     if (memberObj) {
-      setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== memberObj.name.toLowerCase()));
-      setTemplates(prev => prev.filter(t => t.user.toLowerCase() !== memberObj.name.toLowerCase()));
+      setAvailabilities(prev => prev.filter(a => !ruleBelongsTo(a, memberObj)));
+      setTemplates(prev => prev.filter(t => !ruleBelongsTo(t, memberObj)));
     }
     showNotification(`${label} fue eliminado de la sala.`, 'success');
   };
@@ -1783,11 +1823,11 @@ export default function App() {
     if (!nextActiveState) {
       // Limpiar horarios semanales (evitar falsos positivos de reuniones vacías)
       await replaceMyAvailability([]);
-      setAvailabilities(prev => prev.filter(a => a.user.toLowerCase() !== currentUser.name.toLowerCase()));
+      setAvailabilities(prev => prev.filter(a => !ruleBelongsTo(a, currentUser)));
       showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
     } else {
       // Cargar disponibilidad desde la plantilla habitual
-      const userTemplateRules = templates.filter(t => t.user.toLowerCase() === currentUser.name.toLowerCase());
+      const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
 
       await replaceMyAvailability(userTemplateRules);
 
@@ -2851,9 +2891,7 @@ export default function App() {
                     </div>
                   ) : !myProposal ? (
                     (() => {
-                      const hasAvailability = availabilities.some(a =>
-                        a.user.toLowerCase() === currentUser.name.toLowerCase()
-                      );
+                      const hasAvailability = availabilities.some(a => ruleBelongsTo(a, currentUser));
                       const emptyState = !currentUser.active
                         ? {
                             title: 'Tu participación está inactiva.',
@@ -3131,7 +3169,7 @@ export default function App() {
                   {/* "de nuevo" solo si ya tenía horarios cargados: a alguien
                       que acaba de registrarse le sonaba a error. */}
                   <h3 className="wizard-title">
-                    {availabilities.some(a => a.user.toLowerCase() === currentUser.name.toLowerCase())
+                    {availabilities.some(a => ruleBelongsTo(a, currentUser))
                       ? `¡Hola de nuevo, ${currentUser.name}!`
                       : `¡Hola, ${currentUser.name}!`}
                   </h3>

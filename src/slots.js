@@ -71,13 +71,25 @@ export const memberSlotSet = (rules, tz) => {
   return set;
 };
 
+// ¿Esta regla de disponibilidad es de este miembro?
+//
+// El vínculo real es memberEmail, que es estable. El nombre solo se usa como
+// respaldo para las filas anteriores a esa columna (y para las que el backfill
+// no pudo resolver porque dos miembros de la sala se llamaban igual). Empatar
+// por nombre es justamente lo que hacía que dos homónimos compartieran
+// horarios, así que en cuanto hay email, manda el email.
+export const ruleBelongsTo = (rule, member) => {
+  if (rule.memberEmail) {
+    return rule.memberEmail.toLowerCase() === member.email.toLowerCase();
+  }
+  return (rule.user || '').toLowerCase() === (member.name || '').toLowerCase();
+};
+
 // Slots UTC (0..167) libres por miembro: Map(email → Set<int>).
-// Las reglas de availabilities se vinculan al miembro por NOMBRE
-// (case-insensitive), que es como la tabla las guarda hoy.
 export const computeSlotSets = (members, avails) => {
   const map = new Map();
   members.forEach(member => {
-    const rules = avails.filter(a => a.user.toLowerCase() === member.name.toLowerCase());
+    const rules = avails.filter(a => ruleBelongsTo(a, member));
     map.set(member.email, memberSlotSet(rules, member.tz));
   });
   return map;

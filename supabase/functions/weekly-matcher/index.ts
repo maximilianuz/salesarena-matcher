@@ -403,7 +403,14 @@ Deno.serve(async (req) => {
         const offset = getOffsetMinutes(m.tz);
         const set = new Set<number>();
         (avails || [])
-          .filter(a => a.user.toLowerCase() === m.name.toLowerCase())
+          // El vínculo real con el miembro es member_email, que es estable. El
+          // nombre solo sirve de respaldo para las filas anteriores a esa
+          // columna: empatar por nombre era lo que hacía que dos homónimos de
+          // la misma sala compartieran horarios. Debe coincidir con
+          // ruleBelongsTo en src/slots.js.
+          .filter(a => a.member_email
+            ? a.member_email.toLowerCase() === m.email.toLowerCase()
+            : (a.user || '').toLowerCase() === (m.name || '').toLowerCase())
           .forEach(rule => {
             const startUtcMin = rule.day_idx * 1440 + rule.start_hour * 60 - offset;
             const endUtcMin = rule.day_idx * 1440 + rule.end_hour * 60 - offset;

@@ -77,6 +77,45 @@ test('computeSlotSets: vincula reglas por nombre sin distinguir mayúsculas', ()
   assert.deepEqual([...sets.get('ana@x.com')], [2 * 24 + 9]);
 });
 
+test('computeSlotSets: dos miembros con el MISMO nombre no comparten horarios', () => {
+  // Antes de member_email, las reglas se vinculaban por nombre: dos homónimos
+  // en la misma sala heredaban los horarios del otro y el emparejador los
+  // trataba como disponibles cuando no lo estaban.
+  const members = [
+    { email: 'ana.perez@x.com', name: 'Ana Pérez', tz: 'UTC' },
+    { email: 'aperez@y.com', name: 'Ana Pérez', tz: 'UTC' }
+  ];
+  const avails = [
+    { memberEmail: 'ana.perez@x.com', user: 'Ana Pérez', dayIdx: 0, startHour: 9, endHour: 10 },
+    { memberEmail: 'aperez@y.com', user: 'Ana Pérez', dayIdx: 3, startHour: 15, endHour: 16 }
+  ];
+  const sets = computeSlotSets(members, avails);
+  assert.deepEqual([...sets.get('ana.perez@x.com')], [9], 'solo su propio bloque');
+  assert.deepEqual([...sets.get('aperez@y.com')], [3 * 24 + 15], 'solo su propio bloque');
+});
+
+test('computeSlotSets: el email manda sobre el nombre cuando difieren', () => {
+  // Si alguien cambió su nombre en members, sus filas viejas de availabilities
+  // conservan el nombre anterior. Con el vínculo por email siguen siendo suyas.
+  const members = [{ email: 'ana@x.com', name: 'Ana Gómez', tz: 'UTC' }];
+  const avails = [
+    { memberEmail: 'ana@x.com', user: 'Ana Pérez', dayIdx: 1, startHour: 8, endHour: 9 }
+  ];
+  const sets = computeSlotSets(members, avails);
+  assert.deepEqual([...sets.get('ana@x.com')], [24 + 8]);
+});
+
+test('computeSlotSets: sin memberEmail se sigue resolviendo por nombre', () => {
+  // Compatibilidad con las filas anteriores a la columna: mientras no tengan
+  // dueño resuelto, el nombre sigue siendo el único vínculo disponible.
+  const members = [{ email: 'ana@x.com', name: 'Ana Pérez', tz: 'UTC' }];
+  const avails = [
+    { memberEmail: null, user: 'Ana Pérez', dayIdx: 4, startHour: 11, endHour: 12 }
+  ];
+  const sets = computeSlotSets(members, avails);
+  assert.deepEqual([...sets.get('ana@x.com')], [4 * 24 + 11]);
+});
+
 test('heatmap: lo que la persona marca en su grilla aparece EXACTO en sus celdas', () => {
   // Propiedad de ida y vuelta: para zonas con offset entero, el mapa visto en
   // la MISMA zona en que se marcó debe pintar exactamente esas celdas.
