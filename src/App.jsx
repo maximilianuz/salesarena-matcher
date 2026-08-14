@@ -1803,6 +1803,23 @@ export default function App() {
               requestId: Math.random().toString(36).substring(2),
               conferenceSolutionKey: { type: 'hangoutsMeet' }
             }
+          },
+          // Recordatorios: el aviso al móvil llega por la app de Google
+          // Calendar, que ya tiene el evento porque ambos van como attendees.
+          // OJO con el alcance: la API aplica estos overrides SOLO a la copia
+          // del evento de quien lo crea (el usuario autenticado). A la otra
+          // persona le rigen sus propios avisos por defecto de Google —no se
+          // pueden fijar de forma remota—, que normalmente son 10 min antes.
+          // Por eso esto mejora el caso de quien agenda, pero no garantiza el
+          // recordatorio del compañero; ver nota en el README sobre el
+          // recordatorio propio del sistema.
+          reminders: {
+            useDefault: false,
+            overrides: [
+              { method: 'email', minutes: 24 * 60 }, // el día anterior, por mail
+              { method: 'popup', minutes: 60 },      // 1 h antes: push al móvil
+              { method: 'popup', minutes: 10 }       // justo antes de empezar
+            ]
           }
         };
 
@@ -2131,9 +2148,16 @@ export default function App() {
     );
   };
 
+  // Los avisos de error NO se autodestruyen: quedan hasta que se cierran a
+  // mano. Varios pasan de 130 caracteres y piden una acción concreta ("Volvé a
+  // intentarlo desde el asistente", "Avisale a tu compañero"), y leer eso lleva
+  // más de los 4,5 s que duraba el toast: el mensaje desaparecía antes de
+  // terminar de leerlo, justo cuando algo salió mal. Los informativos y los de
+  // éxito sí se van solos, que es el uso para el que sirve un toast.
   const showNotification = (msg, type = 'info') => {
     const id = Date.now() + Math.random();
     setToasts(prev => [...prev, { id, msg, type }]);
+    if (type === 'error') return;
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4500);
@@ -4082,13 +4106,18 @@ export default function App() {
               <h3 className="onboarding-title" id="onboarding-title">{step.title}</h3>
               <p className="onboarding-desc" id="onboarding-desc">{step.desc}</p>
 
+              {/* aria-label con el total y aria-current marcando el actual: el
+                  punto activo se distinguía solo por color y ancho, así que con
+                  lector de pantalla no había forma de saber en qué paso estabas
+                  ni cuántos faltaban. */}
               <div className="onboarding-dots">
                 {steps.map((_, i) => (
                   <button
                     key={i}
                     className={`onboarding-dot ${i === onboardingStep ? 'active' : ''}`}
                     onClick={() => setOnboardingStep(i)}
-                    aria-label={`Paso ${i + 1}`}
+                    aria-label={`Paso ${i + 1} de ${steps.length}`}
+                    aria-current={i === onboardingStep ? 'step' : undefined}
                   />
                 ))}
               </div>
