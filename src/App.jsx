@@ -66,7 +66,10 @@ import {
   Network,
   UsersRound,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  // Reseñas de la app + moderación
+  Star,
+  Inbox
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
@@ -322,6 +325,23 @@ export default function App() {
   const [promptValue, setPromptValue] = useState('');
   const confirmModalRef = useDialogA11y(!!confirmModal, confirmModal?.onCancel);
   const promptModalRef = useDialogA11y(!!promptModal, promptModal?.onCancel);
+
+  // Reseña de la app (estrellas + comentario). myFeedback es la propia fila
+  // (o null si nunca opinó); se usa tanto para prellenar el form como para
+  // mostrar el estado ("pendiente de revisión" / "publicada").
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [myFeedback, setMyFeedback] = useState(null);
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const feedbackModalRef = useDialogA11y(showFeedbackModal, () => setShowFeedbackModal(false));
+
+  // Moderación (solo platform admin): lista de reseñas para aprobar/rechazar.
+  const [showFeedbackReviewModal, setShowFeedbackReviewModal] = useState(false);
+  const [feedbackReviewList, setFeedbackReviewList] = useState([]);
+  const [feedbackReviewLoading, setFeedbackReviewLoading] = useState(false);
+  const feedbackReviewModalRef = useDialogA11y(showFeedbackReviewModal, () => setShowFeedbackReviewModal(false));
+  const pendingFeedbackCount = feedbackReviewList.filter(f => f.status === 'pending').length;
 
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
@@ -1590,6 +1610,141 @@ export default function App() {
     }
   };
 
+  // --- RESEÑAS DE LA APP (estrellas + comentario) ---
+  // Modo mock: se simula con localStorage, con una clave GLOBAL (no por sala,
+  // a diferencia de meetings/attendees) porque una reseña es de la app en
+  // general, no de una sala en particular — mismo criterio que UNIQUE
+  // member_email en la tabla real.
+  const loadMockFeedback = () => {
+    try { return JSON.parse(localStorage.getItem('salesarena-mock-feedback') || '[]'); }
+    catch { return []; }
+  };
+  const saveMockFeedback = (list) => {
+    localStorage.setItem('salesarena-mock-feedback', JSON.stringify(list));
+  };
+
+  const loadMyFeedback = async () => {
+    if (!currentUser) return;
+    if (useMockDb) {
+      const mine = loadMockFeedback().find(f => f.member_email === currentUser.email.toLowerCase());
+      setMyFeedback(mine || null);
+      return;
+    }
+    const { data } = await supabase.rpc('my_app_feedback');
+    setMyFeedback(data || null);
+  };
+
+  const openFeedbackModal = () => {
+    setFeedbackRating(myFeedback?.rating || 0);
+    setFeedbackComment(myFeedback?.comment || '');
+    setShowFeedbackModal(true);
+  };
+
+  const submitFeedback = async () => {
+    if (feedbackRating < 1 || feedbackRating > 5) {
+      showNotification('Elegí de 1 a 5 estrellas antes de enviar.', 'error');
+      return;
+    }
+    const comment = feedbackComment.trim();
+    if (!comment) {
+      showNotification('Escribí un comentario antes de enviar.', 'error');
+      return;
+    }
+
+    setFeedbackSubmitting(true);
+    try {
+      if (useMockDb) {
+        const list = loadMockFeedback();
+        const email = currentUser.email.toLowerCase();
+        const idx = list.findIndex(f => f.member_email === email);
+        const row = {
+          id: idx >= 0 ? list[idx].id : Date.now(),
+          member_email: email,
+          member_name: currentUser.name,
+          avatar_url: currentUser.avatarUrl || null,
+          room_id: currentRoomId,
+          rating: feedbackRating,
+          comment: comment.slice(0, 600),
+          status: 'pending',
+          created_at: idx >= 0 ? list[idx].created_at : new Date().toISOString(),
+          reviewed_at: null
+        };
+        if (idx >= 0) list[idx] = row; else list.push(row);
+        saveMockFeedback(list);
+        setMyFeedback(row);
+      } else {
+        const { data, error } = await supabase.rpc('submit_app_feedback', {
+          p_rating: feedbackRating,
+          p_comment: comment
+        });
+        if (error) {
+          showNotification('No pudimos guardar tu reseña. Intentá de nuevo en un momento.', 'error');
+          return;
+        }
+        setMyFeedback(data);
+      }
+      showNotification('¡Gracias por tu reseña! La vamos a revisar antes de publicarla.', 'success');
+      setShowFeedbackModal(false);
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  // --- MODERACIÓN DE RESEÑAS (solo platform admin) ---
+  const loadFeedbackForReview = async () => {
+    if (!isAdmin) return;
+    setFeedbackReviewLoading(true);
+    try {
+      if (useMockDb) {
+        const list = [...loadMockFeedback()].sort((a, b) =>
+          (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) ||
+          new Date(b.created_at) - new Date(a.created_at)
+        );
+        setFeedbackReviewList(list);
+        return;
+      }
+      const { data, error } = await supabase.rpc('list_feedback_for_review');
+      if (!error) setFeedbackReviewList(data || []);
+    } finally {
+      setFeedbackReviewLoading(false);
+    }
+  };
+
+  const openFeedbackReviewModal = () => {
+    setShowFeedbackReviewModal(true);
+    loadFeedbackForReview();
+  };
+
+  const reviewFeedback = async (id, approve) => {
+    if (useMockDb) {
+      const list = loadMockFeedback().map(f =>
+        f.id === id ? { ...f, status: approve ? 'approved' : 'rejected', reviewed_at: new Date().toISOString() } : f
+      );
+      saveMockFeedback(list);
+      setFeedbackReviewList(prev => prev.map(f =>
+        f.id === id ? { ...f, status: approve ? 'approved' : 'rejected' } : f
+      ));
+      return;
+    }
+    const { error } = await supabase.rpc('review_app_feedback', { p_id: id, p_approve: approve });
+    if (error) {
+      showNotification('No pudimos actualizar esa reseña. Intentá de nuevo.', 'error');
+      return;
+    }
+    setFeedbackReviewList(prev => prev.map(f =>
+      f.id === id ? { ...f, status: approve ? 'approved' : 'rejected' } : f
+    ));
+  };
+
+  // Carga la propia reseña (para el botón "Tu reseña" vs "Calificar la app")
+  // y, si es platform admin, la lista completa (para el contador de
+  // pendientes en el sidebar, sin tener que abrir el modal primero).
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    loadMyFeedback();
+    if (isAdmin) loadFeedbackForReview();
+  }, [isLoggedIn, currentUser?.email, isAdmin]);
+
   // --- ADMINISTRAR MIEMBROS ---
   const handleAddMember = async (e) => {
     e.preventDefault();
@@ -2670,6 +2825,26 @@ export default function App() {
                 <Globe size={10} /> {tzCity(currentUser.tz)}
               </div>
             </div>
+          </div>
+          <div className="profile-card-actions profile-card-actions-secondary">
+            <button
+              type="button"
+              className="profile-action-btn"
+              onClick={openFeedbackModal}
+              title={myFeedback ? 'Ver o editar tu reseña' : 'Calificar la app y dejar un comentario'}
+            >
+              <Star size={13} /> {myFeedback ? 'Tu reseña' : 'Calificar la app'}
+            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className="profile-action-btn"
+                onClick={openFeedbackReviewModal}
+                title="Aprobar o rechazar reseñas para la web pública"
+              >
+                <Inbox size={13} /> Moderar{pendingFeedbackCount > 0 ? ` (${pendingFeedbackCount})` : ''}
+              </button>
+            )}
           </div>
           <div className="profile-card-actions">
             <button type="button" className="profile-action-btn" onClick={openOnboarding} title="Ver la guía de uso">
@@ -4177,6 +4352,190 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* MODAL: CALIFICAR LA APP (estrellas + comentario) */}
+      {showFeedbackModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="feedback-modal-title"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px'
+          }}
+        >
+          <div
+            className="glass"
+            ref={feedbackModalRef}
+            tabIndex={-1}
+            style={{
+              width: '100%', maxWidth: '440px', backgroundColor: 'var(--bg-sidebar)',
+              borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column',
+              gap: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
+              boxSizing: 'border-box', position: 'relative'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 id="feedback-modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Star size={17} className="section-title-icon" /> Calificá la app
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(false)}
+                aria-label="Cerrar"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {myFeedback && (
+              <div className="login-disclosure" style={{ textAlign: 'left' }}>
+                {myFeedback.status === 'pending' && 'Tu reseña anterior está pendiente de revisión.'}
+                {myFeedback.status === 'approved' && 'Tu reseña ya está publicada en la web. Si la editás, vuelve a pasar por revisión.'}
+                {myFeedback.status === 'rejected' && 'Tu reseña anterior no se publicó. Podés volver a intentarlo.'}
+              </div>
+            )}
+
+            <div className="feedback-star-picker" role="radiogroup" aria-label="Puntuación de 1 a 5 estrellas">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button
+                  key={n}
+                  type="button"
+                  role="radio"
+                  aria-checked={feedbackRating === n}
+                  aria-label={`${n} ${n === 1 ? 'estrella' : 'estrellas'}`}
+                  className={`feedback-star-btn ${feedbackRating >= n ? 'filled' : ''}`}
+                  onClick={() => setFeedbackRating(n)}
+                >
+                  <Star size={28} />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              className="form-input"
+              rows={4}
+              maxLength={600}
+              placeholder="Contanos qué te parece la app. Si la aprobamos, puede aparecer con tu nombre y foto en la web pública."
+              value={feedbackComment}
+              onChange={(e) => setFeedbackComment(e.target.value)}
+              style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', padding: '10px 14px', fontFamily: 'inherit' }}
+            />
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowFeedbackModal(false)}>Cancelar</button>
+              <button type="button" className="btn btn-indigo" onClick={submitFeedback} disabled={feedbackSubmitting}>
+                {feedbackSubmitting
+                  ? <span className="spinner" style={{ width: '14px', height: '14px' }}></span>
+                  : <Check size={14} />}
+                {myFeedback ? 'Actualizar reseña' : 'Enviar reseña'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: MODERAR RESEÑAS (solo platform admin) */}
+      {showFeedbackReviewModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="feedback-review-modal-title"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px'
+          }}
+        >
+          <div
+            className="glass"
+            ref={feedbackReviewModalRef}
+            tabIndex={-1}
+            style={{
+              width: '100%', maxWidth: '560px', maxHeight: '80vh', backgroundColor: 'var(--bg-sidebar)',
+              borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column',
+              gap: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
+              boxSizing: 'border-box', position: 'relative', overflow: 'hidden'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <h3 id="feedback-review-modal-title" style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Inbox size={17} className="section-title-icon" /> Moderar reseñas
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFeedbackReviewModal(false)}
+                aria-label="Cerrar"
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--text-muted)', flexShrink: 0 }}>
+              Solo lo que apruebes acá aparece en sales-arena-matcher.com, con nombre y foto de quien lo escribió.
+            </p>
+
+            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {feedbackReviewLoading ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px', padding: '20px 0', justifyContent: 'center' }}>
+                  <span className="spinner" style={{ width: '16px', height: '16px' }}></span> Cargando reseñas…
+                </div>
+              ) : feedbackReviewList.length === 0 ? (
+                <div className="empty-state">
+                  <Inbox size={30} />
+                  <span className="empty-state-title">Todavía no hay reseñas</span>
+                  <span className="empty-state-desc">Cuando alguien califique la app, va a aparecer acá para que la revises.</span>
+                </div>
+              ) : feedbackReviewList.map(f => (
+                <div key={f.id} className="feedback-review-row">
+                  <div className="feedback-review-row-header">
+                    <span className="participant-avatar-mini" style={{ width: '32px', height: '32px', fontSize: '12px', backgroundColor: getAvatarColor(f.member_name) }}>
+                      <AvatarPhoto avatarUrl={f.avatar_url}>{getInitials(f.member_name)}</AvatarPhoto>
+                    </span>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text-main)' }}>{f.member_name}</div>
+                      <div className="feedback-review-stars" aria-label={`${f.rating} de 5 estrellas`}>
+                        {[1, 2, 3, 4, 5].map(n => (
+                          <Star key={n} size={12} className={n <= f.rating ? 'filled' : ''} />
+                        ))}
+                      </div>
+                    </div>
+                    <span className={`feedback-status-badge feedback-status-${f.status}`}>
+                      {f.status === 'pending' && 'Pendiente'}
+                      {f.status === 'approved' && 'Publicada'}
+                      {f.status === 'rejected' && 'Rechazada'}
+                    </span>
+                  </div>
+                  <p className="feedback-review-comment">{f.comment}</p>
+                  <div className="feedback-review-actions">
+                    <button
+                      type="button"
+                      className="attendance-btn attendance-btn-yes"
+                      disabled={f.status === 'approved'}
+                      onClick={() => reviewFeedback(f.id, true)}
+                    >
+                      <Check size={13} /> Aprobar
+                    </button>
+                    <button
+                      type="button"
+                      className="attendance-btn attendance-btn-no"
+                      disabled={f.status === 'rejected'}
+                      onClick={() => reviewFeedback(f.id, false)}
+                    >
+                      <X size={13} /> Rechazar
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
