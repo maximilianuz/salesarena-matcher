@@ -41,6 +41,27 @@ export const GoogleMark = ({ size = 16 }) => (
   </svg>
 );
 
+// Foto de perfil de Google, si existe, en vez de las iniciales que ya traía
+// cada avatar. `children` es ese respaldo (getInitials(...)): si no hay
+// avatarUrl, o la imagen falla al cargar (borrada, o Google bloqueándola por
+// privacidad — pasa), se muestra tal cual estaba antes. object-fit: cover +
+// borderRadius: inherit para que la foto tome exactamente el tamaño y la
+// forma del círculo del que ya depende el layout de cada lugar donde se usa
+// (perfil, fila de miembro, avatar de la dupla del match...), sin tener que
+// tocar el CSS de cada uno.
+export const AvatarPhoto = ({ avatarUrl, children }) => {
+  const [broken, setBroken] = React.useState(false);
+  if (!avatarUrl || broken) return children;
+  return (
+    <img
+      src={avatarUrl}
+      alt=""
+      onError={() => setBroken(true)}
+      style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }}
+    />
+  );
+};
+
 // Piezas de ajedrez en el mismo estilo de trazo que lucide-react (esa
 // librería no trae un set de ajedrez), para el halo del login: refuerzan el
 // motivo de "partida"/"jugada" sin depender de un ícono de marca ya usado.

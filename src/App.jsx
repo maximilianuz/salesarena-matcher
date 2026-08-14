@@ -69,7 +69,7 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 
-import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit } from './components/Brand';
+import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
 import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
@@ -99,6 +99,13 @@ const getRoomIdFromUrl = () => {
   const match = path.match(/\/room\/([^/]+)/);
   return match ? match[1] : null;
 };
+
+// Google entrega la foto de perfil en el token de OAuth. Supabase la
+// normaliza como avatar_url; se cae a picture (el claim crudo de Google) por
+// si alguna vez cambia el mapeo — mismo respaldo doble que ya se usa para el
+// nombre (full_name || name) más abajo.
+const googleAvatarUrl = (session) =>
+  session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || null;
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
 
@@ -744,7 +751,8 @@ export default function App() {
           email: d.email,
           country: d.country,
           tz: d.timezone,
-          active: d.active
+          active: d.active,
+          avatarUrl: d.avatar_url
         })));
       }
 
@@ -807,7 +815,8 @@ export default function App() {
     email: row.email,
     country: row.country,
     tz: row.timezone,
-    active: row.active
+    active: row.active,
+    avatarUrl: row.avatar_url
   });
 
   // Deja la sesión iniciada y la persiste localmente. Centraliza el estado que
@@ -883,6 +892,22 @@ export default function App() {
         .maybeSingle();
 
       if (existing) {
+        // Refresca la foto si cambió la de Google. El resto del perfil
+        // (nombre, país) no se pisa solo por volver a entrar —alguien pudo
+        // haberlo corregido a mano en "Gestionar Equipo"— pero la foto no
+        // tiene ninguna pantalla de edición propia, así que no hay nada que
+        // proteger de un sobrescrito indeseado.
+        const avatarUrl = googleAvatarUrl(session);
+        if (avatarUrl && avatarUrl !== existing.avatar_url) {
+          await supabase.from('members')
+            .update({ avatar_url: avatarUrl })
+            .eq('room_id', currentRoomId)
+            .eq('email', existing.email);
+          existing.avatar_url = avatarUrl;
+          setMembers(prev => prev.map(m =>
+            m.email.toLowerCase() === existing.email.toLowerCase() ? { ...m, avatarUrl } : m
+          ));
+        }
         applyLoggedInUser(memberFromRow(existing));
       } else {
         // Bootstrap de sala nueva: solo el administrador puede crear una sala
@@ -909,7 +934,7 @@ export default function App() {
         // trae— y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
           session.user.user_metadata?.name || nameFromEmail(email)).trim();
-        await registerMember(googleName, guessCountryFromBrowserTz(), email);
+        await registerMember(googleName, guessCountryFromBrowserTz(), email, googleAvatarUrl(session));
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
@@ -946,12 +971,12 @@ export default function App() {
     const sets = activeMembers.map(m => slotSets.get(m.email) || new Set());
     const calculatedAffinity = activeMembers.map((member, i) => {
       const partnerStats = activeMembers.map((partner, j) => {
-        if (i === j) return { name: partner.name, pct: null };
+        if (i === j) return { name: partner.name, email: partner.email, pct: null };
         let common = 0;
         sets[i].forEach(s => { if (sets[j].has(s)) common++; });
         const denom = Math.min(sets[i].size, sets[j].size);
         const pct = denom ? Math.round((common / denom) * 100) : 0;
-        return { name: partner.name, pct };
+        return { name: partner.name, email: partner.email, pct };
       });
       return { name: member.name, stats: partnerStats };
     });
@@ -1309,7 +1334,7 @@ export default function App() {
   // Registra un miembro nuevo en Supabase y actualiza el estado local.
   // Se usa desde el auto-registro OAuth, el flujo mock y el paso de
   // código de invitación.
-  const registerMember = async (rawName, rawCountry, emailOverride) => {
+  const registerMember = async (rawName, rawCountry, emailOverride, avatarUrl = null) => {
     const email = (emailOverride || loginEmail).trim().toLowerCase();
     // El país siempre llega resuelto por guessCountryFromBrowserTz (un país de
     // ZONAS o Argentina como fallback). Antes había una rama para el valor
@@ -1322,7 +1347,8 @@ export default function App() {
       email,
       country: finalCountry,
       tz: finalTz,
-      active: true
+      active: true,
+      avatarUrl
     };
 
     if (!useMockDb) {
@@ -1335,7 +1361,8 @@ export default function App() {
         p_access_code: inviteCode || null,
         p_name: newUser.name,
         p_country: newUser.country,
-        p_timezone: newUser.tz
+        p_timezone: newUser.tz,
+        p_avatar_url: newUser.avatarUrl
       });
 
       if (error) {
@@ -2630,7 +2657,7 @@ export default function App() {
         <div className="profile-card">
           <div className="profile-card-top">
             <div className="profile-avatar" style={{ backgroundColor: getAvatarColor(currentUser.name) }}>
-              {getInitials(currentUser.name)}
+              <AvatarPhoto avatarUrl={currentUser.avatarUrl}>{getInitials(currentUser.name)}</AvatarPhoto>
               <span className={`profile-status-dot ${currentUser.active ? 'on' : 'off'}`} title={currentUser.active ? 'Participando esta semana' : 'Inactivo esta semana'}></span>
             </div>
             <div className="profile-card-info">
@@ -2783,11 +2810,13 @@ export default function App() {
               {/* PROMPTS DE ASISTENCIA PENDIENTES */}
               {pendingReports.length > 0 && (
                 <div className="attendance-prompts">
-                  {pendingReports.map(({ meeting, attendance }) => (
+                  {pendingReports.map(({ meeting, attendance }) => {
+                    const reportedMember = members.find(m => m.email.toLowerCase() === attendance.memberEmail.toLowerCase());
+                    return (
                     <div className="attendance-prompt-card glass" key={attendance.id}>
                       <div className="attendance-prompt-info">
                         <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(attendance.memberName) }}>
-                          {getInitials(attendance.memberName)}
+                          <AvatarPhoto avatarUrl={reportedMember?.avatarUrl}>{getInitials(attendance.memberName)}</AvatarPhoto>
                         </div>
                         <div>
                           <div className="attendance-prompt-question">
@@ -2822,7 +2851,8 @@ export default function App() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               )}
 
@@ -2966,7 +2996,7 @@ export default function App() {
                         <div className="match-card-header">
                           <div className="match-card-identity" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                             <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
-                              {getInitials(partnerName)}
+                              <AvatarPhoto avatarUrl={partnerMember?.avatarUrl}>{getInitials(partnerName)}</AvatarPhoto>
                             </span>
                             <div style={{ minWidth: 0 }}>
                               <div className="match-card-partner-name" style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
@@ -3541,11 +3571,12 @@ export default function App() {
                       <React.Fragment key={i}>
                         {topStats.map(s => {
                           const level = levelForAffinity(s.pct);
+                          const statMember = members.find(m => m.email.toLowerCase() === s.email.toLowerCase());
                           return (
                             <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
                               <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(s.name) }}>
-                                  {getInitials(s.name)}
+                                  <AvatarPhoto avatarUrl={statMember?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
                                 </span>
                                 {s.name}
                               </span>
@@ -3580,7 +3611,7 @@ export default function App() {
                     return (
                     <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={idx}>
                       <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
-                        {getInitials(m.name)}
+                        <AvatarPhoto avatarUrl={m.avatarUrl}>{getInitials(m.name)}</AvatarPhoto>
                       </div>
                       <div className="member-row-info">
                         <span className="member-row-name">
