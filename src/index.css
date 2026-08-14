@@ -371,6 +371,25 @@ html.dark .glass-hover:hover {
   color: var(--color-primary);
 }
 
+.nav-sidebar-head {
+  margin-bottom: 28px;
+}
+
+/* Hereda todo de .nav-link; solo se despega del grupo de vistas para que no se
+   lea como una sección más de la app. */
+.nav-collapse-btn {
+  margin-top: auto;
+  font-size: 12.5px;
+}
+
+/* El botón de contraer no tiene sentido en el cajón móvil, que se abre y
+   cierra con el botón del header. */
+@media (max-width: 768px) {
+  .nav-collapse-btn {
+    display: none;
+  }
+}
+
 .nav-links {
   display: flex;
   flex-direction: column;
@@ -396,6 +415,13 @@ html.dark .glass-hover:hover {
   width: 100%;
   text-align: left;
   font-family: inherit;
+}
+
+/* El ícono nunca se encoge. Sin esto, al contraer el panel la etiqueta (que
+   lleva white-space: nowrap) reclama todo el ancho disponible y comprime al
+   SVG hasta 0px: la barra quedaba con los ítems invisibles, imposible de usar. */
+.nav-link > svg {
+  flex-shrink: 0;
 }
 
 .nav-link:hover {
@@ -669,6 +695,124 @@ html.dark .view-header {
   top: 0; left: 0; right: 0; bottom: 0;
   background-color: rgba(0,0,0,0.4);
   z-index: 90;
+}
+
+/* =========================================
+   SIDEBAR CONTRAÍDO A BARRA DE ÍCONOS (escritorio)
+   =========================================
+   Contraído, el panel queda de 68px y se despliega al pasar el mouse o al
+   recibir foco de teclado. El espaciador conserva esos 68px en el flujo, así
+   que al desplegarse el panel se superpone al contenido en vez de empujarlo:
+   sin ese truco, cada pasada del cursor movía toda la página.
+
+   Las etiquetas NO se ocultan con display:none ni visibility:hidden — eso las
+   sacaría del árbol de accesibilidad y del orden de tabulación, dejando la
+   navegación inservible con lector de pantalla. Se atenúan con opacity y se
+   recortan por el overflow del panel; pointer-events:none evita que se pueda
+   hacer clic en algo invisible, pero el foco por teclado sigue llegando (y al
+   llegar, focus-within despliega el panel y todo vuelve a verse). */
+.nav-rail-spacer {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  .layout-container.sidebar-collapsed .nav-rail-spacer {
+    display: block;
+    width: 68px;
+    flex-shrink: 0;
+  }
+
+  .layout-container.sidebar-collapsed .nav-sidebar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 68px;
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow: hidden;
+    transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.22s ease;
+  }
+
+  /* :has(:focus-visible) y no :focus-within — con focus-within, hacer clic en
+     el botón de contraer dejaba el panel desplegado (el botón conserva el
+     foco), así que la acción parecía no surtir efecto hasta clickear afuera.
+     :focus-visible solo se activa con teclado, que es justo el caso que hay
+     que cubrir para no depender del hover. */
+  .layout-container.sidebar-collapsed .nav-sidebar:hover,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) {
+    width: var(--sidebar-width);
+    padding-left: 16px;
+    padding-right: 16px;
+    box-shadow: 12px 0 34px rgba(0, 0, 0, 0.13);
+  }
+
+  html.dark .layout-container.sidebar-collapsed .nav-sidebar:hover,
+  html.dark .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) {
+    box-shadow: 12px 0 34px rgba(0, 0, 0, 0.5);
+  }
+
+  .layout-container.sidebar-collapsed .nav-link-label,
+  .layout-container.sidebar-collapsed .nav-collapsible,
+  .layout-container.sidebar-collapsed .theme-selector,
+  .layout-container.sidebar-collapsed .profile-card-info,
+  .layout-container.sidebar-collapsed .profile-card-actions {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+  }
+
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .nav-link-label,
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .nav-collapsible,
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .theme-selector,
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .profile-card-info,
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .profile-card-actions,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .nav-link-label,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .nav-collapsible,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .theme-selector,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .profile-card-info,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .profile-card-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* El texto no debe reacomodarse mientras el panel cambia de ancho: sin
+     nowrap, "Cargar Disponibilidad" se parte en dos líneas a mitad de la
+     transición y los ítems saltan de alto. */
+  .layout-container.sidebar-collapsed .nav-link {
+    white-space: nowrap;
+  }
+
+  /* Contraído, la tarjeta de perfil se reduce al avatar y pierde el marco:
+     un recuadro de 14px de padding alrededor de un avatar se ve como un error. */
+  .layout-container.sidebar-collapsed .profile-card {
+    padding: 6px;
+    background: transparent;
+    border-color: transparent;
+    /* Sin esto queda la sombra de una tarjeta que ya no se ve: una mancha
+       suelta debajo del avatar. */
+    box-shadow: none;
+    transition: padding 0.22s ease, background-color 0.22s ease,
+                border-color 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .layout-container.sidebar-collapsed .nav-sidebar:hover .profile-card,
+  .layout-container.sidebar-collapsed .nav-sidebar:has(:focus-visible) .profile-card {
+    padding: 14px;
+    background-color: var(--bg-card);
+    border-color: var(--border-color);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .layout-container.sidebar-collapsed .nav-sidebar,
+  .layout-container.sidebar-collapsed .nav-link-label,
+  .layout-container.sidebar-collapsed .profile-card {
+    transition: none;
+  }
 }
 
 @media (max-width: 768px) {

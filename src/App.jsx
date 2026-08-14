@@ -59,7 +59,14 @@ import {
   ExternalLink,
   BarChart3,
   Award,
-  TrendingUp
+  TrendingUp,
+  // Navegación lateral: íconos más específicos que los genéricos que había
+  // (ver comentario en el bloque .nav-links) + control de contraer/expandir.
+  CalendarClock,
+  Network,
+  UsersRound,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit } from './components/Brand';
@@ -134,6 +141,19 @@ export default function App() {
 
   // Estado del Sidebar móvil
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  // Sidebar contraído a barra de íconos (solo escritorio). Es una preferencia
+  // explícita del usuario y se recuerda entre sesiones. Contraído, el panel se
+  // despliega al pasar el mouse Y al recibir foco de teclado: si dependiera
+  // solo del hover, quien navega con teclado o pantalla táctil no podría leer
+  // las etiquetas nunca.
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('salesarena-sidebar-collapsed') === 'true'; } catch { return false; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('salesarena-sidebar-collapsed', String(isSidebarCollapsed)); } catch { /* modo privado */ }
+  }, [isSidebarCollapsed]);
 
   // Autenticación de Google (Simulada)
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
@@ -2314,7 +2334,7 @@ export default function App() {
   }
 
   return (
-    <div className="layout-container">
+    <div className={`layout-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
 
       {/* SKIP LINK: keyboard users can bypass the sidebar nav and jump straight to content */}
       <a href="#main-content" className="skip-to-content">Saltar al contenido principal</a>
@@ -2408,20 +2428,26 @@ export default function App() {
       {/* MOBILE DRAWER OVERLAY */}
       <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={() => setIsSidebarOpen(false)}></div>
 
+      {/* Reserva el ancho de la barra de íconos mientras el panel está
+          contraído, para que desplegarlo con el mouse superponga el contenido
+          en vez de empujarlo (el salto de layout en cada pasada del cursor era
+          peor que el propio panel angosto). Solo existe en escritorio. */}
+      <div className="nav-rail-spacer" aria-hidden="true"></div>
+
       {/* 1. SIDEBAR NAVIGATION */}
       <nav className={`nav-sidebar ${isSidebarOpen ? 'open' : ''}`}>
-        <div style={{ marginBottom: '28px' }}>
-          <a 
-            href="https://sales-arena.netlify.app/" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            title="Haz clic para visitar el Portal Oficial de Sales Arena" 
+        <div className="nav-sidebar-head">
+          <a
+            href="https://sales-arena.netlify.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Haz clic para visitar el Portal Oficial de Sales Arena"
             className="brand-logo-interactive"
           >
             <div className="brand-logo-container horse-glow-pulse">
               <ChessKnightIcon size={34} />
             </div>
-            <div className="brand-title-stacked">
+            <div className="brand-title-stacked nav-collapsible">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className="brand-title-sales">Sales Arena</span>
                 <span className="portal-badge-mini">PORTAL ↗</span>
@@ -2431,24 +2457,44 @@ export default function App() {
           </a>
         </div>
 
+        {/* Los íconos nombran lo que hace cada vista, no una categoría vaga:
+            reloj+calendario para cargar horarios, nodos conectados para la
+            afinidad entre duplas y un grupo para el equipo (antes "Afinidad" y
+            "Equipo" compartían la misma silueta de personas y se confundían). */}
         <div className="nav-links" role="navigation" aria-label="Navegación principal">
-          <button type="button" className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} aria-current={activeTab === 'dashboard' ? 'page' : undefined} onClick={() => handleTabClick('dashboard')}>
-            <LayoutDashboard size={17} /> Panel de Control
+          <button type="button" title="Panel de Control" className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} aria-current={activeTab === 'dashboard' ? 'page' : undefined} onClick={() => handleTabClick('dashboard')}>
+            <LayoutDashboard size={17} aria-hidden="true" /> <span className="nav-link-label">Panel de Control</span>
           </button>
-          <button type="button" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
-            <CalendarRange size={17} /> Cargar Disponibilidad
+          <button type="button" title="Cargar Disponibilidad" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
+            <CalendarClock size={17} aria-hidden="true" /> <span className="nav-link-label">Cargar Disponibilidad</span>
           </button>
-          <button type="button" className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} aria-current={activeTab === 'heatmap' ? 'page' : undefined} onClick={() => handleTabClick('heatmap')}>
-            <Flame size={17} /> Mapa de Calor
+          <button type="button" title="Mapa de Calor" className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} aria-current={activeTab === 'heatmap' ? 'page' : undefined} onClick={() => handleTabClick('heatmap')}>
+            <Flame size={17} aria-hidden="true" /> <span className="nav-link-label">Mapa de Calor</span>
           </button>
-          <button type="button" className={`nav-link ${activeTab === 'affinity' ? 'active' : ''}`} aria-current={activeTab === 'affinity' ? 'page' : undefined} onClick={() => handleTabClick('affinity')}>
-            <Users size={17} /> Afinidad Horaria
+          <button type="button" title="Afinidad Horaria" className={`nav-link ${activeTab === 'affinity' ? 'active' : ''}`} aria-current={activeTab === 'affinity' ? 'page' : undefined} onClick={() => handleTabClick('affinity')}>
+            <Network size={17} aria-hidden="true" /> <span className="nav-link-label">Afinidad Horaria</span>
           </button>
-          <button type="button" className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} aria-current={activeTab === 'members' ? 'page' : undefined} onClick={() => handleTabClick('members')}>
-            <UserCheck size={17} /> Gestionar Equipo
+          <button type="button" title="Gestionar Equipo" className={`nav-link ${activeTab === 'members' ? 'active' : ''}`} aria-current={activeTab === 'members' ? 'page' : undefined} onClick={() => handleTabClick('members')}>
+            <UsersRound size={17} aria-hidden="true" /> <span className="nav-link-label">Gestionar Equipo</span>
           </button>
-          <button type="button" className={`nav-link ${activeTab === 'reportes' ? 'active' : ''}`} aria-current={activeTab === 'reportes' ? 'page' : undefined} onClick={() => handleTabClick('reportes')}>
-            <BarChart3 size={17} /> Reportes y Análisis
+          <button type="button" title="Reportes y Análisis" className={`nav-link ${activeTab === 'reportes' ? 'active' : ''}`} aria-current={activeTab === 'reportes' ? 'page' : undefined} onClick={() => handleTabClick('reportes')}>
+            <BarChart3 size={17} aria-hidden="true" /> <span className="nav-link-label">Reportes y Análisis</span>
+          </button>
+
+          {/* Al pie de la lista y con etiqueta propia, no como ícono suelto en
+              la cabecera: ahí competía por ancho con la marca y partía "Sales
+              Arena" en dos líneas, además de quedar sin nombre visible. */}
+          <button
+            type="button"
+            className="nav-link nav-collapse-btn"
+            onClick={() => setIsSidebarCollapsed(v => !v)}
+            title={isSidebarCollapsed ? 'Fijar el menú abierto' : 'Contraer el menú a íconos'}
+            aria-pressed={isSidebarCollapsed}
+          >
+            {isSidebarCollapsed
+              ? <PanelLeftOpen size={17} aria-hidden="true" />
+              : <PanelLeftClose size={17} aria-hidden="true" />}
+            <span className="nav-link-label">{isSidebarCollapsed ? 'Fijar menú' : 'Contraer menú'}</span>
           </button>
         </div>
 
