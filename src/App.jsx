@@ -3555,6 +3555,10 @@ export default function App() {
                       <input
                         type="text"
                         className="form-input"
+                        /* El placeholder desaparece al tipear, así que no puede
+                           ser el único nombre del campo: sin esto, un lector de
+                           pantalla solo anuncia "cuadro de texto". */
+                        aria-label="Escribí el país de origen"
                         value={customNewMemberCountry}
                         onChange={(e) => setCustomNewMemberCountry(e.target.value)}
                         placeholder="Escribe el país... Ej. Italia"

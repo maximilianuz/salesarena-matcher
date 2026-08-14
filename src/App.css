@@ -702,13 +702,18 @@
   flex-wrap: wrap;
 }
 
+/* Los badges de estado ("ACTIVO"/"Participa" y su contraparte inactiva) usaban
+   el mismo verde y rojo brillantes en los dos temas. Sobre el chip claro daban
+   1.97:1 y 2.83:1 — muy por debajo del mínimo de 4.5:1 para texto de este
+   tamaño, y encima son de 10px. En oscuro esos mismos colores sí contrastan,
+   así que se conservan ahí y solo se oscurecen para el tema claro. */
 .member-badge-active {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
   background-color: rgba(52, 199, 89, 0.12);
-  color: #34c759;
+  color: #0f7b3e;
 }
 
 .member-badge-inactive {
@@ -717,6 +722,14 @@
   font-size: 10px;
   font-weight: 600;
   background-color: rgba(255, 59, 48, 0.12);
+  color: #b42318;
+}
+
+html.dark .member-badge-active {
+  color: #34c759;
+}
+
+html.dark .member-badge-inactive {
   color: var(--color-danger);
 }
 
