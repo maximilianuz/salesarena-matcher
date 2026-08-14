@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
-import { getOffsetMinutes, computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
+import { computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
   getReliability as reliabilityOf,
@@ -395,13 +395,21 @@ export default function App() {
       });
   }, [currentUser?.email, currentRoomId]);
 
-  // Slot UTC → etiqueta en la hora local de una zona ("Lunes 14:00")
-  const slotToLocalLabel = (slot, tz) => {
-    const localMin = slot * 60 + getOffsetMinutes(tz);
-    const norm = ((localMin % 10080) + 10080) % 10080; // 10080 = minutos por semana
-    const day = DIAS[Math.floor(norm / 1440)];
-    const hour = Math.floor((norm % 1440) / 60);
-    return `${day} ${String(hour).padStart(2, '0')}:00`;
+  // Slot UTC → fecha y hora reales de la próxima ocurrencia en la zona de una
+  // persona ("Lunes 17/08/2026 · 14:00"). Reutiliza getNextMatchDateUtc (la
+  // MISMA ocurrencia que ya usa el plazo de respuesta, ver más abajo) y
+  // formatea todo con Intl para que día de semana, fecha y hora salgan de un
+  // único cálculo consistente en vez de mezclar el offset fijo de arriba con
+  // el calendario real.
+  const slotToLocalDateLabel = (slot, tz) => {
+    const date = getNextMatchDateUtc({ startSlot: slot });
+    const parts = new Intl.DateTimeFormat('es-AR', {
+      timeZone: tz, weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(date);
+    const get = (type) => parts.find(p => p.type === type)?.value || '';
+    const weekday = get('weekday');
+    return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${get('day')}/${get('month')}/${get('year')} · ${get('hour')}:${get('minute')}`;
   };
 
   // Plazo de respuesta en formato relativo y breve ("en 3 h", "en 2 días")
@@ -2796,7 +2804,7 @@ export default function App() {
                           <div className="match-time-compare">
                             <div className="match-time-side">
                               <span className="match-time-side-label">Tú</span>
-                              <span className="match-time-side-value">{slotToLocalLabel(proposal.slot, currentUser.tz)}</span>
+                              <span className="match-time-side-value">{slotToLocalDateLabel(proposal.slot, currentUser.tz)}</span>
                             </div>
                             <div className="match-time-divider" aria-hidden="true">
                               <Clock size={12} />
@@ -2804,7 +2812,7 @@ export default function App() {
                             {partnerMember && (
                               <div className="match-time-side match-time-side-right">
                                 <span className="match-time-side-label">{partnerName.split(' ')[0]}</span>
-                                <span className="match-time-side-value">{slotToLocalLabel(proposal.slot, partnerMember.tz)}</span>
+                                <span className="match-time-side-value">{slotToLocalDateLabel(proposal.slot, partnerMember.tz)}</span>
                               </div>
                             )}
                           </div>
