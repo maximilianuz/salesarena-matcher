@@ -36,7 +36,7 @@
 }
 
 .kpi-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
 
 .section-subtitle {
   margin: -10px 0 0;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1.4;
 }
@@ -128,7 +128,7 @@
 }
 
 .match-meta, .meeting-meta {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -338,7 +338,7 @@
   color: var(--text-main);
   font-weight: 600;
   padding: 10px 8px;
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
   border-bottom: 1px solid var(--border-color);
 }
@@ -346,7 +346,7 @@
 .heatmap-td-hour {
   background-color: var(--bg-card-hover);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   padding: 6px;
   text-align: center;
@@ -379,7 +379,7 @@
 }
 
 .heatmap-legend-text {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   font-weight: 600;
   white-space: nowrap;
@@ -397,7 +397,7 @@
   min-width: 32px;
   border: none;
   cursor: pointer;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   font-family: inherit;
   display: block;
@@ -486,7 +486,7 @@
   z-index: 5;
   background-color: var(--bg-sidebar);
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -504,7 +504,7 @@
 
 .editor-hour-label {
   height: 26px;
-  font-size: 9.5px;
+  font-size: 12px;
   text-align: center;
   background-color: var(--bg-sidebar);
   color: var(--text-muted);
@@ -553,7 +553,7 @@
   background-color: rgba(94, 92, 230, 0.1);
   border: 1px solid rgba(94, 92, 230, 0.24);
   color: var(--color-primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -561,7 +561,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -583,7 +583,7 @@
   border: 1px solid var(--border-color);
   background-color: var(--bg-card);
   color: var(--text-main);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -605,7 +605,7 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   padding: 4px;
@@ -710,7 +710,7 @@
 .member-badge-active {
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   background-color: rgba(52, 199, 89, 0.12);
   color: #0f7b3e;
@@ -719,7 +719,7 @@
 .member-badge-inactive {
   padding: 2px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   background-color: rgba(255, 59, 48, 0.12);
   color: #b42318;
@@ -736,7 +736,7 @@ html.dark .member-badge-inactive {
 .member-badge-self {
   padding: 2px 7px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   background-color: rgba(94, 92, 230, 0.14);
   color: var(--color-primary);
@@ -756,7 +756,7 @@ html.dark .member-badge-inactive {
   gap: 5px;
   padding: 5px 11px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   background-color: rgba(120, 120, 120, 0.08);
@@ -765,7 +765,7 @@ html.dark .member-badge-inactive {
 }
 
 .member-row-details {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   display: flex;
   align-items: center;
@@ -875,7 +875,7 @@ input:checked + .switch-slider:before {
 
 .btn-small {
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--border-color);
   background-color: var(--bg-card);
@@ -967,7 +967,7 @@ input:checked + .switch-slider:before {
 .match-card-score-pill {
   padding: 3px 8px;
   border-radius: 980px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   background-color: rgba(48, 209, 88, 0.12);
   color: #30d158;
@@ -983,7 +983,7 @@ input:checked + .switch-slider:before {
 }
 
 .match-section-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -999,7 +999,7 @@ input:checked + .switch-slider:before {
 .match-participant-tag {
   padding: 4px 10px;
   border-radius: 8px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 500;
   background-color: rgba(120, 120, 120, 0.05);
   border: 1px solid var(--border-color);
@@ -1023,7 +1023,7 @@ input:checked + .switch-slider:before {
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -1058,7 +1058,7 @@ input:checked + .switch-slider:before {
 }
 
 .match-time-side-label {
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--color-primary);
   text-transform: uppercase;
@@ -1092,7 +1092,7 @@ input:checked + .switch-slider:before {
   margin-top: 10px;
   padding: 7px 10px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-warning);
   background-color: rgba(255, 159, 10, 0.08);
@@ -1167,7 +1167,7 @@ input:checked + .switch-slider:before {
   background-color: rgba(10, 132, 255, 0.14);
   color: var(--color-primary);
   font-weight: 800;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.3px;
   border: 1px solid rgba(10, 132, 255, 0.3);
 }
@@ -1890,7 +1890,7 @@ html.dark .login-disclosure {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 980px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   background-color: rgba(94, 92, 230, 0.12);
   color: var(--color-primary);
@@ -1981,7 +1981,7 @@ html.dark .login-disclosure {
   gap: 5px;
   padding: 4px 11px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -2019,7 +2019,7 @@ html.dark .login-disclosure {
   padding: 4px 11px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   white-space: nowrap;
   flex: 0 0 auto;
@@ -2086,7 +2086,7 @@ html.dark .dashboard-next-step--meeting-ready {
 }
 
 .dashboard-next-step-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.45px;
   text-transform: uppercase;
@@ -2101,7 +2101,7 @@ html.dark .dashboard-next-step--meeting-ready {
 
 .dashboard-status-loading-text {
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -2114,7 +2114,7 @@ html.dark .dashboard-next-step--meeting-ready {
   gap: 3px;
   padding: 2px 7px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -2192,7 +2192,7 @@ html.dark .dashboard-next-step--meeting-ready {
 }
 
 .attendance-prompt-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -2264,7 +2264,7 @@ html.dark .dashboard-next-step--meeting-ready {
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2299,7 +2299,7 @@ html.dark .dashboard-next-step--meeting-ready {
   margin-top: 3px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
   background-color: rgba(10, 132, 255, 0.1);
   color: var(--color-info, #0a84ff);
@@ -2318,7 +2318,7 @@ html.dark .dashboard-next-step--meeting-ready {
   margin-top: 3px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 700;
   background-color: rgba(94, 92, 230, 0.12);
   color: var(--color-primary);
@@ -2340,7 +2340,7 @@ html.dark .meeting-mine-badge {
   margin-top: 3px;
   padding: 2px 9px;
   border-radius: 999px;
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -2375,7 +2375,7 @@ html.dark .meeting-mine-badge {
   align-items: center;
   gap: 4px;
   margin-top: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--color-warning);
   line-height: 1.35;
@@ -2386,7 +2386,7 @@ html.dark .meeting-mine-badge {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 4px 10px;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;

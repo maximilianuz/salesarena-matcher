@@ -2244,7 +2244,7 @@ export default function App() {
                 /* LOCAL MOCK TESTING: With optional email input */
                 <form onSubmit={handleGoogleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div className="form-group" style={{ textAlign: 'left' }}>
-                    <label htmlFor="login-email" style={{ fontSize: '11px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Correo de Prueba (Gmail)</label>
+                    <label htmlFor="login-email" style={{ fontSize: '12px', fontWeight: '600', marginBottom: '6px', display: 'block' }}>Correo de Prueba (Gmail)</label>
                     <input
                       type="email"
                       id="login-email"
@@ -2968,8 +2968,8 @@ export default function App() {
                             <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
                               <div className="meeting-info">
                                 <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
-                                <span className="meeting-meta" style={{ fontSize: '11px' }}>{meet.dateUtc}</span>
-                                <span className="meeting-meta" style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="meeting-meta" style={{ fontSize: '12px' }}>{meet.dateUtc}</span>
+                                <span className="meeting-meta" style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                   <Users size={10} /> {meet.participants}
                                 </span>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -3004,7 +3004,7 @@ export default function App() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="btn btn-indigo"
-                                  style={{ padding: '6px 10px', fontSize: '11px', textDecoration: 'none' }}
+                                  style={{ padding: '6px 10px', fontSize: '12px', textDecoration: 'none' }}
                                   aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
                                   onClick={() => markJoined(meet)}
                                 >
@@ -3467,7 +3467,7 @@ export default function App() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                         {isSelf ? (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Participa:</span>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Participa:</span>
                             <label className="switch-control" title="Activa o desactiva tu participación">
                               <input
                                 type="checkbox"
@@ -3512,7 +3512,7 @@ export default function App() {
                 </h4>
                 <form className="add-member-form" onSubmit={handleAddMember}>
                   <div className="form-group">
-                    <label htmlFor="mem-name" style={{ fontSize: '11px', fontWeight: '600' }}>Nombre Completo</label>
+                    <label htmlFor="mem-name" style={{ fontSize: '12px', fontWeight: '600' }}>Nombre Completo</label>
                     <input
                       type="text"
                       id="mem-name"
@@ -3525,7 +3525,7 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="mem-email" style={{ fontSize: '11px', fontWeight: '600' }}>Correo Electrónico (Gmail)</label>
+                    <label htmlFor="mem-email" style={{ fontSize: '12px', fontWeight: '600' }}>Correo Electrónico (Gmail)</label>
                     <input
                       type="email"
                       id="mem-email"
@@ -3538,7 +3538,7 @@ export default function App() {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="mem-country" style={{ fontSize: '11px', fontWeight: '600' }}>País de Origen</label>
+                    <label htmlFor="mem-country" style={{ fontSize: '12px', fontWeight: '600' }}>País de Origen</label>
                     <select
                       id="mem-country"
                       className="form-select"
@@ -3787,7 +3787,7 @@ export default function App() {
               <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Share2 size={14} /> Compartir Enlace de la Sala
               </label>
-              <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                 Este enlace lleva incluido el código de acceso de <strong>{roomName}</strong>: quien lo reciba entra directo.
                 Sin él, nadie puede sumarse aunque conozca la dirección de la sala.
               </p>
@@ -3812,7 +3812,7 @@ export default function App() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
-                <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Lock size={12} aria-hidden="true" />
                   Código de acceso:
                   <strong style={{ color: 'var(--text-main)', fontFamily: 'monospace', letterSpacing: '0.08em' }}>
@@ -3855,7 +3855,7 @@ export default function App() {
             {currentUser.email.toLowerCase() === ADMIN_EMAIL ? (
               <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
                 <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
-                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
                   Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente.
                 </p>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
@@ -3874,7 +3874,7 @@ export default function App() {
                 </div>
               </form>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-muted)' }}>
                 <Lock size={13} style={{ flexShrink: 0 }} />
                 Solo el administrador puede crear salas nuevas por el momento.
               </div>
@@ -3884,7 +3884,7 @@ export default function App() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-danger-hover, #ff453a)' }}>Zona de Peligro</label>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.4' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.4' }}>
                   Eliminar permanentemente esta sala y todos sus miembros de la base de datos.
                 </span>
                 <button 
