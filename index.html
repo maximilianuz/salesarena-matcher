@@ -1130,6 +1130,210 @@
                 padding: 0.5rem 0.75rem;
             }
         }
+
+        /* =========================================
+           COMUNIDAD: testimonios + top 10 del mes
+           ========================================= */
+        .community-showcase {
+            padding: 4rem 2rem 5rem;
+            background: var(--bg-gradient);
+        }
+
+        .community-showcase-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .community-showcase h2 {
+            text-align: center;
+            font-size: 2.25rem;
+            margin: 0 0 0.75rem;
+        }
+
+        .community-showcase-subtitle {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 1rem;
+            max-width: 560px;
+            margin: 0 auto 3rem;
+        }
+
+        /* Marquee de testimonios: se arma con JS a partir de public_testimonials().
+           Si todavía no hay ninguno aprobado, community-community.js oculta el
+           bloque entero — nada de mostrar una franja vacía en la web pública. */
+        .testimonials-marquee {
+            position: relative;
+            overflow: hidden;
+            -webkit-mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+            mask-image: linear-gradient(90deg, transparent, black 6%, black 94%, transparent);
+        }
+
+        .testimonials-track {
+            display: flex;
+            gap: 1.25rem;
+            width: max-content;
+            animation: testimonials-scroll 44s linear infinite;
+        }
+
+        .testimonials-marquee:hover .testimonials-track {
+            animation-play-state: paused;
+        }
+
+        @keyframes testimonials-scroll {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .testimonials-track {
+                animation: none;
+                overflow-x: auto;
+                padding-bottom: 0.5rem;
+            }
+        }
+
+        .testimonial-card {
+            flex: 0 0 auto;
+            width: 300px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .testimonial-card-head {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .testimonial-avatar,
+        .top-roleplayer-avatar {
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .testimonial-avatar {
+            width: 44px;
+            height: 44px;
+            background: var(--primary);
+            font-size: 0.9rem;
+        }
+
+        .testimonial-name {
+            font-weight: 700;
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        .testimonial-stars,
+        .top-roleplayer-stars {
+            display: flex;
+            gap: 1px;
+            color: #E5E7EB;
+        }
+
+        .testimonial-stars svg.filled,
+        .top-roleplayer-stars svg.filled {
+            color: #F59E0B;
+        }
+
+        .testimonial-text {
+            color: var(--text-light);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        /* Top 10 del mes: cuenta de role-plays asistidos en el mes calendario en
+           curso, así que se renueva solo el 1° de cada mes sin ningún cron. */
+        .top-roleplayers {
+            margin-top: 4rem;
+            max-width: 720px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .top-roleplayers h3 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin: 0 0 0.5rem;
+        }
+
+        .top-roleplayers-subtitle {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            margin: 0 0 2rem;
+        }
+
+        .top-roleplayers-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .top-roleplayer-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+        }
+
+        .top-roleplayer-rank {
+            width: 26px;
+            flex-shrink: 0;
+            text-align: center;
+            font-weight: 800;
+            color: var(--primary);
+            font-size: 0.95rem;
+        }
+
+        .top-roleplayer-avatar {
+            width: 36px;
+            height: 36px;
+            background: var(--accent-purple);
+            font-size: 0.8rem;
+        }
+
+        .top-roleplayer-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .top-roleplayer-name {
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 0.9rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-roleplayer-count {
+            color: var(--text-light);
+            font-size: 0.78rem;
+        }
+
+        @media (max-width: 640px) {
+            .testimonial-card {
+                width: 240px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1329,6 +1533,27 @@
         </div>
     </section>
 
+    <!-- Comunidad: testimonios aprobados + top 10 del mes en curso. Ambos
+         bloques se completan con datos reales de Supabase (community-showcase.js);
+         si no hay datos todavía, el script oculta el bloque entero en vez de
+         mostrar una franja vacía. -->
+    <section class="community-showcase" id="community-showcase" hidden>
+        <div class="community-showcase-container">
+            <h2>Lo que dice nuestra comunidad</h2>
+            <p class="community-showcase-subtitle">Opiniones reales de equipos que ya coordinan sus role-plays con Sales Arena Matcher.</p>
+
+            <div class="testimonials-marquee" id="testimonials-marquee" hidden aria-label="Testimonios de usuarios">
+                <div class="testimonials-track" id="testimonials-track"></div>
+            </div>
+
+            <div class="top-roleplayers" id="top-roleplayers" hidden>
+                <h3>🏆 Los 10 más activos este mes</h3>
+                <p class="top-roleplayers-subtitle">Ranking en vivo según role-plays completados. Se renueva solo cada mes.</p>
+                <ol class="top-roleplayers-list" id="top-roleplayers-list"></ol>
+            </div>
+        </div>
+    </section>
+
     <!-- Permissions Disclosure -->
     <section class="permissions">
         <div class="permissions-panel">
@@ -1505,5 +1730,9 @@
     <script src="/js/hero-shader.js"></script>
     <script src="/js/features-coverflow.js"></script>
     <script src="/js/how-it-works-tabs.js"></script>
+    <!-- type="module" (no public/js/*.js como el resto): así Vite lo procesa
+         igual que /app y sustituye import.meta.env.VITE_SUPABASE_URL con el
+         valor real de Netlify, en vez de tener que hardcodear la URL acá. -->
+    <script type="module" src="/src/community-showcase.js"></script>
 </body>
 </html>

@@ -545,6 +545,10 @@ html.dark .profile-card {
   gap: 8px;
 }
 
+.profile-card-actions-secondary {
+  margin-bottom: 8px;
+}
+
 .profile-action-btn {
   flex: 1;
   display: inline-flex;

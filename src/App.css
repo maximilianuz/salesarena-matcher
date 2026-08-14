@@ -2557,3 +2557,111 @@ html.dark .meeting-mine-badge {
   justify-content: center;
   padding: 10px 14px;
 }
+
+/* =========================================
+   RESEÑAS DE LA APP (calificar + moderar)
+   ========================================= */
+.feedback-star-picker {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.feedback-star-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: rgba(120, 120, 120, 0.35);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.feedback-star-btn:hover {
+  transform: scale(1.1);
+}
+
+.feedback-star-btn.filled {
+  color: #ff9f0a;
+}
+
+.feedback-review-row {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: var(--bg-card);
+}
+
+.feedback-review-row-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.feedback-review-stars {
+  display: flex;
+  gap: 1px;
+  color: rgba(120, 120, 120, 0.35);
+  margin-top: 2px;
+}
+
+.feedback-review-stars svg.filled {
+  color: #ff9f0a;
+}
+
+.feedback-review-comment {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.feedback-review-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.feedback-review-actions .attendance-btn {
+  flex: 1;
+  justify-content: center;
+}
+
+.feedback-status-badge {
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.feedback-status-pending {
+  background-color: rgba(255, 159, 10, 0.14);
+  color: #a85b00;
+}
+
+.feedback-status-approved {
+  background-color: rgba(52, 199, 89, 0.14);
+  color: #0f7b3e;
+}
+
+.feedback-status-rejected {
+  background-color: rgba(255, 69, 58, 0.12);
+  color: #b42318;
+}
+
+html.dark .feedback-status-pending {
+  color: #f0b25f;
+}
+
+html.dark .feedback-status-approved {
+  color: #34c759;
+}
+
+html.dark .feedback-status-rejected {
+  color: var(--color-danger);
+}
