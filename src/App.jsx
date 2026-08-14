@@ -145,6 +145,7 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [isInAppBrowserDetected, setIsInAppBrowserDetected] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [isGoogleLoginPending, setIsGoogleLoginPending] = useState(false);
 
   const [customNewMemberCountry, setCustomNewMemberCountry] = useState('');
 
@@ -1170,7 +1171,12 @@ export default function App() {
     setLoginError('');
 
     if (!useMockDb) {
-      // Iniciar sesión con Google OAuth usando Supabase (no requiere ingresar email en nuestro input)
+      // Iniciar sesión con Google OAuth usando Supabase (no requiere ingresar email en nuestro input).
+      // Antes del redirect hay una ida y vuelta de red para armar la URL de
+      // OAuth; sin feedback visual el botón parecía no responder y invitaba a
+      // hacer doble clic. isGoogleLoginPending lo deshabilita y muestra un
+      // spinner mientras dura esa espera.
+      setIsGoogleLoginPending(true);
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -1179,10 +1185,12 @@ export default function App() {
         }
       });
       if (error) {
+        setIsGoogleLoginPending(false);
         const friendlyMsg = friendlyAuthError(error, 'es');
         setLoginError(friendlyMsg);
         showNotification('Error al iniciar sesión: ' + friendlyMsg);
       }
+      // En éxito no se resetea: el navegador ya está saliendo hacia Google.
       return;
     }
 
@@ -2196,11 +2204,21 @@ export default function App() {
 
               {!useMockDb ? (
                 /* REAL PRODUCTION OAUTH: Single-click Google login */
-                <button type="button" className="login-google-btn" onClick={handleGoogleLoginSubmit}>
-                  <span className="login-google-mark" aria-hidden="true">
-                    <GoogleMark />
-                  </span>
-                  Iniciar sesión con Google
+                <button
+                  type="button"
+                  className="login-google-btn"
+                  onClick={handleGoogleLoginSubmit}
+                  disabled={isGoogleLoginPending}
+                  aria-busy={isGoogleLoginPending}
+                >
+                  {isGoogleLoginPending ? (
+                    <span className="spinner" style={{ width: '16px', height: '16px' }}></span>
+                  ) : (
+                    <span className="login-google-mark" aria-hidden="true">
+                      <GoogleMark />
+                    </span>
+                  )}
+                  {isGoogleLoginPending ? 'Redirigiendo a Google…' : 'Iniciar sesión con Google'}
                 </button>
               ) : (
                 /* LOCAL MOCK TESTING: With optional email input */

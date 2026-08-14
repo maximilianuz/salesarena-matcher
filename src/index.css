@@ -555,7 +555,7 @@ html.dark .profile-card {
   border-radius: 8px;
   padding: 2px;
   margin-top: 12px;
-  gap: 2px;
+  gap: 8px;
 }
 
 .theme-btn {
@@ -579,6 +579,11 @@ html.dark .profile-card {
   background-color: var(--bg-sidebar);
   color: var(--text-main);
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.theme-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 /* Main View Area */

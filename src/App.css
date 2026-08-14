@@ -1111,6 +1111,12 @@ input:checked + .switch-slider:before {
   to { transform: rotate(360deg); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 /* --- COMPARTIR Y COPIAR SALA --- */
 .btn-share-header {
   display: flex;
@@ -1182,6 +1188,12 @@ input:checked + .switch-slider:before {
 .horse-glow-pulse {
   animation: horseGlowPulse 2.4s infinite;
   position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .horse-glow-pulse {
+    animation: none;
+  }
 }
 
 .brand-logo-interactive {
@@ -1380,6 +1392,18 @@ html.dark .login-disclosure {
   outline-offset: 3px;
 }
 
+.login-google-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+  transform: none;
+}
+
+.login-google-btn:disabled:hover {
+  transform: none;
+  filter: none;
+  box-shadow: 0 8px 20px rgba(94, 92, 230, 0.28);
+}
+
 /* Chip blanco para que el logo de Google conserve sus colores sobre el degradé */
 .login-google-mark {
   display: inline-flex;
@@ -1471,6 +1495,34 @@ html.dark .login-disclosure {
   .login-theme-switch {
     top: 14px;
     right: 14px;
+  }
+}
+
+/* Entrada escalonada del contenido de la tarjeta: cada bloque aparece un
+   poco después que el anterior en vez de todos a la vez de golpe. */
+@keyframes loginFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.login-brand,
+.login-lede,
+.login-disclosure,
+.login-google-btn {
+  animation: loginFadeUp 0.5s ease both;
+}
+
+.login-brand { animation-delay: 0s; }
+.login-lede { animation-delay: 0.08s; }
+.login-disclosure { animation-delay: 0.16s; }
+.login-google-btn { animation-delay: 0.24s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .login-brand,
+  .login-lede,
+  .login-disclosure,
+  .login-google-btn {
+    animation: none;
   }
 }
 
