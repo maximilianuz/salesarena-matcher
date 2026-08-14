@@ -206,6 +206,63 @@ html.dark .glass-hover:hover {
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
+/* Halo de piezas de ajedrez + conexiones orbitando el login (LoginConnectionsOrbit
+   en Brand.jsx). Un solo elemento por ícono: la animación rota, traslada al
+   radio y vuelve a rotar en sentido contrario en el MISMO keyframe, así el
+   ícono viaja en círculo sin quedar cabeza abajo en ningún punto del recorrido. */
+.login-orbit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.login-orbit-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 36px;
+  height: 36px;
+  margin: -18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--color-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(94, 92, 230, 0.14);
+  animation: login-orbit-spin var(--duration, 24s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+.login-orbit-icon--reverse {
+  animation-direction: reverse;
+}
+
+@keyframes login-orbit-spin {
+  from { transform: rotate(0deg) translateX(var(--radius)) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(var(--radius)) rotate(-360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-orbit-icon {
+    animation: none;
+    transform: translateX(var(--radius));
+  }
+}
+
+@media (max-width: 900px) {
+  .login-orbit {
+    display: none;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

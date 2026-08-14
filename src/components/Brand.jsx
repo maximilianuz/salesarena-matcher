@@ -1,6 +1,6 @@
 // Piezas visuales de marca reutilizadas en varias pantallas.
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Handshake, Users, MessageCircle } from 'lucide-react';
 
 // La app renderiza este ícono varias veces a la vez (header móvil + sidebar de
 // escritorio quedan ambos en el DOM; uno se oculta solo por CSS según el
@@ -39,6 +39,66 @@ export const GoogleMark = ({ size = 16 }) => (
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" fill="#FBBC05"/>
     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
   </svg>
+);
+
+// Piezas de ajedrez en el mismo estilo de trazo que lucide-react (esa
+// librería no trae un set de ajedrez), para el halo del login: refuerzan el
+// motivo de "partida"/"jugada" sin depender de un ícono de marca ya usado.
+const chessStrokeProps = (size) => ({
+  width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
+  stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round'
+});
+
+export const ChessPawnIcon = ({ size = 20 }) => (
+  <svg {...chessStrokeProps(size)} aria-hidden="true">
+    <circle cx="12" cy="7" r="3" />
+    <path d="M10.5 10 13.5 10 14.5 19 9.5 19 Z" />
+  </svg>
+);
+
+export const ChessRookIcon = ({ size = 20 }) => (
+  <svg {...chessStrokeProps(size)} aria-hidden="true">
+    <rect x="7" y="10" width="10" height="9" rx="1" />
+    <path d="M8 10 V6 H10 V8 H14 V6 H16 V10" />
+  </svg>
+);
+
+export const ChessBishopIcon = ({ size = 20 }) => (
+  <svg {...chessStrokeProps(size)} aria-hidden="true">
+    <circle cx="12" cy="5" r="1.3" />
+    <ellipse cx="12" cy="13.5" rx="4" ry="6" />
+    <path d="M8 20 H16" />
+  </svg>
+);
+
+// Halo decorativo del login: alterna piezas de ajedrez (la partida, el
+// role-play) con íconos de conexión entre personas (lo que arma el matcher),
+// orbitando alrededor de la tarjeta. Es puro CSS (@keyframes en App.css) para
+// no sumar una librería de animación solo para esta pantalla.
+// Los radios tienen que superar la mitad del ancho de la tarjeta (max-width
+// 420px → ~210px) para que los íconos asomen por fuera en vez de quedar
+// tapados detrás de ella.
+const ORBIT_NODES = [
+  { Icon: ChessPawnIcon, radius: 238, duration: 26, delay: 0 },
+  { Icon: Handshake, radius: 238, duration: 26, delay: -8.6 },
+  { Icon: ChessRookIcon, radius: 238, duration: 26, delay: -17.3 },
+  { Icon: Users, radius: 300, duration: 34, delay: 0, reverse: true },
+  { Icon: ChessBishopIcon, radius: 300, duration: 34, delay: -11.3, reverse: true },
+  { Icon: MessageCircle, radius: 300, duration: 34, delay: -22.6, reverse: true }
+];
+
+export const LoginConnectionsOrbit = () => (
+  <div className="login-orbit" aria-hidden="true">
+    {ORBIT_NODES.map(({ Icon, radius, duration, delay, reverse }, i) => (
+      <div
+        key={i}
+        className={`login-orbit-icon${reverse ? ' login-orbit-icon--reverse' : ''}`}
+        style={{ '--radius': `${radius}px`, '--duration': `${duration}s`, '--delay': `${delay}s` }}
+      >
+        <Icon size={17} />
+      </div>
+    ))}
+  </div>
 );
 
 // Badge de confiabilidad: % de asistencia en sesiones reportadas (60 días)

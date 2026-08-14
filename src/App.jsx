@@ -62,7 +62,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-import { ChessKnightIcon, GoogleMark, ReliabilityBadge } from './components/Brand';
+import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit } from './components/Brand';
 import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
@@ -2130,6 +2130,11 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Halo de piezas de ajedrez + íconos de conexión orbitando la tarjeta:
+            el "juego" (role-play) y el "match" (conectar personas), sin logos
+            de terceros. Puramente decorativo, oculto a lectores de pantalla. */}
+        <LoginConnectionsOrbit />
 
         <div className="login-card">
           {/* Marca */}
