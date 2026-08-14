@@ -100,6 +100,75 @@ const getRoomIdFromUrl = () => {
   return match ? match[1] : null;
 };
 
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
+
+// Pila de módulo (no estado de React: el orden de apertura no necesita volver
+// a renderizar nada) para que, con dos modales abiertos a la vez —el de
+// gestión de salas y, encima, el de confirmar "Renovar código"—, Escape
+// cierre solo el de ARRIBA. Sin esto, los dos <div> quedan escuchando
+// 'keydown' en document a la vez y un solo Escape cerraba ambos de un saque.
+const dialogStack = [];
+
+// Comportamiento de teclado de un diálogo modal, compartido por los 4 modales
+// de la app (confirmar/prompt, gestión de salas, guía de bienvenida): ninguno
+// lo tenía. Escape cierra, Tab queda atrapado dentro del modal (si no, se
+// puede tabular hacia la página de atrás sin querer) y el foco vuelve a quien
+// abrió el modal al cerrarlo, en vez de perderse en el body.
+// onClose va a un ref porque los 4 llamadores pasan una función nueva en cada
+// render (closures inline o setX(false)); si fuera dependencia del efecto, se
+// reengancharía el listener y se robaría el foco en cada tecla mientras el
+// modal está abierto.
+const useDialogA11y = (isOpen, onClose) => {
+  const ref = React.useRef(null);
+  const previouslyFocused = React.useRef(null);
+  const onCloseRef = React.useRef(onClose);
+  const idRef = React.useRef(null);
+  if (idRef.current === null) idRef.current = Symbol('dialog');
+  onCloseRef.current = onClose;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const id = idRef.current;
+    dialogStack.push(id);
+    previouslyFocused.current = document.activeElement;
+    const container = ref.current;
+    const firstFocusable = container?.querySelector(FOCUSABLE_SELECTOR);
+    (firstFocusable || container)?.focus();
+
+    const isTopmost = () => dialogStack[dialogStack.length - 1] === id;
+
+    const handleKeyDown = (e) => {
+      if (!isTopmost()) return; // un modal apilado encima ya lo va a manejar
+      if (e.key === 'Escape') {
+        onCloseRef.current?.();
+        return;
+      }
+      if (e.key !== 'Tab' || !container) return;
+      const items = container.querySelectorAll(FOCUSABLE_SELECTOR);
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const i = dialogStack.indexOf(id);
+      if (i !== -1) dialogStack.splice(i, 1);
+      previouslyFocused.current?.focus?.();
+    };
+  }, [isOpen]);
+
+  return ref;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -174,6 +243,8 @@ export default function App() {
     return 'Sala ' + roomId.charAt(0).toUpperCase() + roomId.slice(1);
   });
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const closeRoomModal = () => setIsRoomModalOpen(false);
+  const roomModalRef = useDialogA11y(isRoomModalOpen, closeRoomModal);
   const [newRoomNameInput, setNewRoomNameInput] = useState('');
   const [renameRoomInput, setRenameRoomInput] = useState('');
 
@@ -242,6 +313,8 @@ export default function App() {
   const [confirmModal, setConfirmModal] = useState(null); // {msg, onConfirm, onCancel}
   const [promptModal, setPromptModal] = useState(null); // {msg, placeholder, onSubmit, onCancel}
   const [promptValue, setPromptValue] = useState('');
+  const confirmModalRef = useDialogA11y(!!confirmModal, confirmModal?.onCancel);
+  const promptModalRef = useDialogA11y(!!promptModal, promptModal?.onCancel);
 
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
@@ -307,6 +380,8 @@ export default function App() {
     }
     setShowOnboarding(false);
   };
+
+  const onboardingModalRef = useDialogA11y(showOnboarding, closeOnboarding);
 
   const openOnboarding = () => {
     setOnboardingStep(0);
@@ -1458,7 +1533,8 @@ export default function App() {
 
   const handleRegenerateAccessCode = async () => {
     const confirmed = await showConfirm(
-      'Al generar un código nuevo, los enlaces de invitación que ya compartiste dejan de funcionar. Quienes ya son miembros de la sala no se ven afectados. ¿Continuar?'
+      'Al generar un código nuevo, los enlaces de invitación que ya compartiste dejan de funcionar. Quienes ya son miembros de la sala no se ven afectados. ¿Continuar?',
+      'Sí, generar'
     );
     if (!confirmed) return;
 
@@ -2005,7 +2081,8 @@ export default function App() {
       cancelReason = reason;
     } else {
       const confirmed = await showConfirm(
-        `¿Cancelar con aviso tu asistencia a "${meeting.title}"? Faltan más de 24hs, así que NO cuenta como falta. Tus compañeros lo verán reflejado.`
+        `¿Cancelar con aviso tu asistencia a "${meeting.title}"? Faltan más de 24hs, así que NO cuenta como falta. Tus compañeros lo verán reflejado.`,
+        'Sí, cancelar'
       );
       if (!confirmed) return;
       newStatus = 'cancelado_con_aviso';
@@ -2062,9 +2139,15 @@ export default function App() {
     }, 4500);
   };
 
-  const showConfirm = (msg) => new Promise((resolve) => {
+  // confirmLabel por defecto asume que la acción es destructiva (el uso más
+  // común: eliminar sala, eliminar miembro). Los dos llamadores que NO borran
+  // nada (renovar código, cancelar con aviso) pasan su propio texto —
+  // confirmar con "Sí, eliminar" cuando en realidad se está generando un
+  // código o cancelando una sesión es engañoso.
+  const showConfirm = (msg, confirmLabel = 'Sí, eliminar') => new Promise((resolve) => {
     setConfirmModal({
       msg,
+      confirmLabel,
       onConfirm: () => { setConfirmModal(null); resolve(true); },
       onCancel:  () => { setConfirmModal(null); resolve(false); }
     });
@@ -2089,6 +2172,16 @@ export default function App() {
     const active = !exists;
     setDragMode(active);
     toggleCell(dayIdx, hour, active);
+  };
+
+  // Arrastrar para seleccionar un rango es un gesto de mouse/touch: no tiene
+  // equivalente por teclado. WCAG 2.2 exige una alternativa de un solo golpe
+  // para cualquier acción que dependa de arrastrar, así que Enter/Espacio
+  // alternan la celda enfocada una por una (igual que un clic sin arrastre).
+  const handleCellKeyDown = (dayIdx, hour, e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault(); // el espacio no debe desplazar la página
+    handleCellMouseDown(dayIdx, hour);
   };
 
   const handleCellMouseEnter = (dayIdx, hour) => {
@@ -2359,26 +2452,25 @@ export default function App() {
 
       {/* CONFIRM MODAL */}
       {confirmModal && (
-        <div className="confirm-overlay" role="dialog" aria-modal="true">
-          <div className="confirm-card">
+        <div className="confirm-overlay" role="dialog" aria-modal="true" aria-describedby="confirm-modal-msg">
+          <div className="confirm-card" ref={confirmModalRef} tabIndex={-1}>
             <div className="confirm-icon"><AlertCircle size={36} /></div>
-            <p className="confirm-msg">{confirmModal.msg}</p>
+            <p className="confirm-msg" id="confirm-modal-msg">{confirmModal.msg}</p>
             <div className="confirm-actions">
               <button className="btn btn-outline" onClick={confirmModal.onCancel}>Cancelar</button>
-              <button className="btn btn-danger" onClick={confirmModal.onConfirm}>Sí, eliminar</button>
+              <button className="btn btn-danger" onClick={confirmModal.onConfirm}>{confirmModal.confirmLabel}</button>
             </div>
           </div>
         </div>
       )}
 
       {promptModal && (
-        <div className="confirm-overlay" role="dialog" aria-modal="true">
-          <div className="confirm-card">
+        <div className="confirm-overlay" role="dialog" aria-modal="true" aria-describedby="prompt-modal-msg">
+          <div className="confirm-card" ref={promptModalRef} tabIndex={-1}>
             <div className="confirm-icon"><AlertCircle size={36} /></div>
-            <p className="confirm-msg">{promptModal.msg}</p>
+            <p className="confirm-msg" id="prompt-modal-msg">{promptModal.msg}</p>
             <textarea
               className="prompt-textarea"
-              autoFocus
               rows={3}
               maxLength={300}
               value={promptValue}
@@ -3035,7 +3127,17 @@ export default function App() {
           {/* VIEW: WIZARD */}
           {activeTab === 'wizard' && (
             <div className="wizard-card glass">
-              
+
+              {/* Los 3 pasos no tenían ninguna señal de cuántos faltan; quien
+                  llegaba a la grilla de horarios (paso 3, el más largo) no
+                  sabía si era el último paso o si venía algo más después. */}
+              <div className="wizard-progress">
+                <span className="wizard-progress-label">Paso {wizardStep} de 3</span>
+                <div className="wizard-progress-track">
+                  <div className="wizard-progress-fill" style={{ width: `${(wizardStep / 3) * 100}%` }}></div>
+                </div>
+              </div>
+
               {/* Wizard Status Alert */}
               {wizardStatus && (
                 <div id="status" className={`status-${wizardStatus.type}`} style={{ display: 'block', marginBottom: '16px' }}>
@@ -3154,13 +3256,19 @@ export default function App() {
                               <td className="editor-hour-label">{String(h).padStart(2, '0')}:00</td>
                               {Array.from({ length: 7 }).map((_, d) => {
                                 const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
+                                const dayLabel = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][d];
                                 return (
                                   <td
                                     key={d}
                                     className={`editor-cell ${isActive ? 'active' : ''}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-pressed={isActive}
+                                    aria-label={`${dayLabel} ${String(h).padStart(2, '0')}:00${isActive ? ', seleccionado' : ''}`}
                                     onMouseDown={() => handleCellMouseDown(d, h)}
                                     onMouseEnter={() => handleCellMouseEnter(d, h)}
                                     onMouseUp={() => setIsMouseDown(false)}
+                                    onKeyDown={(e) => handleCellKeyDown(d, h, e)}
                                   ></td>
                                 );
                               })}
@@ -3731,38 +3839,47 @@ export default function App() {
       )}
       {/* MODAL DE GESTIÓN DE SALAS (ROOM MANAGER) */}
       {isRoomModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(10px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
-          <div className="glass" style={{
-            width: '100%',
-            maxWidth: '480px',
-            backgroundColor: 'var(--color-bg-sidebar)',
-            borderRadius: '16px',
-            padding: '24px',
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="room-modal-title"
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            backdropFilter: 'blur(10px)',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '20px',
-            boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-            border: '1px solid var(--border-color)',
-            boxSizing: 'border-box',
-            position: 'relative'
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
           }}>
+          <div
+            className="glass"
+            ref={roomModalRef}
+            tabIndex={-1}
+            style={{
+              width: '100%',
+              maxWidth: '480px',
+              backgroundColor: 'var(--color-bg-sidebar)',
+              borderRadius: '16px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              border: '1px solid var(--border-color)',
+              boxSizing: 'border-box',
+              position: 'relative'
+            }}>
             {/* Header del Modal */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h3 id="room-modal-title" style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Settings size={17} className="section-title-icon" /> Gestión de Salas
               </h3>
               <button
-                onClick={() => setIsRoomModalOpen(false)}
+                onClick={closeRoomModal}
+                aria-label="Cerrar gestión de salas"
                 style={{
                   background: 'none',
                   border: 'none',
@@ -3953,8 +4070,8 @@ export default function App() {
         const isLast = onboardingStep === steps.length - 1;
 
         return (
-          <div className="onboarding-overlay" role="dialog" aria-modal="true">
-            <div className="onboarding-card glass">
+          <div className="onboarding-overlay" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-desc">
+            <div className="onboarding-card glass" ref={onboardingModalRef} tabIndex={-1}>
               <button className="onboarding-close" onClick={closeOnboarding} title="Cerrar guía" aria-label="Cerrar guía de bienvenida">
                 <X size={16} aria-hidden="true" />
               </button>
@@ -3962,8 +4079,8 @@ export default function App() {
               <div className={`onboarding-icon ${onboardingStep === 0 ? 'brand' : ''}`}>
                 {step.icon}
               </div>
-              <h3 className="onboarding-title">{step.title}</h3>
-              <p className="onboarding-desc">{step.desc}</p>
+              <h3 className="onboarding-title" id="onboarding-title">{step.title}</h3>
+              <p className="onboarding-desc" id="onboarding-desc">{step.desc}</p>
 
               <div className="onboarding-dots">
                 {steps.map((_, i) => (

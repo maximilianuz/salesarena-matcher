@@ -220,6 +220,43 @@
   }
 }
 
+/* Progreso de los 3 pasos ("Paso X de 3" + barra). Vive fuera del gap de
+   24px de .wizard-card por eso el margin-bottom negativo: sin él, cada paso
+   quedaba con demasiado aire antes de su título. */
+.wizard-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: -12px;
+}
+
+.wizard-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.wizard-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background-color: rgba(120, 120, 120, 0.16);
+  overflow: hidden;
+}
+
+.wizard-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0a84ff 0%, #5e5ce6 100%);
+  transition: width 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wizard-progress-fill {
+    transition: none;
+  }
+}
+
 .wizard-title {
   margin: 0;
   font-size: 20px;
