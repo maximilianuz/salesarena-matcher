@@ -119,9 +119,16 @@ async function renderTestimonials() {
   // Se duplica el listado para que el loop del marquee sea continuo (la
   // animación recorre el 50% del ancho total, así que necesita 2 copias como
   // mínimo). Con pocos testimonios se duplica más para que no se note vacío.
+  //
+  // Las copias son puro relleno visual: van con aria-hidden para que un lector
+  // de pantalla lea cada testimonio UNA vez y no dos o cuatro veces seguidas.
   const copies = data.length <= 4 ? 4 : 2;
   for (let c = 0; c < copies; c++) {
-    data.forEach(t => track.appendChild(buildTestimonialCard(t)));
+    data.forEach(t => {
+      const card = buildTestimonialCard(t);
+      if (c > 0) card.setAttribute('aria-hidden', 'true');
+      track.appendChild(card);
+    });
   }
 
   marquee.hidden = false;

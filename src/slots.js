@@ -107,14 +107,16 @@ export const slotToLocalParts = (slot, tz) => {
 
 // Mapa de calor 7×24 en la hora local de `viewTz`.
 // Devuelve grid[day][hour] = { count, names }. Cada miembro cuenta a lo sumo
-// UNA vez por slot aunque tenga reglas superpuestas (p.ej. plantilla + carga
-// manual duplicada).
+// UNA vez por celda aunque tenga reglas superpuestas (p.ej. plantilla + carga
+// manual duplicada) o aunque la celda pise más de un slot UTC.
 export const buildHeatmapGrid = (members, avails, viewTz) => {
   const slotSets = computeSlotSets(members, avails);
+  // Se guarda email + nombre y no solo el nombre: el conteo se deduplica por
+  // email, así dos personas que se llaman igual siguen contando como dos.
   const presence = Array.from({ length: N_SLOTS }, () => []);
   members.forEach(member => {
     const set = slotSets.get(member.email);
-    set.forEach(s => presence[s].push(member.name));
+    set.forEach(s => presence[s].push({ email: member.email, name: member.name }));
   });
 
   const viewOffset = getOffsetMinutes(viewTz || 'UTC');
@@ -122,10 +124,26 @@ export const buildHeatmapGrid = (members, avails, viewTz) => {
   for (let d = 0; d < 7; d++) {
     const hoursRow = [];
     for (let h = 0; h < 24; h++) {
-      const localMin = d * 1440 + h * 60;
-      const utcMin = localMin - viewOffset;
-      const slotIdx = Math.floor((utcMin / 60) + N_SLOTS) % N_SLOTS;
-      const names = presence[slotIdx] || [];
+      // Intervalo UTC que cubre esta hora local. Se unen TODOS los slots que
+      // solapan, no solo el que cae al principio: es la misma regla con la que
+      // addRuleSlots marcó la disponibilidad. Con offsets de hora entera (todos
+      // los de ZONAS) da exactamente un slot; con offsets de media hora (ej.
+      // India UTC+5:30, alcanzable por el fallback al tz del navegador) una hora
+      // local pisa dos slots UTC, y mirar solo el primero mostraba a esa persona
+      // corrida una hora respecto de lo que había marcado.
+      const lo = d * 1440 + h * 60 - viewOffset;
+      const hi = lo + 60;
+      const seen = new Set();
+      const names = [];
+      for (let s = Math.floor(lo / 60); s <= Math.ceil(hi / 60) - 1; s++) {
+        const idx = ((s % N_SLOTS) + N_SLOTS) % N_SLOTS;
+        for (const m of presence[idx]) {
+          const key = m.email.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          names.push(m.name);
+        }
+      }
       hoursRow.push({ count: names.length, names: names.join(', ') });
     }
     grid.push(hoursRow);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairs, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
+import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
 import { computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
@@ -365,7 +365,32 @@ export default function App() {
   // Celda del mapa de calor seleccionada (click o foco+Enter): reemplaza al
   // tooltip como única forma de ver quiénes están disponibles en ese bloque
   // (el tooltip solo no funciona en mobile ni con teclado/lector de pantalla).
-  const [selectedHeatmapCell, setSelectedHeatmapCell] = useState(null); // { day, hour, count, names }
+  // Solo se guarda QUÉ celda está elegida, nunca sus datos: el mapa se
+  // recalcula (al resolverse la zona horaria de la sesión, o cuando alguien
+  // cambia su disponibilidad) y una copia de count/names tomada en el click
+  // dejaba el panel de detalle mostrando nombres viejos mientras la grilla ya
+  // se había actualizado.
+  const [selectedHeatmapCell, setSelectedHeatmapCell] = useState(null); // { day, hour }
+
+  // Flechas / Inicio / Fin para recorrer el mapa de calor. La grilla expone una
+  // sola parada de tabulación (roving tabindex), así que sin esto el teclado no
+  // tendría forma de llegar a 167 de las 168 celdas. Se enfoca la celda destino
+  // a mano porque el cambio de tabIndex por sí solo no mueve el foco.
+  const handleHeatmapKeyDown = (e) => {
+    const { day, hour } = selectedHeatmapCell || { day: 0, hour: 0 };
+    let next;
+    if (e.key === 'ArrowLeft') next = { day: Math.max(0, day - 1), hour };
+    else if (e.key === 'ArrowRight') next = { day: Math.min(6, day + 1), hour };
+    else if (e.key === 'ArrowUp') next = { day, hour: Math.max(0, hour - 1) };
+    else if (e.key === 'ArrowDown') next = { day, hour: Math.min(23, hour + 1) };
+    else if (e.key === 'Home') next = { day: 0, hour };
+    else if (e.key === 'End') next = { day: 6, hour };
+    else return;
+
+    e.preventDefault();
+    setSelectedHeatmapCell(next);
+    document.querySelector(`[data-heatmap-cell="${next.day}-${next.hour}"]`)?.focus();
+  };
 
   // Variables para arrastre en la grilla visual
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -587,7 +612,6 @@ export default function App() {
   // solo la primera que aparezca en el array.
   const myLiveProposals = myWeekProposals.filter(proposalIsLive)
     .sort((a, b) => a.slot - b.slot);
-  const myProposal = myLiveProposals[0] || null;
   const myLastClosedProposal = myLiveProposals.length > 0
     ? null
     : myWeekProposals.sort((x, y) => (y.id || 0) - (x.id || 0))[0] || null;
@@ -595,35 +619,49 @@ export default function App() {
   // Modo demo: correr el emparejador localmente (en producción lo hace la
   // Edge Function semanal weekly-matcher; el cliente solo lee su propuesta)
   useEffect(() => {
-    if (!useMockDb || !currentUser || myProposal) return;
+    if (!useMockDb || !currentUser) return;
     const week = currentWeekStartISO();
-    const takenOrRejected = new Set(
-      proposals
-        .filter(p => p.weekStart === week && (p.status === 'propuesto' || p.status === 'confirmado'))
-        .flatMap(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()])
-    );
-    // Se excluyen parejas RECHAZADAS (se respeta el "no" explícito) y las
-    // CANCELADAS esta semana (no re-ofrecer la misma dupla que se cayó;
-    // cada integrante queda libre para matchear con otros).
-    const rejectedPairs = new Set(
-      proposals
-        .filter(p => p.weekStart === week && (p.status === 'rechazado' || p.status === 'cancelado'))
-        .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
+    const pairKeyOf = (a, b) => [a.toLowerCase(), b.toLowerCase()].sort().join('|');
+    const weekProposals = proposals.filter(p => p.weekStart === week);
+    // Se excluyen las duplas RECHAZADAS (se respeta el "no" explícito), las
+    // CANCELADAS esta semana (no re-ofrecer la que se cayó) y las que ya tienen
+    // una propuesta VIVA. Se excluye la dupla, no a la persona: cada integrante
+    // queda libre para matchear con otros, igual que en la Edge Function.
+    const excludedPairs = new Set(
+      weekProposals
+        .filter(p => p.status === 'rechazado' || p.status === 'cancelado' ||
+                     p.status === 'propuesto' || p.status === 'confirmado')
+        .map(p => pairKeyOf(p.aEmail, p.bEmail))
     );
     // Duplas EXPIRADAS (sin respuesta): se evitan si hay otro compañero
     // disponible; si no, se vuelven a ofrecer.
     const expiredPairs = new Set(
-      proposals
-        .filter(p => p.weekStart === week && p.status === 'expirado')
-        .map(p => [p.aEmail.toLowerCase(), p.bEmail.toLowerCase()].sort().join('|'))
+      weekProposals
+        .filter(p => p.status === 'expirado')
+        .map(p => pairKeyOf(p.aEmail, p.bEmail))
     );
-    const pool = members.filter(m => m.active && !takenOrRejected.has(m.email.toLowerCase()));
+    // Horarios ya comprometidos por las propuestas vivas: nadie puede terminar
+    // con dos role-plays a la misma hora.
+    const busySlots = new Map();
+    const markBusy = (email, slot) => {
+      const k = email.toLowerCase();
+      if (!busySlots.has(k)) busySlots.set(k, new Set());
+      busySlots.get(k).add(slot);
+    };
+    for (const p of weekProposals) {
+      if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
+      if (p.slot === null || p.slot === undefined) continue;
+      markBusy(p.aEmail, p.slot);
+      markBusy(p.bEmail, p.slot);
+    }
+    const pool = members.filter(m => m.active);
     if (pool.length < 2) return;
 
     const slotSets = computeSlotSets(pool, availabilities);
     const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
-    const { pairs } = buildWeeklyPairs(
-      pool, slotSets, scores, rejectedPairs, new Map(), new Date(), expiredPairs, MIN_LEAD_MS
+    const pairs = buildWeeklyPairsMultiRound(
+      pool, slotSets, scores, excludedPairs, new Map(), new Date(),
+      expiredPairs, MIN_LEAD_MS, busySlots
     );
     if (pairs.length === 0) return;
 
@@ -3584,31 +3622,39 @@ export default function App() {
                   </div>
 
                   <div className="table-responsive-wrapper">
-                    <table className="heatmap-table">
+                    {/* Navegación tipo grilla: una sola parada de tabulación para
+                        las 168 celdas (antes eran 168, imposible de atravesar con
+                        teclado) y flechas/Inicio/Fin para moverse dentro. */}
+                    <table className="heatmap-table" onKeyDown={handleHeatmapKeyDown}>
                       <thead>
                         <tr>
-                          <th className="heatmap-th" style={{ width: '60px' }}>Hora</th>
+                          <th scope="col" className="heatmap-th" style={{ width: '60px' }}>Hora</th>
                           {DIAS.map(d => (
-                            <th className="heatmap-th" key={d}>{d.substring(0, 3)}</th>
+                            <th scope="col" className="heatmap-th" key={d}>{d.substring(0, 3)}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {Array.from({ length: 24 }).map((_, h) => (
                           <tr key={h}>
-                            <td className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</td>
+                            <th scope="row" className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</th>
                             {Array.from({ length: 7 }).map((_, d) => {
                               const cellData = heatmap[d]?.[h] || { count: 0, names: '' };
                               const level = levelFor(cellData.count);
                               const isSelected = selectedHeatmapCell?.day === d && selectedHeatmapCell?.hour === h;
+                              // Sin celda elegida, la única tabulable es la primera.
+                              const isTabStop = selectedHeatmapCell ? isSelected : (d === 0 && h === 0);
 
                               return (
                                 <td key={d} className="heatmap-cell-wrap">
                                   <button
                                     type="button"
+                                    data-heatmap-cell={`${d}-${h}`}
+                                    tabIndex={isTabStop ? 0 : -1}
                                     className={`heatmap-cell-btn ${isSelected ? 'selected' : ''}`}
                                     style={{ backgroundColor: level.bg, color: level.ink }}
-                                    onClick={() => setSelectedHeatmapCell({ day: d, hour: h, count: cellData.count, names: cellData.names })}
+                                    onClick={() => setSelectedHeatmapCell({ day: d, hour: h })}
+                                    aria-pressed={isSelected}
                                     aria-label={`${DIAS[d]} ${String(h).padStart(2, '0')}:00 — ${cellData.count === 0 ? 'nadie disponible' : `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}`}`}
                                   >
                                     {cellData.count > 0 ? cellData.count : ''}
@@ -3623,22 +3669,26 @@ export default function App() {
                   </div>
 
                   {/* DETALLE ACCESIBLE: reemplaza al tooltip como fuente de la lista de nombres.
-                      Funciona con click, teclado (Enter/Espacio en el botón) y touch (tap). */}
+                      Funciona con click, teclado (Enter/Espacio en el botón) y touch (tap).
+                      Los datos se leen del heatmap ACTUAL, no de una copia hecha en el
+                      click: si el mapa se recalcula, el panel se actualiza con él. */}
                   <div className="heatmap-detail-panel" aria-live="polite">
-                    {selectedHeatmapCell ? (
-                      selectedHeatmapCell.count > 0 ? (
+                    {selectedHeatmapCell ? (() => {
+                      const sel = heatmap[selectedHeatmapCell.day]?.[selectedHeatmapCell.hour] || { count: 0, names: '' };
+                      const when = `${DIAS[selectedHeatmapCell.day]} ${String(selectedHeatmapCell.hour).padStart(2, '0')}:00`;
+                      return sel.count > 0 ? (
                         <>
                           <div className="heatmap-detail-title">
-                            <Clock size={13} /> {DIAS[selectedHeatmapCell.day]} {String(selectedHeatmapCell.hour).padStart(2, '0')}:00 · {selectedHeatmapCell.count} {selectedHeatmapCell.count === 1 ? 'persona disponible' : 'personas disponibles'}
+                            <Clock size={13} /> {when} · {sel.count} {sel.count === 1 ? 'persona disponible' : 'personas disponibles'}
                           </div>
-                          <div className="heatmap-detail-names">{selectedHeatmapCell.names}</div>
+                          <div className="heatmap-detail-names">{sel.names}</div>
                         </>
                       ) : (
                         <div className="heatmap-detail-title heatmap-detail-empty">
-                          <Clock size={13} /> {DIAS[selectedHeatmapCell.day]} {String(selectedHeatmapCell.hour).padStart(2, '0')}:00 · Nadie disponible en ese bloque
+                          <Clock size={13} /> {when} · Nadie disponible en ese bloque
                         </div>
-                      )
-                    ) : (
+                      );
+                    })() : (
                       <div className="heatmap-detail-placeholder">Elegí un bloque de la grilla para ver quiénes están disponibles.</div>
                     )}
                   </div>
@@ -3664,7 +3714,7 @@ export default function App() {
                   Tu Solapamiento Horario con el Equipo
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila: la disponibilidad detallada del resto del equipo es privada.
+                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila; el detalle hora por hora de todo el equipo está en el Mapa de Calor.
                 </p>
 
                 <div className="heatmap-legend" role="img" aria-label="Escala de afinidad horaria: de baja o sin coincidencia a alta">
