@@ -25,7 +25,14 @@
     # no soporta en headers estáticos. connect-src cubre Supabase (dominio
     # dinámico vía env var, de ahí el wildcard *.supabase.co) y la API de
     # Google Calendar que el cliente llama directo desde el navegador.
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.googleapis.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    #
+    # img-src incluye googleusercontent porque las fotos de perfil las sirve
+    # Google desde lh3..lh6.googleusercontent.com (el claim "picture" del token
+    # de OAuth). Con solo 'self' data:, el navegador bloqueaba TODAS esas
+    # imágenes: el <img> fallaba, saltaba el respaldo a iniciales y la foto no
+    # aparecía nunca — ni en la app ni en los testimonios de la landing. No se
+    # nota en desarrollo porque estos headers los aplica Netlify, no Vite.
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.googleapis.com; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none'"
 
 # Los HTML nunca se cachean: son los que apuntan a los bundles con hash.
 # Si se cachean, el navegador sigue pidiendo el bundle viejo (que además es

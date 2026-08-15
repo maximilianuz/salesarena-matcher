@@ -113,6 +113,8 @@ const soonestSlot = (slots: number[], now: Date, minLeadMs = 0): number =>
     nextSlotOccurrenceMs(s, now, minLeadMs) < nextSlotOccurrenceMs(best, now, minLeadMs) ? s : best
   );
 
+const EMPTY_SLOTS: Set<number> = new Set();
+
 const buildWeeklyPairs = (
   members: Member[],
   slotSets: Map<string, Set<number>>,
@@ -121,11 +123,13 @@ const buildWeeklyPairs = (
   pairCounts: Map<string, number>,
   now: Date,
   softExcludedPairs: Set<string> = new Set(),
-  minLeadMs = 0
+  minLeadMs = 0,
+  busySlots: Map<string, Set<number>> = new Map()
 ): { pairs: Pair[] } => {
   const scoreOf = (email: string) => scores.get(email) ?? BASELINE_SCORE;
   const pairKey = (e1: string, e2: string) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
   const timesPaired = (e1: string, e2: string) => pairCounts.get(pairKey(e1, e2)) ?? 0;
+  const busyOf = (email: string) => busySlots.get(email.toLowerCase()) ?? EMPTY_SLOTS;
   const ranked = [...members].sort((a, b) => (scoreOf(b.email) ?? BASELINE_SCORE) - (scoreOf(a.email) ?? BASELINE_SCORE));
   const assigned = new Set<string>();
   const pairs: Pair[] = [];
@@ -134,6 +138,9 @@ const buildWeeklyPairs = (
     if (assigned.has(m.email)) continue;
     const mySlots = slotSets.get(m.email);
     if (!mySlots || mySlots.size === 0) continue;
+    const myBusy = busyOf(m.email);
+    const myFree = [...mySlots].filter(s => !myBusy.has(s));
+    if (myFree.length === 0) continue;
 
     let best: { cand: Member; count: number; score: number; common: number[]; isSoft: boolean } | null = null;
     for (const cand of ranked) {
@@ -141,7 +148,11 @@ const buildWeeklyPairs = (
       if (excludedPairs.has(pairKey(m.email, cand.email))) continue;
       const candSlots = slotSets.get(cand.email);
       if (!candSlots || candSlots.size === 0) continue;
-      const common = [...mySlots].filter(s => candSlots.has(s));
+      // Solapamiento REALMENTE disponible: descarta lo que cualquiera de los dos
+      // ya tiene comprometido, para que nadie termine con dos role-plays a la
+      // misma hora. Debe coincidir con src/matcher.js.
+      const candBusy = busyOf(cand.email);
+      const common = myFree.filter(s => candSlots.has(s) && !candBusy.has(s));
       if (common.length === 0) continue;
       const isSoft = softExcludedPairs.has(pairKey(m.email, cand.email));
       const count = timesPaired(m.email, cand.email);
@@ -512,23 +523,44 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Emparejar en rondas: permitir múltiples propuestas por miembro (con personas diferentes).
-      // Cada ronda busca nuevas parejas y las agrega a `excluded` para que no se repita la dupla.
-      // Las rondas terminan cuando no hay más parejas posibles o el pool queda muy pequeño.
+      // HORARIOS YA COMPROMETIDOS. Las propuestas vivas de esta semana ocupan la
+      // agenda de sus dos integrantes: si no se tuvieran en cuenta, cada corrida
+      // del cron (cada 10 min) podría volver a ofrecerles ese mismo horario con
+      // otra persona y dejarlos con dos role-plays superpuestos.
+      const busySlots = new Map<string, Set<number>>();
+      const markBusy = (email: string, slot: number) => {
+        const k = email.toLowerCase();
+        if (!busySlots.has(k)) busySlots.set(k, new Set<number>());
+        busySlots.get(k)!.add(slot);
+      };
+      for (const p of weekProposals || []) {
+        if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
+        if (p.slot_start === null || p.slot_start === undefined) continue;
+        markBusy(p.member_a_email, p.slot_start);
+        markBusy(p.member_b_email, p.slot_start);
+      }
+
+      // Emparejar en rondas: se permiten varias propuestas por miembro (con
+      // personas diferentes). No hay tope fijo — el límite lo pone la
+      // disponibilidad, porque cada horario asignado queda tomado para esas dos
+      // personas y las rondas se cortan solas cuando no quedan horas libres en
+      // común. Debe coincidir con buildWeeklyPairsMultiRound en src/matcher.js.
       const allPairs: Pair[] = [];
-      let roundExcluded = new Set(excluded);
-      const maxRounds = Math.floor(pool.length / 2); // límite de seguridad
+      const roundExcluded = new Set(excluded);
+      const maxRounds = Math.max(1, pool.length - 1); // techo de seguridad
 
       for (let round = 0; round < maxRounds; round++) {
         const { pairs } = buildWeeklyPairs(
-          pool, slotSets, scores, roundExcluded, pairCounts, now, softExcluded, MIN_LEAD_MS
+          pool, slotSets, scores, roundExcluded, pairCounts, now, softExcluded, MIN_LEAD_MS, busySlots
         );
         if (pairs.length === 0) break; // No hay más parejas posibles
 
         allPairs.push(...pairs);
-        // Agrega los nuevos pares a excluded para que no se repitan en la siguiente ronda
         for (const p of pairs) {
+          // La dupla no se repite, y el horario queda ocupado para los dos.
           roundExcluded.add(pairKeyOf(p.a.email, p.b.email));
+          markBusy(p.a.email, p.slot);
+          markBusy(p.b.email, p.slot);
         }
       }
 
@@ -536,6 +568,7 @@ Deno.serve(async (req) => {
       if (pairs.length === 0) continue;
 
       const toInsert: Record<string, unknown>[] = [];
+      let revived = 0;
       for (const p of pairs) {
         const meetingMs = nextSlotOccurrenceMs(p.slot, now, MIN_LEAD_MS);
         // Plazo escalonado: 4h→2h→1h→30m. Si la reunión está a <30min no hay
@@ -545,6 +578,7 @@ Deno.serve(async (req) => {
         const respondBy = new Date(rbMs).toISOString();
         const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
         if (revivedId !== undefined) {
+          revived++;
           await supabase.from('match_proposals').update({
             status: 'propuesto',
             status_a: null,
@@ -566,11 +600,16 @@ Deno.serve(async (req) => {
           });
         }
       }
+      let inserted = 0;
       if (toInsert.length) {
         const { error } = await supabase.from('match_proposals').insert(toInsert);
         if (error) continue;
+        inserted = toInsert.length;
       }
-      summary[roomId] = pairs.length;
+      // Lo que se informa es lo que REALMENTE quedó propuesto: los pares que se
+      // descartan por no entrar en la ventana de confirmación no cuentan, y el
+      // cliente usa este número para avisar "se generaron nuevas propuestas".
+      summary[roomId] = inserted + revived;
     }
 
     return new Response(JSON.stringify({ ok: true, week, created: summary }), {

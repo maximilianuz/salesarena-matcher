@@ -185,3 +185,40 @@ test('heatmap: miembro con reglas duplicadas cuenta UNA sola vez por celda', () 
   assert.equal(grid[0][10].count, 1);
   assert.equal(grid[0][10].names, 'Dup');
 });
+
+test('heatmap: zona de media hora ve su bloque donde lo marcó, no corrido', () => {
+  // India (UTC+5:30). Un bloque local de 1h pisa DOS slots UTC, así que el mapa
+  // tiene que unirlos: mirar solo el primero mostraba a la persona una hora
+  // corrida respecto de lo que había cargado.
+  const IN = 'Asia/Kolkata';
+  const member = { email: 'in@x.com', name: 'Isha', tz: IN };
+  const avails = [{ user: 'Isha', dayIdx: 0, startHour: 9, endHour: 10 }];
+  const { grid } = buildHeatmapGrid([member], avails, IN);
+  assert.equal(grid[0][9].count, 1, 'debe aparecer en la hora que marcó');
+});
+
+test('heatmap: dos personas con el mismo nombre cuentan como dos', () => {
+  // El conteo se deduplica por email, no por nombre: si se dedujera por nombre,
+  // dos homónimos de la misma sala se pisarían y la celda diría 1.
+  const members = [
+    { email: 'juan1@x.com', name: 'Juan', tz: 'UTC' },
+    { email: 'juan2@x.com', name: 'Juan', tz: 'UTC' }
+  ];
+  const avails = [
+    { memberEmail: 'juan1@x.com', user: 'Juan', dayIdx: 0, startHour: 10, endHour: 11 },
+    { memberEmail: 'juan2@x.com', user: 'Juan', dayIdx: 0, startHour: 10, endHour: 11 }
+  ];
+  const { grid } = buildHeatmapGrid(members, avails, 'UTC');
+  assert.equal(grid[0][10].count, 2);
+});
+
+test('heatmap: offsets de hora entera siguen dando una sola celda por slot', () => {
+  // Regresión del mapeo inverso: al pasar a semántica de solapamiento, un
+  // bloque de 1h en una zona de hora entera NO debe pintar dos celdas.
+  const member = { email: 'ar@x.com', name: 'Ari', tz: AR };
+  const avails = [{ user: 'Ari', dayIdx: 0, startHour: 10, endHour: 11 }];
+  const { grid } = buildHeatmapGrid([member], avails, AR);
+  assert.equal(grid[0][10].count, 1);
+  assert.equal(grid[0][9].count, 0);
+  assert.equal(grid[0][11].count, 0);
+});

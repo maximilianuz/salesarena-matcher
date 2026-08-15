@@ -4,6 +4,10 @@
 
 export const BASELINE_SCORE = 50; // score asumido para miembros sin historial
 
+// Set vacío compartido para "esta persona no tiene ningún horario tomado":
+// se lee muchas veces por ronda y no se muta nunca.
+const EMPTY_SLOTS = new Set();
+
 // Ventana de confirmación ESCALONADA. En cada (re)asignación, el plazo para
 // confirmar se elige como el mayor escalón que aún deje el vencimiento en el
 // futuro: 4hs → 2hs → 1h → 30min. Así, si una propuesta vence sin confirmar y el
@@ -72,6 +76,10 @@ export const slotDateMs = (slot, now = new Date(), minLeadMs = 0) =>
 //     propuesta que expiró sin respuesta esta semana → se prefiere otro
 //     compañero disponible; si no hay otro, se re-ofrece la misma dupla)
 //   minLeadMs: antelación mínima de la reunión respecto de `now`
+//   busySlots: Map(email -> Set<int>) horarios que esa persona YA tiene
+//     comprometidos (propuestas vivas de esta semana, o pares elegidos en una
+//     ronda anterior). Nadie puede quedar con dos reuniones a la misma hora,
+//     así que esos slots no se vuelven a ofrecer.
 //
 // Devuelve { pairs: [{ a, b, slot }], unmatched: [email] }.
 // NOTA: Este motor empareja cada miembro UNA SOLA VEZ. Para múltiples
@@ -84,7 +92,8 @@ export const buildWeeklyPairs = (
   pairCounts = new Map(),
   now = new Date(),
   softExcludedPairs = new Set(),
-  minLeadMs = 0
+  minLeadMs = 0,
+  busySlots = new Map()
 ) => {
   const scoreOf = (email) => {
     const s = scores.get(email);
@@ -92,6 +101,8 @@ export const buildWeeklyPairs = (
   };
   const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
   const timesPaired = (e1, e2) => pairCounts.get(pairKey(e1, e2)) ?? 0;
+
+  const busyOf = (email) => busySlots.get(email.toLowerCase()) ?? EMPTY_SLOTS;
 
   const ranked = [...members].sort((a, b) => scoreOf(b.email) - scoreOf(a.email));
   const assigned = new Set();
@@ -101,6 +112,11 @@ export const buildWeeklyPairs = (
     if (assigned.has(m.email)) continue;
     const mySlots = slotSets.get(m.email);
     if (!mySlots || mySlots.size === 0) continue;
+    const myBusy = busyOf(m.email);
+    // Los horarios que esta persona ya tiene tomados no son candidatos, así que
+    // si no le queda ninguno libre no hay nada que ofrecerle en esta ronda.
+    const myFree = [...mySlots].filter(s => !myBusy.has(s));
+    if (myFree.length === 0) continue;
 
     let best = null;
     for (const cand of ranked) {
@@ -109,7 +125,12 @@ export const buildWeeklyPairs = (
       const candSlots = slotSets.get(cand.email);
       if (!candSlots || candSlots.size === 0) continue;
 
-      const common = [...mySlots].filter(s => candSlots.has(s));
+      // Solapamiento REALMENTE disponible: descarta las horas que cualquiera de
+      // los dos ya tiene comprometidas. Sin esto, una persona con varias
+      // propuestas en la misma semana terminaba con dos reuniones a la misma
+      // hora, porque cada ronda volvía a elegir su horario común más próximo.
+      const candBusy = busyOf(cand.email);
+      const common = myFree.filter(s => candSlots.has(s) && !candBusy.has(s));
       if (common.length === 0) continue;
 
       const isSoft = softExcludedPairs.has(pairKey(m.email, cand.email));
@@ -150,6 +171,19 @@ export const buildWeeklyPairs = (
 
 // Empareja en múltiples rondas para permitir que cada miembro tenga varias
 // propuestas en la misma semana (con personas diferentes).
+//
+// No hay tope de propuestas por persona: el límite real lo pone la
+// disponibilidad. Cada horario que se asigna queda TOMADO para esas dos
+// personas, así que las rondas se cortan solas cuando a nadie le quedan horas
+// libres en común. Eso es lo que impide que alguien termine con dos role-plays
+// a la misma hora, que es lo que pasaba cuando las rondas solo excluían la
+// dupla y no el horario.
+//
+//   initialBusySlots: Map(email en minúsculas -> Set<slot>) con lo que ya está
+//     comprometido ANTES de esta corrida (las propuestas vivas de la semana).
+//     Sin esto, el cron —que corre cada 10 minutos— volvería a pisar horarios
+//     ya ocupados en corridas anteriores.
+//
 // Devuelve un array de todos los pares encontrados en todas las rondas.
 export const buildWeeklyPairsMultiRound = (
   members,
@@ -159,23 +193,37 @@ export const buildWeeklyPairsMultiRound = (
   pairCounts = new Map(),
   now = new Date(),
   softExcludedPairs = new Set(),
-  minLeadMs = 0
+  minLeadMs = 0,
+  initialBusySlots = new Map()
 ) => {
   const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
   const allPairs = [];
-  let roundExcluded = new Set(excludedPairs);
-  const maxRounds = Math.floor(members.length / 2); // límite de seguridad
+  const roundExcluded = new Set(excludedPairs);
+  // Copia propia: se muta ronda a ronda y no debe tocar el Map del llamador.
+  const busySlots = new Map();
+  for (const [email, slots] of initialBusySlots) {
+    busySlots.set(email.toLowerCase(), new Set(slots));
+  }
+  const markBusy = (email, slot) => {
+    const key = email.toLowerCase();
+    if (!busySlots.has(key)) busySlots.set(key, new Set());
+    busySlots.get(key).add(slot);
+  };
+  const maxRounds = Math.max(1, members.length - 1); // techo de seguridad
 
   for (let round = 0; round < maxRounds; round++) {
     const { pairs } = buildWeeklyPairs(
-      members, slotSets, scores, roundExcluded, pairCounts, now, softExcludedPairs, minLeadMs
+      members, slotSets, scores, roundExcluded, pairCounts, now,
+      softExcludedPairs, minLeadMs, busySlots
     );
     if (pairs.length === 0) break; // No hay más parejas posibles
 
     allPairs.push(...pairs);
-    // Agrega los nuevos pares a excluded para que no se repitan
     for (const p of pairs) {
+      // La dupla no se repite, y el horario elegido queda ocupado para los dos.
       roundExcluded.add(pairKey(p.a.email, p.b.email));
+      markBusy(p.a.email, p.slot);
+      markBusy(p.b.email, p.slot);
     }
   }
 
