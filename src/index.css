@@ -932,3 +932,287 @@ html.dark .view-header {
     padding: 16px;
   }
 }
+
+/* =========================================
+   CIERRE DE SESIÓN
+   =========================================
+   Lo que responden los dos después del role-play, sin verse entre sí. */
+
+.closeout-prompt-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(94, 92, 230, 0.35);
+  /* Filo izquierdo en el color primario: lo distingue del aviso de asistencia,
+     que es rojo, sin repetir el mismo tratamiento para dos cosas distintas. */
+  border-left: 3px solid var(--color-primary);
+}
+
+.closeout-prompt-btn {
+  white-space: nowrap;
+}
+
+.closeout-modal {
+  max-width: 520px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* La promesa de privacidad va arriba de todo y no al pie: es la condición que
+   hace que valga la pena contestar con honestidad, así que se lee ANTES de la
+   primera pregunta y no después de haberlas respondido todas. */
+.closeout-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  background-color: rgba(48, 209, 88, 0.1);
+  border: 1px solid rgba(48, 209, 88, 0.28);
+  color: var(--text-main);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.closeout-privacy svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-accent);
+}
+
+.closeout-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.closeout-question {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.closeout-question-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.closeout-optional {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.closeout-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.closeout-option {
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background-color: transparent;
+  color: var(--text-main);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.closeout-option:hover {
+  border-color: rgba(94, 92, 230, 0.45);
+  background-color: rgba(94, 92, 230, 0.06);
+}
+
+.closeout-option.selected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.closeout-textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+/* --- Tarjeta de credibilidad propia --- */
+.credibility-card {
+  margin-bottom: 24px;
+}
+
+.credibility-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.credibility-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 11px;
+  border: 1px solid var(--border-color);
+  background-color: rgba(94, 92, 230, 0.05);
+}
+
+/* El primero es el número que ordena el emparejamiento, así que va destacado
+   sobre los tres que lo componen. */
+.credibility-metric:first-child {
+  background-color: rgba(94, 92, 230, 0.13);
+  border-color: rgba(94, 92, 230, 0.35);
+}
+
+.credibility-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.credibility-metric:first-child .credibility-value {
+  color: var(--color-primary);
+}
+
+.credibility-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.credibility-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.credibility-praise {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.credibility-praise-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-bottom: 8px;
+}
+
+.credibility-praise-item {
+  margin: 0 0 6px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--color-accent);
+  border-radius: 0 9px 9px 0;
+  background-color: rgba(48, 209, 88, 0.08);
+  color: var(--text-main);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+@media (max-width: 640px) {
+  .closeout-prompt-card {
+    align-items: stretch;
+  }
+
+  .closeout-prompt-btn {
+    width: 100%;
+  }
+}
+
+/* Banderas del cierre de sesión, en el modal de moderación. */
+.closeout-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 159, 10, 0.3);
+  background-color: rgba(255, 159, 10, 0.07);
+}
+
+.closeout-flags-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-warning);
+}
+
+.closeout-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.closeout-flag-kind {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.closeout-flag-disputa .closeout-flag-kind {
+  background-color: rgba(255, 159, 10, 0.18);
+  color: var(--color-warning);
+}
+
+.closeout-flag-trato .closeout-flag-kind {
+  background-color: rgba(255, 69, 58, 0.16);
+  color: var(--color-danger);
+}
+
+.closeout-flag-who {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  word-break: break-all;
+}
+
+.closeout-flag-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
