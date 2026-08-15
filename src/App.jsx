@@ -110,6 +110,14 @@ const getRoomIdFromUrl = () => {
 const googleAvatarUrl = (session) =>
   session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || null;
 
+// Estado de una reseña, en palabras. Lo usan el botón del menú y la lista de
+// moderación, que antes lo tenían escrito por separado.
+const FEEDBACK_STATUS_LABEL = {
+  pending: 'Pendiente',
+  approved: 'Publicada',
+  rejected: 'Rechazada'
+};
+
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
 
 // Pila de módulo (no estado de React: el orden de apertura no necesita volver
@@ -1723,6 +1731,10 @@ export default function App() {
       }
       showNotification('¡Gracias por tu reseña! La vamos a revisar antes de publicarla.', 'success');
       setShowFeedbackModal(false);
+      // La reseña recién enviada nace 'pending', así que suma al contador de
+      // moderación. Sin este refresco el número del menú se quedaba con el
+      // valor de la carga de la página y solo se corregía al abrir el modal.
+      if (isAdmin) loadFeedbackForReview();
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -2864,26 +2876,44 @@ export default function App() {
               </div>
             </div>
           </div>
+          {/* La reseña va en una fila propia y con relleno sólido: es el único
+              botón lleno de todo el pie del menú, así que se distingue de un
+              vistazo del resto (Moderar, Guía, Salir), que son acciones de
+              mantenimiento. Cuando todavía no hay reseña el botón invita a
+              dejarla; cuando ya existe, muestra en qué estado quedó. */}
           <div className="profile-card-actions profile-card-actions-secondary">
             <button
               type="button"
-              className="profile-action-btn"
+              className={`profile-action-btn profile-review-btn ${myFeedback ? 'has-review' : ''}`}
               onClick={openFeedbackModal}
-              title={myFeedback ? 'Ver o editar tu reseña' : 'Calificar la app y dejar un comentario'}
+              title={myFeedback
+                ? `Ver o editar tu reseña — ${FEEDBACK_STATUS_LABEL[myFeedback.status] || 'enviada'}`
+                : 'Calificar la app y dejar un comentario'}
             >
-              <Star size={13} /> {myFeedback ? 'Tu reseña' : 'Calificar la app'}
+              <Star size={14} fill="currentColor" strokeWidth={0} />
+              <span className="profile-review-label">
+                {myFeedback ? 'Tu reseña' : 'Calificar la app'}
+              </span>
+              {myFeedback && (
+                <span className={`profile-review-dot profile-review-dot-${myFeedback.status}`} aria-hidden="true" />
+              )}
             </button>
-            {isAdmin && (
+          </div>
+          {isAdmin && (
+            <div className="profile-card-actions profile-card-actions-secondary">
               <button
                 type="button"
                 className="profile-action-btn"
                 onClick={openFeedbackReviewModal}
                 title="Aprobar o rechazar reseñas para la web pública"
               >
-                <Inbox size={13} /> Moderar{pendingFeedbackCount > 0 ? ` (${pendingFeedbackCount})` : ''}
+                <Inbox size={13} /> Moderar
+                {pendingFeedbackCount > 0 && (
+                  <span className="profile-pending-badge">{pendingFeedbackCount}</span>
+                )}
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <div className="profile-card-actions">
             <button type="button" className="profile-action-btn" onClick={openOnboarding} title="Ver la guía de uso">
               <HelpCircle size={13} /> Guía
@@ -4556,9 +4586,7 @@ export default function App() {
                       </div>
                     </div>
                     <span className={`feedback-status-badge feedback-status-${f.status}`}>
-                      {f.status === 'pending' && 'Pendiente'}
-                      {f.status === 'approved' && 'Publicada'}
-                      {f.status === 'rejected' && 'Rechazada'}
+                      {FEEDBACK_STATUS_LABEL[f.status] || f.status}
                     </span>
                   </div>
                   <p className="feedback-review-comment">{f.comment}</p>

@@ -578,6 +578,83 @@ html.dark .profile-card {
   color: var(--color-danger);
 }
 
+/* Reseña: el único botón RELLENO del pie del menú. Los demás (Moderar, Guía,
+   Salir) son contornos, así que basta el relleno para que este destaque sin
+   agregar ningún adorno. Va en ámbar, el mismo color de las estrellas del
+   modal, para que se lea como "calificar" y no como otra acción más. */
+.profile-review-btn {
+  padding: 9px 10px;
+  border-color: transparent;
+  background-image: linear-gradient(135deg, #ffb340, var(--color-warning));
+  /* Texto oscuro fijo: el botón es ámbar en los dos temas, así que seguir a
+     --text-main lo dejaría en blanco sobre naranja en modo oscuro. */
+  color: #3d2600;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 159, 10, 0.3);
+}
+
+.profile-review-btn:hover {
+  background-image: linear-gradient(135deg, #ffbe5c, #ffa927);
+  border-color: transparent;
+  color: #3d2600;
+  box-shadow: 0 6px 18px rgba(255, 159, 10, 0.42);
+  transform: translateY(-1px);
+}
+
+/* Ya dejó su reseña: la invitación cumplió su función, así que el botón baja
+   un escalón y pasa a ser un acceso teñido en vez de un llamado a la acción.
+   Sigue distinguiéndose del resto, pero deja de competir con la navegación. */
+.profile-review-btn.has-review {
+  background-image: none;
+  background-color: rgba(255, 159, 10, 0.14);
+  border-color: rgba(255, 159, 10, 0.35);
+  color: var(--color-warning);
+  box-shadow: none;
+}
+
+.profile-review-btn.has-review:hover {
+  background-color: rgba(255, 159, 10, 0.22);
+  border-color: rgba(255, 159, 10, 0.55);
+  color: var(--color-warning);
+  box-shadow: none;
+}
+
+.profile-review-label {
+  flex: 1;
+  text-align: center;
+}
+
+/* Punto de estado: dice si la reseña está esperando revisión, ya salió
+   publicada o no pasó, sin tener que abrir el modal. */
+.profile-review-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.profile-review-dot-pending { background-color: var(--color-warning); }
+.profile-review-dot-approved { background-color: var(--color-accent); }
+.profile-review-dot-rejected { background-color: var(--text-muted); }
+
+/* Cantidad pendiente de moderar: en rojo, porque es trabajo sin hacer. Antes
+   iba entre paréntesis dentro del texto y se perdía. */
+.profile-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background-color: var(--color-danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Theme selector controls */
 .theme-selector {
   display: flex;
