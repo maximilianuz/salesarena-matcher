@@ -375,7 +375,7 @@ Deno.serve(async (req) => {
       // meeting_attendees NO tiene columna room_id: sus filas se filtran por los
       // IDs de las reuniones de esta sala.
       const { data: meetingsRows } = await supabase
-        .from('meetings').select('id, starts_at').eq('room_id', roomId);
+        .from('meetings').select('id, starts_at, duration').eq('room_id', roomId);
       const meetingIds = (meetingsRows || []).map(mt => mt.id);
       const { data: attRows } = meetingIds.length
         ? await supabase.from('meeting_attendees')
@@ -385,9 +385,16 @@ Deno.serve(async (req) => {
 
       const nowMs = Date.now();
       const meetingStartMs = new Map<string, number>();
+      // Fin real de cada reunión: lo usa el cierre de sesión para saber si ya
+      // venció el plazo. duration es nullable, así que se cae a 60 igual que
+      // meeting_end_at() en la base y que el cliente.
+      const meetingEndMs = new Map<string, number>();
       for (const mt of meetingsRows || []) {
         const t = mt.starts_at ? Date.parse(mt.starts_at) : NaN;
-        if (!Number.isNaN(t)) meetingStartMs.set(mt.id, t);
+        if (!Number.isNaN(t)) {
+          meetingStartMs.set(mt.id, t);
+          meetingEndMs.set(mt.id, t + (mt.duration || 60) * 60000);
+        }
       }
 
       const pairKeyOf = (a: string, b: string) =>
@@ -513,14 +520,106 @@ Deno.serve(async (req) => {
         if (!attByMember.has(k)) attByMember.set(k, []);
         attByMember.get(k)!.push({ status: r.status, punctuality: r.punctuality, startMs });
       }
-      const scores = new Map<string, number | null>();
+      const attendanceScores = new Map<string, number | null>();
       for (const m of pool) {
         const rows = (attByMember.get(m.email.toLowerCase()) || []).filter(r => r.startMs >= cutoff60);
         const vals = rows.map(r => scoreVal(r.status, r.punctuality)).filter((v): v is number => v !== null);
-        scores.set(
+        attendanceScores.set(
           m.email,
           vals.length === 0 ? null : Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100)
         );
+      }
+
+      // COMPROMISO Y RECIPROCIDAD (cierre de sesión).
+      //
+      // La asistencia sola medía un click en el link de Meet: entrar y irse a
+      // los dos minutos daba 100. El compromiso es lo que responde el compañero
+      // sobre si la persona sostuvo el ejercicio, y es lo que ordena la fila del
+      // emparejamiento junto con la asistencia.
+      //
+      // Debe coincidir con getEngagement / getReciprocity / getCredibility en
+      // src/closeouts.js.
+      const { data: closeoutRows } = await supabase
+        .from('session_closeouts')
+        .select('meeting_id, author_email, subject_email, happened, engagement')
+        .eq('room_id', roomId);
+
+      const closeoutsByMeeting = new Map<string, typeof closeoutRows>();
+      for (const c of closeoutRows || []) {
+        if (!closeoutsByMeeting.has(c.meeting_id)) closeoutsByMeeting.set(c.meeting_id, []);
+        closeoutsByMeeting.get(c.meeting_id)!.push(c);
+      }
+
+      const CLOSEOUT_WINDOW_MS = 48 * 3600e3;
+      // Un sobre abierto es el que ya respondieron los dos, o cuyo plazo venció.
+      // Mientras siga cerrado no puntúa: si contara antes, mirar el propio score
+      // delataría cómo lo calificó a uno el compañero.
+      const sobreAbierto = (meetingId: string) => {
+        const rows = closeoutsByMeeting.get(meetingId) || [];
+        if (rows.length >= 2) return true;
+        const endMs = meetingEndMs.get(meetingId);
+        if (endMs === undefined) return false;
+        return nowMs > endMs + CLOSEOUT_WINDOW_MS;
+      };
+      // Reunión en disputa: una respuesta dice que no se hizo y la otra que sí.
+      // No puntúa para ninguno de los dos, así acusar en falso no hunde al otro.
+      const enDisputa = new Set<string>();
+      for (const [meetingId, rows] of closeoutsByMeeting) {
+        if (rows.length < 2) continue;
+        const noSeHizo = rows.filter(r => r.happened === 'no_se_hizo').length;
+        if (noSeHizo > 0 && noSeHizo < rows.length) enDisputa.add(meetingId);
+      }
+
+      const ENGAGEMENT_VALUE: Record<string, number> = {
+        preparado: 1, a_medias: 0.5, no_participo: 0
+      };
+      const engagementScores = new Map<string, number | null>();
+      const reciprocity = new Map<string, number | null>();
+      for (const m of pool) {
+        const email = m.email.toLowerCase();
+        const vals = (closeoutRows || [])
+          .filter(c =>
+            c.subject_email.toLowerCase() === email &&
+            !enDisputa.has(c.meeting_id) &&
+            sobreAbierto(c.meeting_id) &&
+            (meetingStartMs.get(c.meeting_id) ?? 0) >= cutoff60)
+          .map(c => ENGAGEMENT_VALUE[c.engagement])
+          .filter(v => v !== undefined);
+        engagementScores.set(m.email,
+          vals.length === 0 ? null : Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100));
+
+        // Cierres que le tocaba responder: reuniones suyas ya terminadas.
+        const meTocaba = (attRows || [])
+          .filter(r => r.member_email.toLowerCase() === email)
+          .map(r => r.meeting_id)
+          .filter(id => {
+            const end = meetingEndMs.get(id);
+            return end !== undefined && nowMs > end;
+          });
+        const respondi = new Set(
+          (closeoutRows || [])
+            .filter(c => c.author_email.toLowerCase() === email)
+            .map(c => c.meeting_id)
+        );
+        reciprocity.set(m.email, meTocaba.length === 0
+          ? null
+          : meTocaba.filter(id => respondi.has(id)).length / meTocaba.length);
+      }
+
+      // Credibilidad: promedio de las señales que EXISTEN, por el factor de
+      // reciprocidad (piso 0.85). Quien recién entra no tiene compromiso y
+      // compite con su asistencia, en vez de quedar último por no tenerlo.
+      const RECIPROCITY_FLOOR = 0.85;
+      const scores = new Map<string, number | null>();
+      for (const m of pool) {
+        const dims = [attendanceScores.get(m.email), engagementScores.get(m.email)]
+          .filter((v): v is number => v !== null && v !== undefined);
+        if (dims.length === 0) { scores.set(m.email, null); continue; }
+        const base = dims.reduce((s, x) => s + x, 0) / dims.length;
+        const r = reciprocity.get(m.email);
+        const factor = r === null || r === undefined
+          ? 1 : RECIPROCITY_FLOOR + (1 - RECIPROCITY_FLOOR) * r;
+        scores.set(m.email, Math.round(base * factor));
       }
 
       // HORARIOS YA COMPROMETIDOS. Las propuestas vivas de esta semana ocupan la

@@ -69,13 +69,25 @@ import {
   PanelLeftOpen,
   // Reseñas de la app + moderación
   Star,
-  Inbox
+  Inbox,
+  // Cierre de sesión (lo que responden los dos después del role-play)
+  ClipboardCheck,
+  ThumbsUp,
+  Gauge
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
 import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
+import {
+  getEngagement,
+  getReciprocity,
+  getCredibility,
+  getPraiseReceived,
+  getOwedCloseouts,
+  CLOSEOUT_WINDOW_MS
+} from './closeouts';
 import {
   getInitials,
   getAvatarColor,
@@ -109,6 +121,14 @@ const getRoomIdFromUrl = () => {
 // nombre (full_name || name) más abajo.
 const googleAvatarUrl = (session) =>
   session?.user?.user_metadata?.avatar_url || session?.user?.user_metadata?.picture || null;
+
+// Estado de una reseña, en palabras. Lo usan el botón del menú y la lista de
+// moderación, que antes lo tenían escrito por separado.
+const FEEDBACK_STATUS_LABEL = {
+  pending: 'Pendiente',
+  approved: 'Publicada',
+  rejected: 'Rechazada'
+};
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
 
@@ -339,6 +359,19 @@ export default function App() {
   // Moderación (solo platform admin): lista de reseñas para aprobar/rechazar.
   const [showFeedbackReviewModal, setShowFeedbackReviewModal] = useState(false);
   const [feedbackReviewList, setFeedbackReviewList] = useState([]);
+
+  // --- CIERRE DE SESIÓN (lo que responden los dos después del role-play) ---
+  // openCloseouts: los que me faltan responder. standing: mi compromiso y mi
+  // reciprocidad ya calculados. praise: los elogios que recibí, sin autor y
+  // solo de sobres ya abiertos. Nunca entra acá nada de lo que respondió otra
+  // persona sobre sí misma ni sobre terceros.
+  const [openCloseouts, setOpenCloseouts] = useState([]);
+  const [closeoutStanding, setCloseoutStanding] = useState(null);
+  const [closeoutPraise, setCloseoutPraise] = useState([]);
+  const [closeoutFlags, setCloseoutFlags] = useState([]); // solo admin
+  const [closeoutTarget, setCloseoutTarget] = useState(null); // el pendiente que se está respondiendo
+  const [closeoutAnswers, setCloseoutAnswers] = useState(null);
+  const [closeoutSubmitting, setCloseoutSubmitting] = useState(false);
   const [feedbackReviewLoading, setFeedbackReviewLoading] = useState(false);
   const feedbackReviewModalRef = useDialogA11y(showFeedbackReviewModal, () => setShowFeedbackReviewModal(false));
   const pendingFeedbackCount = feedbackReviewList.filter(f => f.status === 'pending').length;
@@ -1723,14 +1756,28 @@ export default function App() {
       }
       showNotification('¡Gracias por tu reseña! La vamos a revisar antes de publicarla.', 'success');
       setShowFeedbackModal(false);
+      // La reseña recién enviada nace 'pending', así que suma al contador de
+      // moderación. Sin este refresco el número del menú se quedaba con el
+      // valor de la carga de la página y solo se corregía al abrir el modal.
+      if (isAdmin) loadFeedbackForReview();
     } finally {
       setFeedbackSubmitting(false);
     }
   };
 
   // --- MODERACIÓN DE RESEÑAS (solo platform admin) ---
+  // Lo que ningún promedio resuelve solo: reportes de trato no cordial y
+  // sesiones en disputa. Va junto a la moderación de reseñas porque es el mismo
+  // trabajo —revisar a mano lo que el sistema no puede decidir.
+  const loadCloseoutFlags = async () => {
+    if (!isAdmin || useMockDb) return;
+    const { data, error } = await supabase.rpc('list_closeout_flags');
+    if (!error && data) setCloseoutFlags(data);
+  };
+
   const loadFeedbackForReview = async () => {
     if (!isAdmin) return;
+    loadCloseoutFlags();
     setFeedbackReviewLoading(true);
     try {
       if (useMockDb) {
@@ -1782,6 +1829,187 @@ export default function App() {
     loadMyFeedback();
     if (isAdmin) loadFeedbackForReview();
   }, [isLoggedIn, currentUser?.email, isAdmin]);
+
+  // --- CIERRE DE SESIÓN ---
+  const mockCloseoutKey = `salesarena-mock-closeouts-${currentRoomId}`;
+  const loadMockCloseouts = () => {
+    try { return JSON.parse(localStorage.getItem(mockCloseoutKey) || '[]'); } catch { return []; }
+  };
+  const saveMockCloseouts = (list) => {
+    try { localStorage.setItem(mockCloseoutKey, JSON.stringify(list)); } catch { /* modo privado */ }
+  };
+
+  // Qué cierres me faltan, mi situación y los elogios recibidos.
+  //
+  // En producción esto son tres RPC: el cliente NUNCA recibe la tabla de
+  // cierres, porque el sobre cerrado se sostiene en las funciones del servidor
+  // y no en lo que decida mostrar la pantalla. En modo demo se calcula local
+  // con el mismo módulo puro que usan los tests.
+  const loadCloseoutState = async () => {
+    if (!currentUser) return;
+    const email = currentUser.email.toLowerCase();
+
+    if (useMockDb) {
+      const all = loadMockCloseouts();
+      const now = Date.now();
+      const yaRespondi = new Set(
+        all.filter(c => c.authorEmail.toLowerCase() === email).map(c => c.meetingId)
+      );
+      const pendientes = getOwedCloseouts(email, meetings, attendances, now)
+        .filter(id => !yaRespondi.has(id))
+        .filter(id => {
+          const m = meetings.find(x => x.id === id);
+          const fin = Date.parse(m.startsAt) + (m.duration || 60) * 60000;
+          return now <= fin + CLOSEOUT_WINDOW_MS;
+        })
+        .map(id => {
+          const m = meetings.find(x => x.id === id);
+          const otro = attendances.find(a =>
+            a.meetingId === id && a.memberEmail.toLowerCase() !== email);
+          const perfil = members.find(x => x.email.toLowerCase() === otro?.memberEmail.toLowerCase());
+          const fin = Date.parse(m.startsAt) + (m.duration || 60) * 60000;
+          return {
+            meetingId: id,
+            startsAt: m.startsAt,
+            closesAt: new Date(fin + CLOSEOUT_WINDOW_MS).toISOString(),
+            partnerEmail: otro?.memberEmail || '',
+            partnerName: otro?.memberName || perfil?.name || 'Tu compañero',
+            partnerAvatarUrl: perfil?.avatarUrl || null
+          };
+        });
+      setOpenCloseouts(pendientes);
+      setCloseoutStanding({
+        engagement: getEngagement(email, all, meetings, now),
+        reciprocity: getReciprocity(email, all, meetings, attendances, now)
+      });
+      setCloseoutPraise(getPraiseReceived(email, all, meetings, now).map(p => p.praise));
+      return;
+    }
+
+    const [pend, standing, praise] = await Promise.all([
+      supabase.rpc('my_open_closeouts'),
+      supabase.rpc('my_closeout_standing'),
+      supabase.rpc('my_closeout_praise', { p_limit: 5 })
+    ]);
+    if (!pend.error && pend.data) {
+      setOpenCloseouts(pend.data.map(d => ({
+        meetingId: d.meeting_id,
+        startsAt: d.starts_at,
+        closesAt: d.closes_at,
+        partnerEmail: d.partner_email,
+        partnerName: d.partner_name || 'Tu compañero',
+        partnerAvatarUrl: d.partner_avatar_url
+      })));
+    }
+    if (!standing.error && standing.data) {
+      const row = Array.isArray(standing.data) ? standing.data[0] : standing.data;
+      setCloseoutStanding(row ? {
+        engagement: row.engagement_pct,
+        // El servidor la devuelve en porcentaje y la lógica pura la espera 0..1.
+        reciprocity: row.reciprocity_pct === null || row.reciprocity_pct === undefined
+          ? null : row.reciprocity_pct / 100
+      } : null);
+    }
+    if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
+  };
+
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    loadCloseoutState();
+  }, [isLoggedIn, currentUser?.email, meetings, attendances]);
+
+  // Plazo del cierre en la hora local de quien mira ("mañana 14:30", "hoy
+  // 20:00"). Es un dato de urgencia, así que importa el día relativo más que
+  // la fecha exacta.
+  const closeoutDeadlineLabel = (iso) => {
+    const tz = currentUser?.tz || 'UTC';
+    const fecha = new Date(iso);
+    const dia = (d) => new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(d);
+    const hoy = dia(new Date());
+    const manana = dia(new Date(Date.now() + 86400e3));
+    const hora = new Intl.DateTimeFormat('es-AR', {
+      timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(fecha);
+    const cuando = dia(fecha);
+    if (cuando === hoy) return `hoy ${hora}`;
+    if (cuando === manana) return `mañana ${hora}`;
+    return new Intl.DateTimeFormat('es-AR', {
+      timeZone: tz, weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(fecha);
+  };
+
+  const openCloseoutForm = (pendiente) => {
+    setCloseoutTarget(pendiente);
+    setCloseoutAnswers({
+      happened: '', engagement: '', learned: '', cordial: true, concern: '', praise: ''
+    });
+  };
+  const closeCloseoutForm = () => {
+    setCloseoutTarget(null);
+    setCloseoutAnswers(null);
+  };
+  const closeoutModalRef = useDialogA11y(!!closeoutTarget, closeCloseoutForm);
+
+  const submitCloseout = async () => {
+    if (!closeoutTarget || !closeoutAnswers) return;
+    const { happened, engagement, learned, cordial, concern, praise } = closeoutAnswers;
+    if (!happened || !engagement || !learned) {
+      showNotification('Respondé las tres primeras preguntas para poder cerrar la sesión.', 'error');
+      return;
+    }
+    if (!cordial && !concern.trim()) {
+      showNotification('Contanos brevemente qué pasó: eso lo lee solo quien administra.', 'error');
+      return;
+    }
+
+    setCloseoutSubmitting(true);
+    try {
+      if (useMockDb) {
+        const all = loadMockCloseouts();
+        if (all.some(c => c.meetingId === closeoutTarget.meetingId &&
+                          c.authorEmail.toLowerCase() === currentUser.email.toLowerCase())) {
+          showNotification('Ya habías cerrado esta sesión.', 'error');
+          return;
+        }
+        saveMockCloseouts([...all, {
+          meetingId: closeoutTarget.meetingId,
+          authorEmail: currentUser.email.toLowerCase(),
+          subjectEmail: closeoutTarget.partnerEmail.toLowerCase(),
+          happened, engagement, learned, cordial,
+          concern: concern.trim() || null,
+          praise: praise.trim().slice(0, 240) || null,
+          createdAt: new Date().toISOString()
+        }]);
+      } else {
+        const { error } = await supabase.rpc('submit_session_closeout', {
+          p_meeting_id: closeoutTarget.meetingId,
+          p_happened: happened,
+          p_engagement: engagement,
+          p_learned: learned,
+          p_cordial: cordial,
+          p_concern: concern.trim() || null,
+          p_praise: praise.trim() || null
+        });
+        if (error) {
+          const raw = `${error.message || ''} ${error.details || ''}`;
+          showNotification(
+            raw.includes('CLOSEOUT_ALREADY_OPEN')
+              ? 'Tu compañero ya respondió, así que el cierre quedó firme y no se puede modificar.'
+              : raw.includes('CLOSEOUT_WINDOW_CLOSED')
+                ? 'El plazo para cerrar esta sesión ya venció.'
+                : 'No pudimos guardar el cierre. Intentá de nuevo en un momento.',
+            'error'
+          );
+          return;
+        }
+      }
+      closeCloseoutForm();
+      showNotification('¡Gracias! Tu compañero no ve lo que respondiste.', 'success');
+      await loadCloseoutState();
+    } finally {
+      setCloseoutSubmitting(false);
+    }
+  };
 
   // --- ADMINISTRAR MIEMBROS ---
   const handleAddMember = async (e) => {
@@ -2864,26 +3092,44 @@ export default function App() {
               </div>
             </div>
           </div>
+          {/* La reseña va en una fila propia y con relleno sólido: es el único
+              botón lleno de todo el pie del menú, así que se distingue de un
+              vistazo del resto (Moderar, Guía, Salir), que son acciones de
+              mantenimiento. Cuando todavía no hay reseña el botón invita a
+              dejarla; cuando ya existe, muestra en qué estado quedó. */}
           <div className="profile-card-actions profile-card-actions-secondary">
             <button
               type="button"
-              className="profile-action-btn"
+              className={`profile-action-btn profile-review-btn ${myFeedback ? 'has-review' : ''}`}
               onClick={openFeedbackModal}
-              title={myFeedback ? 'Ver o editar tu reseña' : 'Calificar la app y dejar un comentario'}
+              title={myFeedback
+                ? `Ver o editar tu reseña — ${FEEDBACK_STATUS_LABEL[myFeedback.status] || 'enviada'}`
+                : 'Calificar la app y dejar un comentario'}
             >
-              <Star size={13} /> {myFeedback ? 'Tu reseña' : 'Calificar la app'}
+              <Star size={14} fill="currentColor" strokeWidth={0} />
+              <span className="profile-review-label">
+                {myFeedback ? 'Tu reseña' : 'Calificar la app'}
+              </span>
+              {myFeedback && (
+                <span className={`profile-review-dot profile-review-dot-${myFeedback.status}`} aria-hidden="true" />
+              )}
             </button>
-            {isAdmin && (
+          </div>
+          {isAdmin && (
+            <div className="profile-card-actions profile-card-actions-secondary">
               <button
                 type="button"
                 className="profile-action-btn"
                 onClick={openFeedbackReviewModal}
                 title="Aprobar o rechazar reseñas para la web pública"
               >
-                <Inbox size={13} /> Moderar{pendingFeedbackCount > 0 ? ` (${pendingFeedbackCount})` : ''}
+                <Inbox size={13} /> Moderar
+                {pendingFeedbackCount > 0 && (
+                  <span className="profile-pending-badge">{pendingFeedbackCount}</span>
+                )}
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <div className="profile-card-actions">
             <button type="button" className="profile-action-btn" onClick={openOnboarding} title="Ver la guía de uso">
               <HelpCircle size={13} /> Guía
@@ -3020,10 +3266,48 @@ export default function App() {
                 </button>
               </div>
 
-              {/* PROMPTS DE ASISTENCIA PENDIENTES */}
-              {pendingReports.length > 0 && (
+              {/* CIERRES DE SESIÓN PENDIENTES.
+                  Es lo que reemplaza al viejo "¿se conectó?": pregunta por la
+                  sesión entera, no solo por la presencia, y lo responden los
+                  dos por separado sin verse. */}
+              {openCloseouts.length > 0 && (
                 <div className="attendance-prompts">
-                  {pendingReports.map(({ meeting, attendance }) => {
+                  {openCloseouts.map(p => (
+                    <div className="closeout-prompt-card glass" key={p.meetingId}>
+                      <div className="attendance-prompt-info">
+                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(p.partnerName) }}>
+                          <AvatarPhoto avatarUrl={p.partnerAvatarUrl}>{getInitials(p.partnerName)}</AvatarPhoto>
+                        </div>
+                        <div>
+                          <div className="attendance-prompt-question">
+                            Cerrá tu role-play con <strong>{p.partnerName}</strong>
+                          </div>
+                          <div className="attendance-prompt-meta">
+                            <ClipboardCheck size={12} /> 4 preguntas · tenés tiempo hasta {closeoutDeadlineLabel(p.closesAt)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="attendance-prompt-actions">
+                        <button type="button" className="btn btn-indigo closeout-prompt-btn" onClick={() => openCloseoutForm(p)}>
+                          Responder
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* PROMPTS DE ASISTENCIA PENDIENTES.
+                  Respaldo para cuando el barrido automático no llegó a
+                  resolver la reunión. Se oculta si esa misma sesión ya tiene
+                  un cierre pendiente: preguntar dos veces por lo mismo, con
+                  dos formularios distintos, solo confunde. */}
+              {pendingReports.filter(({ meeting }) =>
+                !openCloseouts.some(c => c.meetingId === meeting.id)).length > 0 && (
+                <div className="attendance-prompts">
+                  {pendingReports.filter(({ meeting }) =>
+                    !openCloseouts.some(c => c.meetingId === meeting.id)
+                  ).map(({ meeting, attendance }) => {
                     const reportedMember = members.find(m => m.email.toLowerCase() === attendance.memberEmail.toLowerCase());
                     return (
                     <div className="attendance-prompt-card glass" key={attendance.id}>
@@ -3066,6 +3350,63 @@ export default function App() {
                     </div>
                   );
                   })}
+                </div>
+              )}
+
+              {/* MI CREDIBILIDAD.
+                  Cada quien ve la suya y nada más: nunca la de otro, y nunca
+                  quién dijo qué. El compromiso llega ya promediado desde el
+                  servidor y los elogios vienen sin autor. */}
+              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0) && (
+                <div className="section-card glass credibility-card">
+                  <h4 className="section-title">
+                    <Gauge size={15} className="section-title-icon" /> Tu credibilidad
+                  </h4>
+                  <div className="credibility-grid">
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {getCredibility(
+                          getReliability(currentUser.email),
+                          closeoutStanding.engagement,
+                          closeoutStanding.reciprocity
+                        ) ?? '—'}
+                        {getCredibility(getReliability(currentUser.email), closeoutStanding.engagement, closeoutStanding.reciprocity) !== null && '%'}
+                      </span>
+                      <span className="credibility-label">General</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {getReliability(currentUser.email) ?? '—'}
+                        {getReliability(currentUser.email) !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Asistencia</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.engagement ?? '—'}
+                        {closeoutStanding.engagement !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Compromiso</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.reciprocity === null ? '—' : `${Math.round(closeoutStanding.reciprocity * 100)}%`}
+                      </span>
+                      <span className="credibility-label">Cierres respondidos</span>
+                    </div>
+                  </div>
+                  <p className="credibility-note">
+                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver quién dijo qué,
+                    ni ellos lo que respondiste vos.
+                  </p>
+                  {closeoutPraise.length > 0 && (
+                    <div className="credibility-praise">
+                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
+                      {closeoutPraise.map((p, i) => (
+                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4530,6 +4871,29 @@ export default function App() {
               Solo lo que apruebes acá aparece en sales-arena-matcher.com, con nombre y foto de quien lo escribió.
             </p>
 
+            {/* BANDERAS DEL CIERRE DE SESIÓN.
+                Un caso suelto no penaliza a nadie: lo que importa es ver si la
+                misma persona reaparece. Por eso se listan en crudo, sin
+                convertirlos en un puntaje automático. */}
+            {closeoutFlags.length > 0 && (
+              <div className="closeout-flags">
+                <div className="closeout-flags-title">
+                  <AlertCircle size={14} /> Requieren tu criterio ({closeoutFlags.length})
+                </div>
+                {closeoutFlags.map((f, i) => (
+                  <div className={`closeout-flag closeout-flag-${f.kind}`} key={`${f.meeting_id}-${i}`}>
+                    <span className="closeout-flag-kind">
+                      {f.kind === 'disputa' ? 'Versiones distintas' : 'Trato'}
+                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="closeout-flag-who">{f.subject_email}</div>
+                      <div className="closeout-flag-detail">{f.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {feedbackReviewLoading ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px', padding: '20px 0', justifyContent: 'center' }}>
@@ -4556,9 +4920,7 @@ export default function App() {
                       </div>
                     </div>
                     <span className={`feedback-status-badge feedback-status-${f.status}`}>
-                      {f.status === 'pending' && 'Pendiente'}
-                      {f.status === 'approved' && 'Publicada'}
-                      {f.status === 'rejected' && 'Rechazada'}
+                      {FEEDBACK_STATUS_LABEL[f.status] || f.status}
                     </span>
                   </div>
                   <p className="feedback-review-comment">{f.comment}</p>
@@ -4582,6 +4944,158 @@ export default function App() {
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CIERRE DE SESIÓN.
+          Lo responden los dos por separado y ninguno ve lo del otro. Son cuatro
+          preguntas cortas a propósito: un formulario largo no se completa, y un
+          cierre que nadie contesta no mide nada. */}
+      {closeoutTarget && closeoutAnswers && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="closeout-title"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px'
+          }}
+        >
+          <div
+            className="glass closeout-modal"
+            ref={closeoutModalRef}
+            tabIndex={-1}
+            style={{
+              width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-sidebar)',
+              borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column',
+              gap: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
+              boxSizing: 'border-box', maxHeight: '88vh'
+            }}
+          >
+            <h3 className="section-title" id="closeout-title">
+              <ClipboardCheck size={17} className="section-title-icon" />
+              Cierre de tu role-play con {closeoutTarget.partnerName}
+            </h3>
+            <p className="closeout-privacy">
+              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver lo que respondas.
+              Solo se comparte el elogio final, y recién cuando los dos hayan cerrado.
+            </p>
+
+            <div className="closeout-questions">
+              {[
+                {
+                  key: 'happened',
+                  label: '¿La sesión se hizo?',
+                  options: [
+                    { v: 'completa', t: 'Sí, completa' },
+                    { v: 'cortada', t: 'Se cortó antes' },
+                    { v: 'no_se_hizo', t: 'No se hizo' }
+                  ]
+                },
+                {
+                  key: 'engagement',
+                  label: `¿Cómo participó ${closeoutTarget.partnerName.split(' ')[0]}?`,
+                  options: [
+                    { v: 'preparado', t: 'Preparado, sostuvo el role-play' },
+                    { v: 'a_medias', t: 'A medias' },
+                    { v: 'no_participo', t: 'No participó en serio' }
+                  ]
+                },
+                {
+                  key: 'learned',
+                  label: '¿Te sirvió para aprender algo?',
+                  options: [
+                    { v: 'si', t: 'Sí, me llevo algo concreto' },
+                    { v: 'mas_o_menos', t: 'Más o menos' },
+                    { v: 'no', t: 'No' }
+                  ]
+                }
+              ].map(q => (
+                <fieldset className="closeout-question" key={q.key}>
+                  <legend className="closeout-question-label">{q.label}</legend>
+                  <div className="closeout-options">
+                    {q.options.map(o => (
+                      <button
+                        type="button"
+                        key={o.v}
+                        className={`closeout-option ${closeoutAnswers[q.key] === o.v ? 'selected' : ''}`}
+                        aria-pressed={closeoutAnswers[q.key] === o.v}
+                        onClick={() => setCloseoutAnswers(a => ({ ...a, [q.key]: o.v }))}
+                      >
+                        {o.t}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              ))}
+
+              <fieldset className="closeout-question">
+                <legend className="closeout-question-label">¿El trato fue cordial?</legend>
+                <div className="closeout-options">
+                  <button
+                    type="button"
+                    className={`closeout-option ${closeoutAnswers.cordial ? 'selected' : ''}`}
+                    aria-pressed={closeoutAnswers.cordial}
+                    onClick={() => setCloseoutAnswers(a => ({ ...a, cordial: true, concern: '' }))}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    type="button"
+                    className={`closeout-option ${!closeoutAnswers.cordial ? 'selected' : ''}`}
+                    aria-pressed={!closeoutAnswers.cordial}
+                    onClick={() => setCloseoutAnswers(a => ({ ...a, cordial: false }))}
+                  >
+                    Hay algo que reportar
+                  </button>
+                </div>
+                {!closeoutAnswers.cordial && (
+                  <textarea
+                    className="closeout-textarea"
+                    rows={3}
+                    maxLength={600}
+                    placeholder="¿Qué pasó? Esto lo lee solo quien administra la plataforma."
+                    value={closeoutAnswers.concern}
+                    onChange={(e) => setCloseoutAnswers(a => ({ ...a, concern: e.target.value }))}
+                  />
+                )}
+              </fieldset>
+
+              <fieldset className="closeout-question">
+                <legend className="closeout-question-label">
+                  <ThumbsUp size={12} /> Una cosa que rescatás de tu compañero <span className="closeout-optional">(opcional)</span>
+                </legend>
+                <textarea
+                  className="closeout-textarea"
+                  rows={2}
+                  maxLength={240}
+                  placeholder="Esto sí se lo vamos a mostrar, cuando los dos hayan cerrado."
+                  value={closeoutAnswers.praise}
+                  onChange={(e) => setCloseoutAnswers(a => ({ ...a, praise: e.target.value }))}
+                />
+              </fieldset>
+            </div>
+
+            {/* "Enviar cierre" y no "Cerrar sesión": ese texto se confunde con
+                salir de la cuenta, que además es un botón real del menú. */}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary" onClick={closeCloseoutForm}>
+                Ahora no
+              </button>
+              <button
+                type="button"
+                className="btn btn-indigo"
+                onClick={submitCloseout}
+                disabled={closeoutSubmitting}
+              >
+                {closeoutSubmitting
+                  ? <><span className="spinner" style={{ width: '14px', height: '14px' }}></span> Guardando…</>
+                  : <>Enviar cierre</>}
+              </button>
             </div>
           </div>
         </div>
