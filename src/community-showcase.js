@@ -84,13 +84,20 @@ function buildTestimonialCard(t) {
 function buildRankRow(entry, rank) {
   const li = document.createElement('li');
   li.className = 'top-roleplayer-row';
+  // El puesto va como atributo y no como clase porque el CSS lo usa para el
+  // filo de color del podio (oro/plata/bronce) con un selector por valor.
+  li.dataset.rank = String(rank);
 
   const rankEl = document.createElement('span');
   rankEl.className = 'top-roleplayer-rank';
   rankEl.textContent = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : String(rank);
+  rankEl.setAttribute('role', 'img');
+  rankEl.setAttribute('aria-label', `Puesto ${rank}`);
   li.appendChild(rankEl);
 
   li.appendChild(buildAvatar(entry.member_name, entry.avatar_url, 'top-roleplayer-avatar'));
+
+  const n = Number(entry.sessions_count);
 
   const info = document.createElement('div');
   info.className = 'top-roleplayer-info';
@@ -100,10 +107,28 @@ function buildRankRow(entry, rank) {
   info.appendChild(name);
   const count = document.createElement('div');
   count.className = 'top-roleplayer-count';
-  const n = Number(entry.sessions_count);
-  count.textContent = `${n} role-play${n === 1 ? '' : 's'} este mes`;
+  // Solo la etiqueta: la cantidad vive en la pastilla de la derecha, y
+  // repetirla acá la haría sonar dos veces en un lector de pantalla.
+  count.textContent = 'role-plays';
+  count.setAttribute('aria-hidden', 'true');
   info.appendChild(count);
   li.appendChild(info);
+
+  // role="img" + aria-label: el lector lee "3 role-plays este mes" de corrido
+  // en vez de deletrear el número y la etiqueta como dos textos sueltos.
+  const metric = document.createElement('div');
+  metric.className = 'top-roleplayer-metric';
+  metric.setAttribute('role', 'img');
+  metric.setAttribute('aria-label', `${n} role-play${n === 1 ? '' : 's'} este mes`);
+  const value = document.createElement('span');
+  value.className = 'top-roleplayer-metric-value';
+  value.textContent = String(n);
+  metric.appendChild(value);
+  const label = document.createElement('span');
+  label.className = 'top-roleplayer-metric-label';
+  label.textContent = 'este mes';
+  metric.appendChild(label);
+  li.appendChild(metric);
 
   return li;
 }
