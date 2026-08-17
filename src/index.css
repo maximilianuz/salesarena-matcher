@@ -301,6 +301,26 @@ html.dark .glass-hover:hover {
   box-sizing: border-box;
   z-index: 100;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease;
+  /* Red de seguridad para ventanas bajas: el layout fija la altura del sidebar
+     al viewport (100vh acá, 100vh - 56px en mobile) y su padre recorta lo que
+     se pase (layout-container: overflow hidden). Sin scroll propio, agregar
+     contenido al pie —como el botón de reseña— empujaba "Guía"/"Salir" fuera
+     del viewport de forma invisible: no desaparecían, quedaban recortados por
+     el padre sin ningún indicio de que había más para ver. Ahora, si no entra,
+     se puede bajar hasta encontrarlos. */
+  overflow-y: auto;
+}
+
+/* Ninguno de los cuatro bloques del sidebar se comprime para "hacer lugar":
+   con flex-shrink implícito en 1, agregar una fila nueva al pie encogía TODO
+   —logo, links, selector de tema y tarjeta de perfil— en vez de simplemente
+   desbordar hacia el scroll de arriba. Fijar cada bloque a su tamaño natural
+   es lo que hace que el overflow-y de arriba tenga algo consistente que
+   scrollear, en lugar de un acordeón compactándose de forma impredecible. */
+.nav-sidebar-head,
+.nav-sidebar .theme-selector,
+.nav-sidebar .profile-card {
+  flex-shrink: 0;
 }
 
 .brand-section {
@@ -394,7 +414,11 @@ html.dark .glass-hover:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
+  /* grow para ocupar el espacio libre cuando sobra alto, pero NUNCA encogerse
+     por debajo de sus 6 links + el botón de contraer: eso es lo que antes
+     dejaba "Guía"/"Salir" recortados en vez de simplemente hacer aparecer
+     el scroll del sidebar. */
+  flex: 1 0 auto;
 }
 
 .nav-link {
