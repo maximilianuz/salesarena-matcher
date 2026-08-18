@@ -14,7 +14,7 @@ import {
   currentWeekStartISO,
   MIN_LEAD_MS,
   CONFIRM_STEPS_MS,
-  MAX_SESSIONS_PER_WEEK
+  DEFAULT_WEEKLY_TARGET
 } from '../src/matcher.js';
 import { computeSlotSets, slotToLocalParts } from '../src/slots.js';
 
@@ -425,7 +425,7 @@ test('tope semanal: marcar el día entero no genera una sesión por hora', () =>
     }
   }
   for (const [email, n] of porPersona) {
-    assert.ok(n <= MAX_SESSIONS_PER_WEEK, `${email} quedó con ${n} sesiones`);
+    assert.ok(n <= DEFAULT_WEEKLY_TARGET, `${email} quedó con ${n} sesiones`);
   }
 });
 
@@ -438,7 +438,7 @@ test('tope semanal: cuenta las propuestas que la persona YA tiene', () => {
   const slotSets = computeSlotSets(members, avails);
 
   // Ana ya llegó al tope en corridas anteriores; el resto no tiene nada.
-  const yaTiene = new Map([['ana@x.com', MAX_SESSIONS_PER_WEEK]]);
+  const yaTiene = new Map([['ana@x.com', DEFAULT_WEEKLY_TARGET]]);
 
   const pairs = buildWeeklyPairsMultiRound(
     members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS,
@@ -448,4 +448,45 @@ test('tope semanal: cuenta las propuestas que la persona YA tiene', () => {
   const deAna = pairs.filter(p => p.a.email === 'ana@x.com' || p.b.email === 'ana@x.com');
   assert.equal(deAna.length, 0, 'Ana ya estaba en el tope y volvió a recibir propuestas');
   assert.ok(pairs.length > 0, 'los demás sí deben seguir emparejándose');
+});
+
+test('cupo semanal: cada persona recibe el que ELIGIÓ, no uno igual para todos', () => {
+  // Ana quiere entrenar intensivo (6), Beto quiere una sola, el resto no eligió
+  // nada y usa el valor de arranque. Nadie debe pasarse del suyo.
+  const members = ['ana', 'beto', 'caro', 'dani']
+    .map(n => member(`${n}@x.com`, n, AR));
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+  const targets = new Map([['ana@x.com', 6], ['beto@x.com', 1]]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS,
+    new Map(), new Map(), targets
+  );
+
+  const cuenta = (email) =>
+    pairs.filter(p => p.a.email === email || p.b.email === email).length;
+
+  assert.ok(cuenta('ana@x.com') <= 6, 'Ana pasó del cupo que pidió');
+  assert.ok(cuenta('ana@x.com') > DEFAULT_WEEKLY_TARGET,
+    'Ana pidió más que el valor de arranque y debía poder superarlo');
+  assert.equal(cuenta('beto@x.com'), 1, 'Beto pidió una sola sesión');
+  assert.ok(cuenta('caro@x.com') <= DEFAULT_WEEKLY_TARGET, 'Caro no eligió: usa el valor base');
+});
+
+test('cupo semanal: pedir muchas no fabrica sesiones si nadie más tiene lugar', () => {
+  // Ana pide 20 pero Beto solo quiere 1: la sesión necesita a los dos, así que
+  // el cupo del otro también limita. Es lo que hace que el sistema no explote
+  // aunque no haya techo.
+  const members = [member('ana@x.com', 'Ana', AR), member('beto@x.com', 'Beto', AR)];
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+  const targets = new Map([['ana@x.com', 20], ['beto@x.com', 1]]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS,
+    new Map(), new Map(), targets
+  );
+
+  assert.equal(pairs.length, 1, 'el cupo del compañero también limita');
 });

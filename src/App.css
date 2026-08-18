@@ -638,6 +638,87 @@
   background-color: rgba(255, 69, 58, 0.07);
 }
 
+/* Cuántos role-plays por semana. Va junto al calendario porque se decide con
+   las horas a la vista: cuántas quiero y cuándo puedo son la misma decisión
+   tomada desde dos lados. */
+.weekly-target-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background-color: var(--bg-card);
+}
+
+.weekly-target-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.weekly-target-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.weekly-target-step {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.weekly-target-step:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.weekly-target-step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.weekly-target-input {
+  width: 56px;
+  height: 30px;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-target-input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+/* Aviso cuando pidió más sesiones que horas marcadas: no es un error, es que
+   todavía no hay dónde ubicarlas. */
+.weekly-target-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--color-warning, #ff9f0a);
+}
+
 .show-hours-toggle {
   background: none;
   border: none;

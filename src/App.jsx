@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs, MAX_SESSIONS_PER_WEEK } from './matcher';
+import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs, DEFAULT_WEEKLY_TARGET } from './matcher';
 import { computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
@@ -384,6 +384,9 @@ export default function App() {
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  // Cuántos role-plays quiere esta semana. Se precarga con lo que ya eligió
+  // para que reabrir el asistente no le pise su preferencia con el valor base.
+  const [wizardWeeklyTarget, setWizardWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
   const [saveAsTemplate, setSaveAsTemplate] = useState(true);
   const [wizardStatus, setWizardStatus] = useState(null); // {type, msg}
 
@@ -706,9 +709,13 @@ export default function App() {
 
     const slotSets = computeSlotSets(pool, availabilities);
     const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
+    // Cuántas sesiones quiere cada uno: el cupo es de la persona, no global.
+    const weeklyTargets = new Map(
+      pool.map(m => [m.email.toLowerCase(), m.weeklyTarget ?? DEFAULT_WEEKLY_TARGET])
+    );
     const pairs = buildWeeklyPairsMultiRound(
       pool, slotSets, scores, excludedPairs, new Map(), new Date(),
-      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts
+      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts, weeklyTargets
     );
     if (pairs.length === 0) return;
 
@@ -857,7 +864,11 @@ export default function App() {
           country: d.country,
           tz: d.timezone,
           active: d.active,
-          avatarUrl: d.avatar_url
+          avatarUrl: d.avatar_url,
+          // Cuántos role-plays quiere por semana. La columna es nueva: si la
+          // migración todavía no corrió, se cae al valor de arranque en vez de
+          // dejar el cupo en undefined y que el motor no proponga nada.
+          weeklyTarget: d.weekly_target ?? DEFAULT_WEEKLY_TARGET
         })));
       }
 
@@ -1351,6 +1362,24 @@ export default function App() {
       setWizardStatus({ type: 'error', msg: gridError });
       return;
     }
+
+    // 2b. Cuántos role-plays quiere esta semana. Si la columna todavía no
+    // existe (migración sin aplicar) el guardado falla, pero los horarios YA
+    // quedaron guardados: se sigue adelante con el cupo por defecto en vez de
+    // hacer fracasar todo el paso.
+    if (!useMockDb) {
+      const { error: targetError } = await supabase
+        .from('members')
+        .update({ weekly_target: wizardWeeklyTarget })
+        .eq('room_id', currentRoomId)
+        .ilike('email', escapeLikeLiteral(currentUser.email));
+      if (targetError) console.error('weekly_target:', targetError);
+    }
+    setMembers(prev => prev.map(mem =>
+      mem.email.toLowerCase() === currentUser.email.toLowerCase()
+        ? { ...mem, weeklyTarget: wizardWeeklyTarget }
+        : mem
+    ));
 
     // 3. Escribir a disponibilidad local
     const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
@@ -2006,6 +2035,17 @@ export default function App() {
     if (!isLoggedIn || !currentUser) return;
     loadCloseoutState();
   }, [isLoggedIn, currentUser?.email, meetings, attendances, members]);
+
+  // El cupo semanal del asistente arranca en lo que la persona ya eligió, no en
+  // el valor base: si no, cada vez que reabre el asistente y guarda, su
+  // preferencia se pisaría sola con el número por defecto.
+  useEffect(() => {
+    if (!currentUser) return;
+    const mio = members.find(
+      mem => mem.email.toLowerCase() === currentUser.email.toLowerCase()
+    );
+    if (mio?.weeklyTarget) setWizardWeeklyTarget(mio.weeklyTarget);
+  }, [currentUser?.email, members]);
 
   // Plazo del cierre en la hora local de quien mira ("mañana 14:30", "hoy
   // 20:00"). Es un dato de urgencia, así que importa el día relativo más que
@@ -3907,10 +3947,56 @@ export default function App() {
                       muchas horas NO agenda muchas sesiones. Sin esta frase la
                       gente marcaba el día entero creyendo que era necesario. */}
                   <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
-                    Marcá las horas en las que podrías hacer un role-play. Son opciones, no compromisos:
-                    vas a tener hasta {MAX_SESSIONS_PER_WEEK} sesiones por semana, en los horarios donde
-                    coincidas con alguien.
+                    Marcá las horas en las que podrías hacer un role-play. Son opciones, no
+                    compromisos: de todas las que marques se van a usar solo las que hagan falta
+                    para llegar a la cantidad que elijas abajo.
                   </p>
+
+                  {/* Cuántas sesiones querés es una pregunta DISTINTA de cuándo
+                      podés, y antes se deducía de la segunda: quien marcaba el
+                      día entero recibía una propuesta por hora. Preguntarlo de
+                      frente evita ese malentendido y saca el tope fijo que le
+                      quedaba corto a quien tiene tiempo. */}
+                  <div className="weekly-target-row">
+                    <label className="weekly-target-label" htmlFor="weekly-target">
+                      <Target size={13} aria-hidden="true" />
+                      ¿Cuántos role-plays querés por semana?
+                    </label>
+                    <div className="weekly-target-control">
+                      <button
+                        type="button"
+                        className="weekly-target-step"
+                        onClick={() => setWizardWeeklyTarget(n => Math.max(1, n - 1))}
+                        disabled={wizardWeeklyTarget <= 1}
+                        aria-label="Uno menos"
+                      >−</button>
+                      <input
+                        id="weekly-target"
+                        type="number"
+                        className="weekly-target-input"
+                        min="1"
+                        max="168"
+                        value={wizardWeeklyTarget}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10);
+                          setWizardWeeklyTarget(Number.isNaN(n) ? 1 : Math.min(168, Math.max(1, n)));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="weekly-target-step"
+                        onClick={() => setWizardWeeklyTarget(n => Math.min(168, n + 1))}
+                        aria-label="Uno más"
+                      >+</button>
+                    </div>
+                  </div>
+                  {wizardGrid.length > 0 && wizardGrid.length < wizardWeeklyTarget && (
+                    <p className="weekly-target-hint">
+                      Marcaste {wizardGrid.length} {wizardGrid.length === 1 ? 'hora' : 'horas'} y pediste{' '}
+                      {wizardWeeklyTarget} {wizardWeeklyTarget === 1 ? 'sesión' : 'sesiones'}: marcá
+                      más horas para que haya dónde ubicarlas.
+                    </p>
+                  )}
 
                   <div className="editor-toolbar">
                     <span className="tz-chip" title="Tus horarios se guardan en esta zona horaria">

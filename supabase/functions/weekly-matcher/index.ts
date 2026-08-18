@@ -62,18 +62,18 @@ const ROTATION_WEIGHT = 40;
 const partnerDesirability = (timesPaired: number, score: number): number =>
   score - timesPaired * ROTATION_WEIGHT;
 
-// Tope de role-plays por persona y por semana.
+// Cuántos role-plays por semana quiere hacer alguien que todavía no lo eligió.
 //
-// Marcar "libre lunes de 9 a 17" significa "cualquiera de esas horas me sirve",
-// NO "agendame ocho sesiones el lunes". Sin este tope el motor llenaba cada hora
-// declarada: una sala de 20 personas con 40 horas marcadas cada una generaba 400
-// propuestas, 40 por persona, y la misma dupla se repetía 22 veces — con lo que
-// la rotación dejaba de significar nada.
+// La cantidad NO se deduce de la disponibilidad: marcar "libre lunes de 9 a 17"
+// significa "cualquiera de esas horas me sirve", no "agendame ocho sesiones el
+// lunes". Cada persona lo elige (members.weekly_target) y esto es solo el valor
+// de arranque. No hay techo: el límite real lo ponen sus horas marcadas y que
+// del otro lado haya alguien con cupo, porque cada sesión consume el de las DOS.
 //
-// El tope cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
-// el cron pasa cada 10 minutos y sin eso sumaría el tope entero en cada pasada.
-// Debe coincidir con MAX_SESSIONS_PER_WEEK en src/matcher.js.
-const MAX_SESSIONS_PER_WEEK = 3;
+// El cupo cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
+// el cron pasa cada 10 minutos y sin eso sumaría el cupo entero en cada pasada.
+// Debe coincidir con DEFAULT_WEEKLY_TARGET en src/matcher.js.
+const DEFAULT_WEEKLY_TARGET = 3;
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -753,6 +753,14 @@ Deno.serve(async (req) => {
         sessionCount.set(k, (sessionCount.get(k) ?? 0) + 1);
       };
       const sessionsOf = (email: string) => sessionCount.get(email.toLowerCase()) ?? 0;
+      // Cuántas quiere cada uno. Quien nunca lo eligió usa el valor de arranque.
+      const weeklyTargets = new Map<string, number>(
+        (members || [])
+          .filter(mem => Number.isFinite(mem.weekly_target))
+          .map(mem => [mem.email.toLowerCase(), mem.weekly_target as number])
+      );
+      const targetOf = (email: string) =>
+        weeklyTargets.get(email.toLowerCase()) ?? DEFAULT_WEEKLY_TARGET;
       for (const p of weekProposals || []) {
         if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
         addSession(p.member_a_email);
@@ -779,8 +787,8 @@ Deno.serve(async (req) => {
       const maxRounds = 168;
 
       for (let round = 0; round < maxRounds; round++) {
-        // Quien ya llegó a su tope semanal no entra a esta ronda.
-        const disponibles = pool.filter(m => sessionsOf(m.email) < MAX_SESSIONS_PER_WEEK);
+        // Quien ya llegó al cupo que eligió no entra a esta ronda.
+        const disponibles = pool.filter(m => sessionsOf(m.email) < targetOf(m.email));
         if (disponibles.length < 2) break;
 
         const { pairs } = buildWeeklyPairs(
