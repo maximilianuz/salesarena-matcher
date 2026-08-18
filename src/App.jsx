@@ -1670,10 +1670,6 @@ export default function App() {
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
-    if (currentUser.email.toLowerCase() !== ADMIN_EMAIL) {
-      showNotification('Solo el administrador puede crear salas nuevas.', 'error');
-      return;
-    }
     if (!newRoomNameInput.trim()) return;
     if (roomSaving) return;
 
@@ -4806,34 +4802,29 @@ export default function App() {
               </div>
             </form>
 
-            {/* Formulario 2: Crear Nueva Sala (solo administrador, por ahora) */}
-            {currentUser.email.toLowerCase() === ADMIN_EMAIL ? (
-              <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                  Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente.
-                </p>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newRoomNameInput}
-                    onChange={(e) => setNewRoomNameInput(e.target.value)}
-                    placeholder="Ej. Marketing 2026"
-                    required
-                    style={{ flex: 1, padding: '8px 12px' }}
-                  />
-                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
-                    {roomSaving ? 'Creando...' : 'Crear'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <Lock size={13} style={{ flexShrink: 0 }} />
-                Solo el administrador puede crear salas nuevas por el momento.
+            {/* Formulario 2: Crear Nueva Sala. Abierto a cualquiera: quien la
+                crea queda como su dueño y es el único que puede renombrarla o
+                borrarla — la sala de otra persona no se toca. */}
+            <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente. Vas a quedar como quien la administra, y solo vos vas a poder renombrarla o eliminarla.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newRoomNameInput}
+                  onChange={(e) => setNewRoomNameInput(e.target.value)}
+                  placeholder="Ej. Marketing 2026"
+                  required
+                  style={{ flex: 1, padding: '8px 12px' }}
+                />
+                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
+                  {roomSaving ? 'Creando...' : 'Crear'}
+                </button>
               </div>
-            )}
+            </form>
 
             {/* Sección 3: Eliminar Sala */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -4999,13 +4990,11 @@ export default function App() {
               </button>
             </div>
 
-            {myFeedback && (
-              <div className="login-disclosure" style={{ textAlign: 'left' }}>
-                {myFeedback.status === 'pending' && 'Tu reseña anterior está pendiente de revisión.'}
-                {myFeedback.status === 'approved' && 'Tu reseña ya está publicada en la web. Si la editás, vuelve a pasar por revisión.'}
-                {myFeedback.status === 'rejected' && 'Tu reseña anterior no se publicó. Podés volver a intentarlo.'}
-              </div>
-            )}
+            {/* Acá iba un aviso de que la reseña pasa por revisión. Se quitó:
+                escribir una opinión no debería sentirse como presentar un
+                trámite. La moderación sigue igual del lado del servidor —solo
+                el administrador de plataforma aprueba lo que se publica—, pero
+                eso es asunto nuestro y no una advertencia para quien escribe. */}
 
             <div className="feedback-star-picker" role="radiogroup" aria-label="Puntuación de 1 a 5 estrellas">
               {[1, 2, 3, 4, 5].map(n => (
@@ -5027,7 +5016,7 @@ export default function App() {
               className="form-input"
               rows={4}
               maxLength={600}
-              placeholder="Contanos qué te parece la app. Si la aprobamos, puede aparecer con tu nombre y foto en la web pública."
+              placeholder="Contanos qué te parece la app. Puede aparecer con tu nombre y foto en la web pública."
               value={feedbackComment}
               onChange={(e) => setFeedbackComment(e.target.value)}
               style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', padding: '10px 14px', fontFamily: 'inherit' }}
