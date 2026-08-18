@@ -1381,6 +1381,23 @@ export default function App() {
         : mem
     ));
 
+    // Bajar el cupo NO cancela lo que ya está agendado: del otro lado hay
+    // alguien que quizás ya confirmó. Se avisa para que no parezca que el
+    // cambio no se guardó al seguir viendo más propuestas de las que pidió.
+    const misPropuestasVivas = proposals.filter(p =>
+      p.weekStart === currentWeekStartISO() &&
+      (p.status === 'propuesto' || p.status === 'confirmado') &&
+      [p.aEmail, p.bEmail].some(e => e?.toLowerCase() === currentUser.email.toLowerCase())
+    ).length;
+    if (misPropuestasVivas > wizardWeeklyTarget) {
+      showNotification(
+        `Ya tenés ${misPropuestasVivas} role-plays agendados esta semana, más de los ${wizardWeeklyTarget} que pediste. ` +
+        'Esos siguen en pie porque del otro lado hay alguien esperándote: si no podés con alguno, cancelalo desde la tarjeta. ' +
+        'El cupo nuevo se aplica desde la próxima semana.',
+        'info'
+      );
+    }
+
     // 3. Escribir a disponibilidad local
     const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
     setAvailabilities([...cleanAvail, ...newRules]);
