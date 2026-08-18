@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
 import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs, DEFAULT_WEEKLY_TARGET } from './matcher';
@@ -1363,21 +1363,34 @@ export default function App() {
       return;
     }
 
-    // 2b. Cuántos role-plays quiere esta semana. Si la columna todavía no
-    // existe (migración sin aplicar) el guardado falla, pero los horarios YA
-    // quedaron guardados: se sigue adelante con el cupo por defecto en vez de
-    // hacer fracasar todo el paso.
+    // 2b. Cuántos role-plays quiere esta semana. Si esto falla, los horarios YA
+    // quedaron guardados, así que no se hace fracasar todo el paso — pero
+    // TAMPOCO se toca el estado local: dejarlo en el número nuevo mostraría un
+    // cupo que la base no tiene, y la persona creería que pidió 5 mientras el
+    // emparejador le sigue dando 3.
+    let targetGuardado = wizardWeeklyTarget;
     if (!useMockDb) {
       const { error: targetError } = await supabase
         .from('members')
         .update({ weekly_target: wizardWeeklyTarget })
         .eq('room_id', currentRoomId)
         .ilike('email', escapeLikeLiteral(currentUser.email));
-      if (targetError) console.error('weekly_target:', targetError);
+      if (targetError) {
+        console.error('weekly_target:', targetError);
+        const anterior = members.find(
+          mem => mem.email.toLowerCase() === currentUser.email.toLowerCase()
+        )?.weeklyTarget ?? DEFAULT_WEEKLY_TARGET;
+        targetGuardado = anterior;
+        setWizardWeeklyTarget(anterior);
+        showNotification(
+          `Tus horarios se guardaron, pero no pudimos cambiar la cantidad de role-plays por semana: sigue en ${anterior}. Probá de nuevo desde el asistente.`,
+          'error'
+        );
+      }
     }
     setMembers(prev => prev.map(mem =>
       mem.email.toLowerCase() === currentUser.email.toLowerCase()
-        ? { ...mem, weeklyTarget: wizardWeeklyTarget }
+        ? { ...mem, weeklyTarget: targetGuardado }
         : mem
     ));
 
@@ -2056,12 +2069,19 @@ export default function App() {
   // El cupo semanal del asistente arranca en lo que la persona ya eligió, no en
   // el valor base: si no, cada vez que reabre el asistente y guarda, su
   // preferencia se pisaría sola con el número por defecto.
+  //
+  // Se sincroniza UNA sola vez por usuario. `members` se recarga por muchos
+  // motivos ajenos (alguien más entra, alguien cambia su foto) y volver a
+  // aplicarlo pisaría el número que la persona está tipeando en ese momento.
+  const targetSincronizadoPara = useRef(null);
   useEffect(() => {
     if (!currentUser) return;
-    const mio = members.find(
-      mem => mem.email.toLowerCase() === currentUser.email.toLowerCase()
-    );
-    if (mio?.weeklyTarget) setWizardWeeklyTarget(mio.weeklyTarget);
+    const email = currentUser.email.toLowerCase();
+    if (targetSincronizadoPara.current === email) return;
+    const mio = members.find(mem => mem.email.toLowerCase() === email);
+    if (!mio) return; // todavía no cargó su fila
+    targetSincronizadoPara.current = email;
+    if (mio.weeklyTarget) setWizardWeeklyTarget(mio.weeklyTarget);
   }, [currentUser?.email, members]);
 
   // Plazo del cierre en la hora local de quien mira ("mañana 14:30", "hoy

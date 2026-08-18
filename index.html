@@ -1701,7 +1701,10 @@
     <!-- Hero Section -->
     <section class="hero">
         <div class="hero-bg" id="hero-bg" aria-hidden="true">
-            <video class="hero-video" id="hero-video" muted loop playsinline preload="none" poster="/hero-poster.jpg">
+            <!-- Sin poster: el archivo que se referenciaba acá no existe en el
+                 proyecto, así que cada carga pedía /hero-poster.jpg y recibía un
+                 404 sin mostrar nada. El fondo del hero cubre ese instante. -->
+            <video class="hero-video" id="hero-video" muted loop playsinline preload="none">
                 <source src="/videos/hero-bg.mp4" type="video/mp4">
             </video>
         </div>
