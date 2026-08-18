@@ -62,6 +62,19 @@ const ROTATION_WEIGHT = 40;
 const partnerDesirability = (timesPaired: number, score: number): number =>
   score - timesPaired * ROTATION_WEIGHT;
 
+// Tope de role-plays por persona y por semana.
+//
+// Marcar "libre lunes de 9 a 17" significa "cualquiera de esas horas me sirve",
+// NO "agendame ocho sesiones el lunes". Sin este tope el motor llenaba cada hora
+// declarada: una sala de 20 personas con 40 horas marcadas cada una generaba 400
+// propuestas, 40 por persona, y la misma dupla se repetía 22 veces — con lo que
+// la rotación dejaba de significar nada.
+//
+// El tope cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
+// el cron pasa cada 10 minutos y sin eso sumaría el tope entero en cada pasada.
+// Debe coincidir con MAX_SESSIONS_PER_WEEK en src/matcher.js.
+const MAX_SESSIONS_PER_WEEK = 3;
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -725,8 +738,19 @@ Deno.serve(async (req) => {
         if (!busySlots.has(k)) busySlots.set(k, new Set<number>());
         busySlots.get(k)!.add(slot);
       };
+      // Sesiones que cada persona YA tiene esta semana. El cron corre cada 10
+      // minutos: si el tope contara solo lo de esta corrida, cada pasada le
+      // sumaría el tope entero a la misma persona.
+      const sessionCount = new Map<string, number>();
+      const addSession = (email: string) => {
+        const k = email.toLowerCase();
+        sessionCount.set(k, (sessionCount.get(k) ?? 0) + 1);
+      };
+      const sessionsOf = (email: string) => sessionCount.get(email.toLowerCase()) ?? 0;
       for (const p of weekProposals || []) {
         if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
+        addSession(p.member_a_email);
+        addSession(p.member_b_email);
         if (p.slot_start === null || p.slot_start === undefined) continue;
         markBusy(p.member_a_email, p.slot_start);
         markBusy(p.member_b_email, p.slot_start);
@@ -749,8 +773,12 @@ Deno.serve(async (req) => {
       const maxRounds = 168;
 
       for (let round = 0; round < maxRounds; round++) {
+        // Quien ya llegó a su tope semanal no entra a esta ronda.
+        const disponibles = pool.filter(m => sessionsOf(m.email) < MAX_SESSIONS_PER_WEEK);
+        if (disponibles.length < 2) break;
+
         const { pairs } = buildWeeklyPairs(
-          pool, slotSets, scores, excluded, pairCounts, now, roundSoftExcluded, MIN_LEAD_MS, busySlots
+          disponibles, slotSets, scores, excluded, pairCounts, now, roundSoftExcluded, MIN_LEAD_MS, busySlots
         );
         if (pairs.length === 0) break; // No hay más parejas posibles
 
@@ -759,6 +787,8 @@ Deno.serve(async (req) => {
           roundSoftExcluded.add(pairKeyOf(p.a.email, p.b.email));
           markBusy(p.a.email, p.slot);
           markBusy(p.b.email, p.slot);
+          addSession(p.a.email);
+          addSession(p.b.email);
         }
       }
 

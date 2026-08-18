@@ -25,6 +25,19 @@ export const ROTATION_WEIGHT = 40;
 export const partnerDesirability = (timesPaired, score) =>
   score - timesPaired * ROTATION_WEIGHT;
 
+// Tope de role-plays por persona y por semana.
+//
+// Marcar "libre lunes de 9 a 17" significa "cualquiera de esas horas me sirve",
+// NO "agendame ocho sesiones el lunes". Sin este tope el motor llenaba cada hora
+// declarada: una sala de 20 personas con 40 horas marcadas cada una generaba 400
+// propuestas, 40 por persona, y la misma dupla se repetía 22 veces — con lo que
+// la rotación dejaba de significar nada.
+//
+// El tope cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
+// el cron pasa cada 10 minutos y sin eso sumaría el tope entero en cada pasada.
+// Debe coincidir con la Edge Function.
+export const MAX_SESSIONS_PER_WEEK = 3;
+
 // Ventana de confirmación ESCALONADA. En cada (re)asignación, el plazo para
 // confirmar se elige como el mayor escalón que aún deje el vencimiento en el
 // futuro: 4hs → 2hs → 1h → 30min. Así, si una propuesta vence sin confirmar y el
@@ -264,10 +277,23 @@ export const buildWeeklyPairsMultiRound = (
   now = new Date(),
   softExcludedPairs = new Set(),
   minLeadMs = 0,
-  initialBusySlots = new Map()
+  initialBusySlots = new Map(),
+  initialSessionCounts = new Map(),
+  maxSessionsPerWeek = MAX_SESSIONS_PER_WEEK
 ) => {
   const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
   const allPairs = [];
+  // Sesiones que cada persona ya tiene esta semana, contando las propuestas
+  // vivas de corridas anteriores. Quien llegó al tope sale del pool.
+  const sessionCount = new Map();
+  for (const [email, n] of initialSessionCounts) {
+    sessionCount.set(email.toLowerCase(), n);
+  }
+  const sessionsOf = (email) => sessionCount.get(email.toLowerCase()) ?? 0;
+  const addSession = (email) => {
+    const k = email.toLowerCase();
+    sessionCount.set(k, (sessionCount.get(k) ?? 0) + 1);
+  };
   // Las duplas que ya se juntaron en una ronda anterior de ESTA corrida pasan a
   // evitarse, no a prohibirse: si a los dos les quedan horas libres y ya no hay
   // nadie nuevo con quien emparejarlos, es mejor una segunda sesión juntos que
@@ -289,8 +315,12 @@ export const buildWeeklyPairsMultiRound = (
   const maxRounds = 168;
 
   for (let round = 0; round < maxRounds; round++) {
+    // Quien ya llegó a su tope semanal no entra a esta ronda.
+    const disponibles = members.filter(m => sessionsOf(m.email) < maxSessionsPerWeek);
+    if (disponibles.length < 2) break;
+
     const { pairs } = buildWeeklyPairs(
-      members, slotSets, scores, excludedPairs, pairCounts, now,
+      disponibles, slotSets, scores, excludedPairs, pairCounts, now,
       roundSoftExcluded, minLeadMs, busySlots
     );
     if (pairs.length === 0) break; // No hay más parejas posibles
@@ -300,6 +330,8 @@ export const buildWeeklyPairsMultiRound = (
       roundSoftExcluded.add(pairKey(p.a.email, p.b.email));
       markBusy(p.a.email, p.slot);
       markBusy(p.b.email, p.slot);
+      addSession(p.a.email);
+      addSession(p.b.email);
     }
   }
 

@@ -13,7 +13,8 @@ import {
   respondByMs,
   currentWeekStartISO,
   MIN_LEAD_MS,
-  CONFIRM_STEPS_MS
+  CONFIRM_STEPS_MS,
+  MAX_SESSIONS_PER_WEEK
 } from '../src/matcher.js';
 import { computeSlotSets, slotToLocalParts } from '../src/slots.js';
 
@@ -401,4 +402,50 @@ test('multi-ronda: no muta el Map de horarios ocupados que recibe', () => {
   );
   assert.deepEqual([...busy.get('ana@x.com')], [100]);
   assert.equal(busy.size, 1);
+});
+
+test('tope semanal: marcar el día entero no genera una sesión por hora', () => {
+  // "Libre lunes de 9 a 18" significa "cualquiera de esas horas me sirve", no
+  // "agendame nueve role-plays el lunes". Sin tope, seis personas con nueve
+  // horas marcadas generaban 27 propuestas y la misma dupla se repetía once
+  // veces, con lo que la rotación dejaba de significar algo.
+  const members = ['ana', 'beto', 'caro', 'dani', 'eva', 'fito']
+    .map(n => member(`${n}@x.com`, n, AR));
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS
+  );
+
+  const porPersona = new Map();
+  for (const p of pairs) {
+    for (const e of [p.a.email, p.b.email]) {
+      porPersona.set(e, (porPersona.get(e) ?? 0) + 1);
+    }
+  }
+  for (const [email, n] of porPersona) {
+    assert.ok(n <= MAX_SESSIONS_PER_WEEK, `${email} quedó con ${n} sesiones`);
+  }
+});
+
+test('tope semanal: cuenta las propuestas que la persona YA tiene', () => {
+  // El cron corre cada 10 minutos. Si el tope contara solo lo de esta corrida,
+  // cada pasada volvería a sumarle el tope entero a la misma persona.
+  const members = ['ana', 'beto', 'caro', 'dani']
+    .map(n => member(`${n}@x.com`, n, AR));
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+
+  // Ana ya llegó al tope en corridas anteriores; el resto no tiene nada.
+  const yaTiene = new Map([['ana@x.com', MAX_SESSIONS_PER_WEEK]]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS,
+    new Map(), yaTiene
+  );
+
+  const deAna = pairs.filter(p => p.a.email === 'ana@x.com' || p.b.email === 'ana@x.com');
+  assert.equal(deAna.length, 0, 'Ana ya estaba en el tope y volvió a recibir propuestas');
+  assert.ok(pairs.length > 0, 'los demás sí deben seguir emparejándose');
 });
