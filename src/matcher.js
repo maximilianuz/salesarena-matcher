@@ -25,18 +25,23 @@ export const ROTATION_WEIGHT = 40;
 export const partnerDesirability = (timesPaired, score) =>
   score - timesPaired * ROTATION_WEIGHT;
 
-// Tope de role-plays por persona y por semana.
+// Cuántos role-plays por semana quiere hacer alguien que todavía no lo eligió.
 //
-// Marcar "libre lunes de 9 a 17" significa "cualquiera de esas horas me sirve",
-// NO "agendame ocho sesiones el lunes". Sin este tope el motor llenaba cada hora
-// declarada: una sala de 20 personas con 40 horas marcadas cada una generaba 400
-// propuestas, 40 por persona, y la misma dupla se repetía 22 veces — con lo que
-// la rotación dejaba de significar nada.
+// La cantidad NO se deduce de la disponibilidad. Marcar "libre lunes de 9 a 17"
+// significa "cualquiera de esas horas me sirve", no "agendame ocho sesiones el
+// lunes". Cuando el motor las leía como lo mismo, una sala de 20 personas con
+// 40 horas marcadas cada una generaba 400 propuestas y la misma dupla se
+// repetía 22 veces, con lo que la rotación dejaba de significar algo.
 //
-// El tope cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
-// el cron pasa cada 10 minutos y sin eso sumaría el tope entero en cada pasada.
-// Debe coincidir con la Edge Function.
-export const MAX_SESSIONS_PER_WEEK = 3;
+// Ahora cada persona dice cuántas quiere (members.weekly_target) y esto es solo
+// el valor de arranque. No hay techo: el límite real lo ponen sus propias horas
+// marcadas y que del otro lado haya alguien con cupo, porque cada sesión
+// consume el de las DOS personas.
+//
+// El cupo cuenta las propuestas VIVAS de la semana, no solo las de esta
+// corrida: el cron pasa cada 10 minutos y sin eso sumaría el cupo entero en
+// cada pasada. Debe coincidir con la Edge Function.
+export const DEFAULT_WEEKLY_TARGET = 3;
 
 // Ventana de confirmación ESCALONADA. En cada (re)asignación, el plazo para
 // confirmar se elige como el mayor escalón que aún deje el vencimiento en el
@@ -279,17 +284,20 @@ export const buildWeeklyPairsMultiRound = (
   minLeadMs = 0,
   initialBusySlots = new Map(),
   initialSessionCounts = new Map(),
-  maxSessionsPerWeek = MAX_SESSIONS_PER_WEEK
+  weeklyTargets = new Map()
 ) => {
   const pairKey = (e1, e2) => [e1.toLowerCase(), e2.toLowerCase()].sort().join('|');
   const allPairs = [];
   // Sesiones que cada persona ya tiene esta semana, contando las propuestas
-  // vivas de corridas anteriores. Quien llegó al tope sale del pool.
+  // vivas de corridas anteriores. Quien llegó a SU cupo sale del pool.
   const sessionCount = new Map();
   for (const [email, n] of initialSessionCounts) {
     sessionCount.set(email.toLowerCase(), n);
   }
   const sessionsOf = (email) => sessionCount.get(email.toLowerCase()) ?? 0;
+  // Cuántas quiere cada uno. Quien nunca lo eligió usa el valor de arranque.
+  const targetOf = (email) =>
+    weeklyTargets.get(email.toLowerCase()) ?? DEFAULT_WEEKLY_TARGET;
   const addSession = (email) => {
     const k = email.toLowerCase();
     sessionCount.set(k, (sessionCount.get(k) ?? 0) + 1);
@@ -315,8 +323,8 @@ export const buildWeeklyPairsMultiRound = (
   const maxRounds = 168;
 
   for (let round = 0; round < maxRounds; round++) {
-    // Quien ya llegó a su tope semanal no entra a esta ronda.
-    const disponibles = members.filter(m => sessionsOf(m.email) < maxSessionsPerWeek);
+    // Quien ya llegó al cupo que eligió no entra a esta ronda.
+    const disponibles = members.filter(m => sessionsOf(m.email) < targetOf(m.email));
     if (disponibles.length < 2) break;
 
     const { pairs } = buildWeeklyPairs(

@@ -175,13 +175,21 @@
     <main>
         <div class="doc-header">
             <h1>Política de Privacidad</h1>
-            <span class="updated-badge">Última actualización: julio de 2026</span>
+            <span class="updated-badge">Última actualización: agosto de 2026</span>
         </div>
 
         <article>
             <section>
                 <h2><span class="num">1.</span> Información que recopilamos</h2>
-                <p>Cuando te registrás con Google, recopilamos tu <strong>email</strong>, <strong>nombre</strong> y <strong>zona horaria</strong>. Además, con tu autorización explícita durante el inicio de sesión, solicitamos permiso de <strong>Google Calendar</strong> (scope <code>calendar.events</code>) para crear los eventos de las sesiones de práctica.</p>
+                <p>Cuando te registrás con Google recibimos tu <strong>email</strong>, <strong>nombre</strong> y <strong>foto de perfil</strong>. Al completar tu alta guardamos tu <strong>país</strong> y tu <strong>zona horaria</strong>. Además, con tu autorización explícita durante el inicio de sesión, solicitamos permiso de <strong>Google Calendar</strong> (scope <code>calendar.events</code>) para crear los eventos de las sesiones de práctica.</p>
+                <p style="margin-top: 0.75rem;">Mientras usás la plataforma se guarda además lo que hace falta para coordinar las sesiones y sostener la convivencia de la sala:</p>
+                <ul style="margin: 0.75rem 0 0 1.25rem; color: var(--text-light); font-size: 0.98rem;">
+                    <li><strong>Tu disponibilidad horaria</strong> y, si la guardás, tu plantilla de horarios habituales.</li>
+                    <li><strong>Cuántos role-plays querés por semana.</strong></li>
+                    <li><strong>Tu asistencia a cada sesión</strong>: si entraste a la videollamada, si llegaste a tiempo, y si cancelaste con o sin aviso. Acumular tres ausencias en un mes calendario te deja fuera de los emparejamientos hasta el mes siguiente.</li>
+                    <li><strong>El cierre de cada sesión</strong>: al terminar un role-play, cada participante responde unas preguntas sobre cómo fue —si la sesión ocurrió, cómo participó la otra persona, si el trato fue cordial— y puede dejar un comentario privado y un elogio. Esto significa que <em>otras personas escriben información sobre vos</em>, y vos sobre ellas.</li>
+                    <li><strong>Las reseñas de la app</strong> que quieras dejar, con tu puntuación y comentario.</li>
+                </ul>
             </section>
 
             <section>
@@ -203,11 +211,19 @@
 
             <section>
                 <h2><span class="num">5.</span> Seguridad</h2>
-                <p>Tus datos se almacenan en <strong>Supabase</strong> con encriptación de nivel empresarial, tanto en tránsito como en reposo. Los datos sensibles —como los tokens de acceso a tu cuenta de Google— se guardan cifrados, con acceso restringido, y se usan de forma automatizada únicamente en el momento de crear el evento de calendario. Ningún otro usuario ni miembro de nuestro equipo puede verlos.</p>
+                <p>Tus datos se almacenan en <strong>Supabase</strong> con encriptación de nivel empresarial, tanto en tránsito como en reposo, y el acceso está restringido por sala: nadie puede leer los datos de una sala a la que no pertenece.</p>
+                <p style="margin-top: 0.75rem;"><strong>Tu token de acceso a Google nunca se guarda en nuestra base de datos.</strong> Vive únicamente en la sesión de tu navegador, y el evento de calendario se crea desde tu propio dispositivo en el momento en que confirmás una sesión. Cuando el token vence, la app te pide volver a iniciar sesión en vez de conservar uno de larga duración. Ni nosotros ni ningún otro usuario podemos usar tu cuenta de Google fuera de esa acción que hacés vos.</p>
             </section>
 
             <section>
-                <h2><span class="num">6.</span> Compartir datos con terceros</h2>
+                <h2><span class="num">6.</span> Lo que otras personas ven de vos</h2>
+                <p>Dentro de tu sala, los demás miembros ven tu <strong>nombre</strong>, tu <strong>foto</strong>, tu <strong>disponibilidad horaria</strong> y tu <strong>puntaje de confiabilidad</strong>. No ven tu email salvo que administren la sala.</p>
+                <p style="margin-top: 0.75rem;">Sobre el <strong>cierre de sesión</strong>: lo que respondés sobre tu compañero no se le muestra nunca, ni él ve lo tuyo. Lo único que cruza de una persona a la otra es el elogio opcional, y solo una vez que ambos respondieron o pasaron 48 horas. Tu puntaje de compromiso te llega ya promediado, sin decirte quién dijo qué. Los comentarios marcados como problema de trato los lee únicamente quien administra la plataforma, para poder intervenir.</p>
+                <p style="margin-top: 0.75rem;"><strong>En la web pública</strong> pueden aparecer: tu primer nombre y tu foto en el ranking mensual de participación, y tu nombre, foto, puntuación y comentario si dejás una reseña de la app y esta se aprueba. Si no querés figurar, escribinos y lo sacamos.</p>
+            </section>
+
+            <section>
+                <h2><span class="num">7.</span> Compartir datos con terceros</h2>
                 <p>No vendemos, alquilamos ni compartimos tus datos con terceros con fines comerciales o publicitarios. Los únicos terceros que procesan tus datos son:</p>
                 <ul style="margin: 0.75rem 0 0 1.25rem; color: var(--text-light); font-size: 0.98rem;">
                     <li><strong>Google</strong>, para la autenticación y para crear el evento de calendario que vos autorizás.</li>
@@ -217,22 +233,22 @@
             </section>
 
             <section>
-                <h2><span class="num">7.</span> Retención y eliminación de datos</h2>
+                <h2><span class="num">8.</span> Retención y eliminación de datos</h2>
                 <p>Conservamos tus datos mientras tu cuenta esté activa. Podés solicitar la eliminación total de tu cuenta y de los datos asociados en cualquier momento; procesamos estas solicitudes dentro de los 30 días.</p>
             </section>
 
             <section>
-                <h2><span class="num">8.</span> Tus derechos</h2>
+                <h2><span class="num">9.</span> Tus derechos</h2>
                 <p>Podés solicitar acceso, corrección o eliminación de tus datos personales, así como <strong>revocar el acceso a tu Google Calendar</strong> en cualquier momento desde la <a class="inline-link" href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">página de permisos de tu cuenta de Google</a>.</p>
             </section>
 
             <section>
-                <h2><span class="num">9.</span> Cambios a esta política</h2>
+                <h2><span class="num">10.</span> Cambios a esta política</h2>
                 <p>Si modificamos de forma sustancial cómo accedemos, usamos o compartimos los datos de tu cuenta de Google, actualizaremos la fecha de esta página y te lo notificaremos por email o dentro de la plataforma antes de que el cambio entre en vigencia.</p>
             </section>
 
             <section>
-                <h2><span class="num">10.</span> Contacto</h2>
+                <h2><span class="num">11.</span> Contacto</h2>
                 <p>Para consultas sobre privacidad, escribinos a <a class="inline-link" href="mailto:community.argen.manager@gmail.com">community.argen.manager@gmail.com</a>.</p>
             </section>
         </article>

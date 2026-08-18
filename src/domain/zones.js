@@ -35,7 +35,29 @@ export const ZONAS = [
   { country: 'Polonia', tz: 'Europe/Warsaw', flag: '🇵🇱' },
   { country: 'Países Bajos', tz: 'Europe/Amsterdam', flag: '🇳🇱' },
   { country: 'Bélgica', tz: 'Europe/Brussels', flag: '🇧🇪' },
-  { country: 'República Checa', tz: 'Europe/Prague', flag: '🇨🇿' }
+  { country: 'República Checa', tz: 'Europe/Prague', flag: '🇨🇿' },
+  { country: 'Portugal', tz: 'Europe/Lisbon', flag: '🇵🇹' },
+
+  // Brasil faltaba, siendo el país más grande de la región. Quien entraba desde
+  // ahí quedaba registrado con horario de Buenos Aires y recibía propuestas
+  // corridas una hora, sin ninguna pantalla donde corregirlo.
+  { country: 'Brasil', tz: 'America/Sao_Paulo', flag: '🇧🇷' },
+  { country: 'Guatemala', tz: 'America/Guatemala', flag: '🇬🇹' },
+  { country: 'Rep. Dominicana', tz: 'America/Santo_Domingo', flag: '🇩🇴' },
+  { country: 'Honduras', tz: 'America/Tegucigalpa', flag: '🇭🇳' },
+  { country: 'El Salvador', tz: 'America/El_Salvador', flag: '🇸🇻' },
+  { country: 'Nicaragua', tz: 'America/Managua', flag: '🇳🇮' },
+  { country: 'Cuba', tz: 'America/Havana', flag: '🇨🇺' },
+  { country: 'Canadá (Este)', tz: 'America/Toronto', flag: '🇨🇦' },
+
+  // Zonas con offset fraccionario: la app las soporta desde el arreglo de
+  // solapamiento parcial en src/slots.js, así que pueden ofrecerse sin riesgo.
+  { country: 'India', tz: 'Asia/Kolkata', flag: '🇮🇳' },
+  { country: 'Israel', tz: 'Asia/Jerusalem', flag: '🇮🇱' },
+  { country: 'Emiratos Árabes', tz: 'Asia/Dubai', flag: '🇦🇪' },
+  { country: 'Sudáfrica', tz: 'Africa/Johannesburg', flag: '🇿🇦' },
+  { country: 'Australia (Sídney)', tz: 'Australia/Sydney', flag: '🇦🇺' },
+  { country: 'Filipinas', tz: 'Asia/Manila', flag: '🇵🇭' }
 ];
 
 // Bandera del país (fallback a globo si no está en la lista)
@@ -71,14 +93,26 @@ export const resolveTimezone = (countryName) => {
   }
 };
 
-// Adivina el país del usuario a partir de la zona horaria que reporta su
+// Adivina el país y la zona del usuario a partir de lo que reporta su
 // navegador, para poder registrarlo sin pedirle que lo elija a mano.
-export const guessCountryFromBrowserTz = () => {
+//
+// Cuando la zona del navegador NO está en la tabla, lo que se devuelve es esa
+// zona real con el nombre de su ciudad, no un país inventado. Antes el fallback
+// era 'Argentina': alguien entrando desde São Paulo, Bombay o Tel Aviv quedaba
+// con horario de Buenos Aires, marcaba "libre de 9 a 12" y recibía propuestas
+// corridas, sin enterarse nunca de por qué.
+export const guessLocationFromBrowser = () => {
+  let browserTz = 'UTC';
   try {
-    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const matched = ZONAS.find(z => z.tz === browserTz);
-    return matched ? matched.country : 'Argentina';
+    browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
-    return 'Argentina';
+    return { country: 'Argentina', tz: 'America/Argentina/Buenos_Aires' };
   }
+  const matched = ZONAS.find(z => z.tz === browserTz);
+  if (matched) return { country: matched.country, tz: matched.tz };
+  return { country: tzCity(browserTz), tz: browserTz };
 };
+
+// Compatibilidad: se mantiene por si algún llamador viejo la usa, pero ahora
+// devuelve el país realmente detectado y no 'Argentina' por defecto.
+export const guessCountryFromBrowserTz = () => guessLocationFromBrowser().country;

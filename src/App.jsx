@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
+import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs, DEFAULT_WEEKLY_TARGET } from './matcher';
 import { computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
@@ -49,9 +49,6 @@ import {
   Eraser,
   Target,
   UserPlus,
-  Briefcase,
-  Sunrise,
-  Sunset,
   Lock,
   RefreshCw,
   ShieldCheck,
@@ -77,7 +74,7 @@ import {
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
-import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
+import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessLocationFromBrowser } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
 import {
@@ -387,6 +384,15 @@ export default function App() {
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  // Corrección de la zona horaria detectada, desde el asistente.
+  const [editingTz, setEditingTz] = useState(false);
+  const [savingTz, setSavingTz] = useState(false);
+  // Propuesta cuyo Meet se está creando ahora mismo, para no dispararlo dos
+  // veces desde esta misma pantalla.
+  const [creatingMeetFor, setCreatingMeetFor] = useState(null);
+  // Cuántos role-plays quiere esta semana. Se precarga con lo que ya eligió
+  // para que reabrir el asistente no le pise su preferencia con el valor base.
+  const [wizardWeeklyTarget, setWizardWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
   const [saveAsTemplate, setSaveAsTemplate] = useState(true);
   const [wizardStatus, setWizardStatus] = useState(null); // {type, msg}
 
@@ -709,9 +715,13 @@ export default function App() {
 
     const slotSets = computeSlotSets(pool, availabilities);
     const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
+    // Cuántas sesiones quiere cada uno: el cupo es de la persona, no global.
+    const weeklyTargets = new Map(
+      pool.map(m => [m.email.toLowerCase(), m.weeklyTarget ?? DEFAULT_WEEKLY_TARGET])
+    );
     const pairs = buildWeeklyPairsMultiRound(
       pool, slotSets, scores, excludedPairs, new Map(), new Date(),
-      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts
+      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts, weeklyTargets
     );
     if (pairs.length === 0) return;
 
@@ -860,7 +870,11 @@ export default function App() {
           country: d.country,
           tz: d.timezone,
           active: d.active,
-          avatarUrl: d.avatar_url
+          avatarUrl: d.avatar_url,
+          // Cuántos role-plays quiere por semana. La columna es nueva: si la
+          // migración todavía no corrió, se cae al valor de arranque en vez de
+          // dejar el cupo en undefined y que el motor no proponga nada.
+          weeklyTarget: d.weekly_target ?? DEFAULT_WEEKLY_TARGET
         })));
       }
 
@@ -1042,7 +1056,7 @@ export default function App() {
         // trae— y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
           session.user.user_metadata?.name || nameFromEmail(email)).trim();
-        await registerMember(googleName, guessCountryFromBrowserTz(), email, googleAvatarUrl(session));
+        await registerMember(googleName, guessLocationFromBrowser(), email, googleAvatarUrl(session));
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
@@ -1355,6 +1369,54 @@ export default function App() {
       return;
     }
 
+    // 2b. Cuántos role-plays quiere esta semana. Si esto falla, los horarios YA
+    // quedaron guardados, así que no se hace fracasar todo el paso — pero
+    // TAMPOCO se toca el estado local: dejarlo en el número nuevo mostraría un
+    // cupo que la base no tiene, y la persona creería que pidió 5 mientras el
+    // emparejador le sigue dando 3.
+    let targetGuardado = wizardWeeklyTarget;
+    if (!useMockDb) {
+      const { error: targetError } = await supabase
+        .from('members')
+        .update({ weekly_target: wizardWeeklyTarget })
+        .eq('room_id', currentRoomId)
+        .ilike('email', escapeLikeLiteral(currentUser.email));
+      if (targetError) {
+        console.error('weekly_target:', targetError);
+        const anterior = members.find(
+          mem => mem.email.toLowerCase() === currentUser.email.toLowerCase()
+        )?.weeklyTarget ?? DEFAULT_WEEKLY_TARGET;
+        targetGuardado = anterior;
+        setWizardWeeklyTarget(anterior);
+        showNotification(
+          `Tus horarios se guardaron, pero no pudimos cambiar la cantidad de role-plays por semana: sigue en ${anterior}. Probá de nuevo desde el asistente.`,
+          'error'
+        );
+      }
+    }
+    setMembers(prev => prev.map(mem =>
+      mem.email.toLowerCase() === currentUser.email.toLowerCase()
+        ? { ...mem, weeklyTarget: targetGuardado }
+        : mem
+    ));
+
+    // Bajar el cupo NO cancela lo que ya está agendado: del otro lado hay
+    // alguien que quizás ya confirmó. Se avisa para que no parezca que el
+    // cambio no se guardó al seguir viendo más propuestas de las que pidió.
+    const misPropuestasVivas = proposals.filter(p =>
+      p.weekStart === currentWeekStartISO() &&
+      (p.status === 'propuesto' || p.status === 'confirmado') &&
+      [p.aEmail, p.bEmail].some(e => e?.toLowerCase() === currentUser.email.toLowerCase())
+    ).length;
+    if (misPropuestasVivas > wizardWeeklyTarget) {
+      showNotification(
+        `Ya tenés ${misPropuestasVivas} role-plays agendados esta semana, más de los ${wizardWeeklyTarget} que pediste. ` +
+        'Esos siguen en pie porque del otro lado hay alguien esperándote: si no podés con alguno, cancelalo desde la tarjeta. ' +
+        'El cupo nuevo se aplica desde la próxima semana.',
+        'info'
+      );
+    }
+
     // 3. Escribir a disponibilidad local
     const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
     setAvailabilities([...cleanAvail, ...newRules]);
@@ -1452,21 +1514,23 @@ export default function App() {
       applyLoggedInUser(existing);
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
-      await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
+      await registerMember(nameFromEmail(emailToUse), guessLocationFromBrowser(), emailToUse);
     }
   };
 
   // Registra un miembro nuevo en Supabase y actualiza el estado local.
   // Se usa desde el auto-registro OAuth, el flujo mock y el paso de
   // código de invitación.
-  const registerMember = async (rawName, rawCountry, emailOverride, avatarUrl = null) => {
+  const registerMember = async (rawName, rawLocation, emailOverride, avatarUrl = null) => {
     const email = (emailOverride || loginEmail).trim().toLowerCase();
-    // El país siempre llega resuelto por guessCountryFromBrowserTz (un país de
-    // ZONAS o Argentina como fallback). Antes había una rama para el valor
-    // 'Otro' que leía un estado que ya nadie escribía: si alguna vez se
-    // alcanzaba, registraba a la persona con el país en blanco.
-    const finalCountry = rawCountry;
-    const finalTz = resolveTimezone(finalCountry);
+    // rawLocation viene de guessLocationFromBrowser: trae el país Y la zona.
+    // La zona se toma de ahí y NO se re-deriva del nombre del país, porque para
+    // alguien cuya zona no está en la tabla el nombre es el de su ciudad y
+    // resolveTimezone no sabría traducirlo — terminaba cayendo a otro país.
+    const finalCountry = typeof rawLocation === 'string' ? rawLocation : rawLocation.country;
+    const finalTz = (typeof rawLocation === 'object' && rawLocation.tz)
+      ? rawLocation.tz
+      : resolveTimezone(finalCountry);
     const newUser = {
       name: rawName.trim(),
       email,
@@ -1520,6 +1584,46 @@ export default function App() {
 
     showNotification(`¡Bienvenido a Sales Arena Matcher, ${newUser.name}!`);
     return true;
+  };
+
+  // Cambiar la zona horaria propia. Los horarios ya cargados NO se tocan: se
+  // guardaron como "lunes de 9 a 12 en mi hora local", así que al cambiar la
+  // zona pasan a significar 9 a 12 en la zona nueva, que es justo lo que quiere
+  // alguien que estaba mal detectado. Lo que sí cambia es a qué hora UTC caen,
+  // y eso lo recalcula el motor solo en la próxima corrida.
+  const saveMyTimezone = async (nuevaTz) => {
+    if (!nuevaTz || nuevaTz === currentUser?.tz) { setEditingTz(false); return; }
+    const zona = ZONAS.find(z => z.tz === nuevaTz);
+    if (!zona) { setEditingTz(false); return; }
+
+    setSavingTz(true);
+    try {
+      if (!useMockDb) {
+        const { error } = await supabase
+          .from('members')
+          .update({ country: zona.country, timezone: zona.tz })
+          .eq('room_id', currentRoomId)
+          .ilike('email', escapeLikeLiteral(currentUser.email));
+        if (error) {
+          showNotification('No pudimos guardar tu zona horaria. Intentá de nuevo en un momento.', 'error');
+          return;
+        }
+      }
+      const actualizado = { ...currentUser, country: zona.country, tz: zona.tz };
+      applyLoggedInUser(actualizado);
+      setMembers(prev => prev.map(mem =>
+        mem.email.toLowerCase() === currentUser.email.toLowerCase()
+          ? { ...mem, country: zona.country, tz: zona.tz }
+          : mem
+      ));
+      setEditingTz(false);
+      showNotification(
+        `Listo: tus horarios ahora se leen en ${zona.country}. Revisá el calendario por las dudas.`,
+        'success'
+      );
+    } finally {
+      setSavingTz(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -1614,10 +1718,6 @@ export default function App() {
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
-    if (currentUser.email.toLowerCase() !== ADMIN_EMAIL) {
-      showNotification('Solo el administrador puede crear salas nuevas.', 'error');
-      return;
-    }
     if (!newRoomNameInput.trim()) return;
     if (roomSaving) return;
 
@@ -2010,6 +2110,24 @@ export default function App() {
     loadCloseoutState();
   }, [isLoggedIn, currentUser?.email, meetings, attendances, members]);
 
+  // El cupo semanal del asistente arranca en lo que la persona ya eligió, no en
+  // el valor base: si no, cada vez que reabre el asistente y guarda, su
+  // preferencia se pisaría sola con el número por defecto.
+  //
+  // Se sincroniza UNA sola vez por usuario. `members` se recarga por muchos
+  // motivos ajenos (alguien más entra, alguien cambia su foto) y volver a
+  // aplicarlo pisaría el número que la persona está tipeando en ese momento.
+  const targetSincronizadoPara = useRef(null);
+  useEffect(() => {
+    if (!currentUser) return;
+    const email = currentUser.email.toLowerCase();
+    if (targetSincronizadoPara.current === email) return;
+    const mio = members.find(mem => mem.email.toLowerCase() === email);
+    if (!mio) return; // todavía no cargó su fila
+    targetSincronizadoPara.current = email;
+    if (mio.weeklyTarget) setWizardWeeklyTarget(mio.weeklyTarget);
+  }, [currentUser?.email, members]);
+
   // Plazo del cierre en la hora local de quien mira ("mañana 14:30", "hoy
   // 20:00"). Es un dato de urgencia, así que importa el día relativo más que
   // la fecha exacta.
@@ -2096,8 +2214,13 @@ export default function App() {
         }
       }
       closeCloseoutForm();
+      // Si el cierre corrigió una ausencia mal puesta por el barrido, la
+      // asistencia local quedó vieja: se vuelve a leer para que la persona vea
+      // el cambio sin recargar. Es justo el dato que le importa — de eso
+      // dependen sus faltas del mes.
       showNotification('¡Gracias! Tu compañero no ve lo que respondiste.', 'success');
       await loadCloseoutState();
+      setRoomDataVersion(v => v + 1);
     } finally {
       setCloseoutSubmitting(false);
     }
@@ -2312,9 +2435,43 @@ export default function App() {
   // --- AGENDAR REUNIÓN CON APIS REALES DE GOOGLE CALENDAR / MEET ---
   // Crea la reunión real (Meet + registro + compromiso de asistencia) para una
   // propuesta 1:1 confirmada por ambas partes
+  // Marca que esta propuesta está siendo agendada. Es una etiqueta temporal en
+  // match_proposals.meeting_id: sirve de cerrojo entre las DOS personas de la
+  // dupla, que ven el mismo botón al mismo tiempo.
+  const MEET_CLAIM = 'creando';
+
   const createProposalMeeting = async (proposal) => {
+    if (creatingMeetFor === proposal.id) return; // doble clic de la misma persona
     const participantsStr = `${proposal.aName}, ${proposal.bName}`;
     const title = `Roleplay — ${proposal.aName.split(' ')[0]} · ${proposal.bName.split(' ')[0]}`;
+
+    // El botón "Crear Meet" lo ven los dos integrantes. Si ambos lo tocan se
+    // creaban DOS eventos y dos reuniones; a la huérfana no entraba nadie y el
+    // barrido de asistencia terminaba marcando ausentes a los dos, con la falta
+    // correspondiente. Se reclama la propuesta antes de hablar con Google: el
+    // UPDATE condicionado a meeting_id NULL solo puede ganarlo uno.
+    if (!useMockDb) {
+      const { data: claimed, error: claimError } = await supabase
+        .from('match_proposals')
+        .update({ meeting_id: MEET_CLAIM })
+        .eq('id', proposal.id)
+        .is('meeting_id', null)
+        .select('id');
+
+      if (claimError) {
+        showNotification('No pudimos agendar la reunión ahora. Intentá de nuevo en un momento.', 'error');
+        return;
+      }
+      if (!claimed || claimed.length === 0) {
+        showNotification(
+          'Tu compañero ya está creando el Meet de esta dupla. En unos segundos te aparece el enlace acá.',
+          'info'
+        );
+        setRoomDataVersion(v => v + 1); // traer el enlace cuando esté
+        return;
+      }
+    }
+    setCreatingMeetFor(proposal.id);
 
     setSchedulingStatus('loading');
     setScheduledDetails({
@@ -2413,6 +2570,13 @@ export default function App() {
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
+        setCreatingMeetFor(null);
+        // Se suelta el cerrojo: si quedara puesto, nadie —ni esta persona ni su
+        // compañero— podría volver a intentar agendar esta dupla nunca más.
+        await supabase.from('match_proposals')
+          .update({ meeting_id: null })
+          .eq('id', proposal.id)
+          .eq('meeting_id', MEET_CLAIM);
         showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. ${err.message}`, 'error');
         return;
       }
@@ -2482,10 +2646,15 @@ export default function App() {
       }))]);
     }
 
-    // Vincular la reunión creada a la propuesta
-    if (!useMockDb && newMeeting.id != null) {
-      await supabase.from('match_proposals').update({ meeting_id: newMeeting.id }).eq('id', proposal.id);
+    // Vincular la reunión creada a la propuesta: la etiqueta del cerrojo se
+    // reemplaza por el id real. Si la reunión no llegó a guardarse, se suelta
+    // para que se pueda reintentar.
+    if (!useMockDb) {
+      await supabase.from('match_proposals')
+        .update({ meeting_id: newMeeting.id != null ? String(newMeeting.id) : null })
+        .eq('id', proposal.id);
     }
+    setCreatingMeetFor(null);
     setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, meetingId: newMeeting.id } : p));
 
     setMeetings(prev => [...prev, newMeeting]);
@@ -2783,30 +2952,6 @@ export default function App() {
 
   const clearAllCells = () => {
     setWizardGrid([]);
-  };
-
-  // Presets rápidos de disponibilidad (se suman a la selección actual)
-  const applyPreset = (preset) => {
-    const slots = [];
-    const addRange = (days, from, to) => {
-      days.forEach(d => {
-        for (let h = from; h < to; h++) slots.push({ dayIdx: d, hour: h });
-      });
-    };
-    const WORKDAYS = [0, 1, 2, 3, 4];
-    const ALLDAYS = [0, 1, 2, 3, 4, 5, 6];
-
-    if (preset === 'work') addRange(WORKDAYS, 9, 18);
-    if (preset === 'mornings') addRange(ALLDAYS, 8, 12);
-    if (preset === 'evenings') addRange(ALLDAYS, 18, 22);
-
-    setWizardGrid(prev => {
-      const merged = [...prev];
-      slots.forEach(s => {
-        if (!merged.some(m => m.dayIdx === s.dayIdx && m.hour === s.hour)) merged.push(s);
-      });
-      return merged;
-    });
   };
 
   const handleTabClick = (tab) => {
@@ -3214,7 +3359,10 @@ export default function App() {
                 ? `Ver o editar tu reseña — ${FEEDBACK_STATUS_LABEL[myFeedback.status] || 'enviada'}`
                 : 'Calificar la app y dejar un comentario'}
             >
-              <Star size={14} fill="currentColor" strokeWidth={0} />
+              {/* La estrella crece hasta llenar el botón al pasar el mouse y el
+                  texto se corre para dejarla pasar. Va detrás del texto (no al
+                  revés) para que la etiqueta siga legible durante el barrido. */}
+              <Star className="profile-review-star" size={14} fill="currentColor" strokeWidth={0} aria-hidden="true" />
               <span className="profile-review-label">
                 {myFeedback ? 'Tu reseña' : 'Calificar la app'}
               </span>
@@ -3716,8 +3864,14 @@ export default function App() {
                                 <Video size={14} /> Abrir Google Meet
                               </a>
                             ) : (
-                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => createProposalMeeting(proposal)}>
-                                <Video size={14} /> Crear Meet de la dupla
+                              <button
+                                className="btn btn-indigo"
+                                style={{ width: '100%' }}
+                                onClick={() => createProposalMeeting(proposal)}
+                                disabled={creatingMeetFor === proposal.id}
+                              >
+                                <Video size={14} />
+                                {creatingMeetFor === proposal.id ? 'Creando el Meet...' : 'Crear Meet de la dupla'}
                               </button>
                             )
                           ) : mySide === 'pendiente' ? (
@@ -3900,6 +4054,52 @@ export default function App() {
                       </span>
                     </button>
                   </div>
+
+                  {/* La zona horaria se detecta del navegador y hasta ahora no
+                      había NINGÚN lugar para corregirla. Si la detección erraba,
+                      la persona marcaba "9 a 12" y recibía propuestas a otra
+                      hora, sin forma de darse cuenta de por qué. Va acá, al
+                      inicio del asistente, porque todo lo que sigue —el
+                      calendario, el mapa de calor, las propuestas— se
+                      interpreta con este dato. */}
+                  <div className="wizard-tz-row">
+                    <span className="wizard-tz-current">
+                      <Globe size={13} aria-hidden="true" />
+                      Tus horarios se leen en <strong>{tzCity(currentUser?.tz)}</strong>
+                    </span>
+                    {editingTz ? (
+                      <div className="wizard-tz-edit">
+                        <select
+                          className="form-input"
+                          aria-label="Elegí tu país o zona horaria"
+                          value={ZONAS.some(z => z.tz === currentUser?.tz) ? currentUser.tz : ''}
+                          onChange={(e) => saveMyTimezone(e.target.value)}
+                          disabled={savingTz}
+                        >
+                          <option value="" disabled>
+                            {ZONAS.some(z => z.tz === currentUser?.tz)
+                              ? 'Elegí tu país...'
+                              : `Detectada: ${tzCity(currentUser?.tz)}`}
+                          </option>
+                          {ZONAS.map(z => (
+                            <option key={z.tz} value={z.tz}>{z.flag} {z.country}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-small"
+                          onClick={() => setEditingTz(false)}
+                          disabled={savingTz}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className="btn-small" onClick={() => setEditingTz(true)}>
+                        No es mi zona
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -3930,9 +4130,60 @@ export default function App() {
               {wizardStep === 3 && (
                 <div className="editor-grid-container">
                   <h3 className="wizard-title">Marca tu Disponibilidad</h3>
+                  {/* Decir el tope acá evita el malentendido de fondo: marcar
+                      muchas horas NO agenda muchas sesiones. Sin esta frase la
+                      gente marcaba el día entero creyendo que era necesario. */}
                   <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
-                    Haz clic o arrastra sobre el calendario para marcar los horarios en los que podés hacer un role-play.
+                    Marcá las horas en las que podrías hacer un role-play. Son opciones, no
+                    compromisos: de todas las que marques se van a usar solo las que hagan falta
+                    para llegar a la cantidad que elijas abajo.
                   </p>
+
+                  {/* Cuántas sesiones querés es una pregunta DISTINTA de cuándo
+                      podés, y antes se deducía de la segunda: quien marcaba el
+                      día entero recibía una propuesta por hora. Preguntarlo de
+                      frente evita ese malentendido y saca el tope fijo que le
+                      quedaba corto a quien tiene tiempo. */}
+                  <div className="weekly-target-row">
+                    <label className="weekly-target-label" htmlFor="weekly-target">
+                      <Target size={13} aria-hidden="true" />
+                      ¿Cuántos role-plays querés por semana?
+                    </label>
+                    <div className="weekly-target-control">
+                      <button
+                        type="button"
+                        className="weekly-target-step"
+                        onClick={() => setWizardWeeklyTarget(n => Math.max(1, n - 1))}
+                        disabled={wizardWeeklyTarget <= 1}
+                        aria-label="Uno menos"
+                      >−</button>
+                      <input
+                        id="weekly-target"
+                        type="number"
+                        className="weekly-target-input"
+                        min="1"
+                        max="168"
+                        value={wizardWeeklyTarget}
+                        onChange={(e) => {
+                          const n = parseInt(e.target.value, 10);
+                          setWizardWeeklyTarget(Number.isNaN(n) ? 1 : Math.min(168, Math.max(1, n)));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="weekly-target-step"
+                        onClick={() => setWizardWeeklyTarget(n => Math.min(168, n + 1))}
+                        aria-label="Uno más"
+                      >+</button>
+                    </div>
+                  </div>
+                  {wizardGrid.length > 0 && wizardGrid.length < wizardWeeklyTarget && (
+                    <p className="weekly-target-hint">
+                      Marcaste {wizardGrid.length} {wizardGrid.length === 1 ? 'hora' : 'horas'} y pediste{' '}
+                      {wizardWeeklyTarget} {wizardWeeklyTarget === 1 ? 'sesión' : 'sesiones'}: marcá
+                      más horas para que haya dónde ubicarlas.
+                    </p>
+                  )}
 
                   <div className="editor-toolbar">
                     <span className="tz-chip" title="Tus horarios se guardan en esta zona horaria">
@@ -3943,20 +4194,20 @@ export default function App() {
                     </span>
                   </div>
 
-                  <div className="preset-bar">
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('work')} title="Lunes a Viernes, 9:00 a 18:00">
-                      <Briefcase size={12} /> Laboral 9–18
-                    </button>
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('mornings')} title="Todos los días, 8:00 a 12:00">
-                      <Sunrise size={12} /> Mañanas
-                    </button>
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('evenings')} title="Todos los días, 18:00 a 22:00">
-                      <Sunset size={12} /> Noches
-                    </button>
-                    <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
-                      <Eraser size={12} /> Limpiar
-                    </button>
-                  </div>
+                  {/* Los atajos "Laboral 9–18", "Mañanas" y "Noches" se
+                      quitaron: marcaban 45, 28 y 28 horas de una, y empujaban a
+                      declarar una disponibilidad que no era real. Además hacían
+                      creer que había que elegir un "tipo" de horario. Marcar a
+                      mano las horas que de verdad sirven es más claro y da
+                      mejores coincidencias. Queda solo el borrado, que no
+                      interpreta nada. */}
+                  {wizardGrid.length > 0 && (
+                    <div className="preset-bar">
+                      <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
+                        <Eraser size={12} /> Limpiar
+                      </button>
+                    </div>
+                  )}
 
                   <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
                     <table className="editor-table">
@@ -4702,34 +4953,29 @@ export default function App() {
               </div>
             </form>
 
-            {/* Formulario 2: Crear Nueva Sala (solo administrador, por ahora) */}
-            {currentUser.email.toLowerCase() === ADMIN_EMAIL ? (
-              <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                  Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente.
-                </p>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                  <input
-                    type="text"
-                    className="form-input"
-                    value={newRoomNameInput}
-                    onChange={(e) => setNewRoomNameInput(e.target.value)}
-                    placeholder="Ej. Marketing 2026"
-                    required
-                    style={{ flex: 1, padding: '8px 12px' }}
-                  />
-                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
-                    {roomSaving ? 'Creando...' : 'Crear'}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '20px', borderBottom: '1px solid var(--border-color)', fontSize: '12px', color: 'var(--text-muted)' }}>
-                <Lock size={13} style={{ flexShrink: 0 }} />
-                Solo el administrador puede crear salas nuevas por el momento.
+            {/* Formulario 2: Crear Nueva Sala. Abierto a cualquiera: quien la
+                crea queda como su dueño y es el único que puede renombrarla o
+                borrarla — la sala de otra persona no se toca. */}
+            <form onSubmit={handleCreateRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Crear Nueva Sala (Desde Cero)</label>
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                Al crear una nueva sala con un nombre personalizado, se generará una URL limpia. El nombre debe ser único: no se puede repetir el de otra sala existente. Vas a quedar como quien la administra, y solo vos vas a poder renombrarla o eliminarla.
+              </p>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newRoomNameInput}
+                  onChange={(e) => setNewRoomNameInput(e.target.value)}
+                  placeholder="Ej. Marketing 2026"
+                  required
+                  style={{ flex: 1, padding: '8px 12px' }}
+                />
+                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
+                  {roomSaving ? 'Creando...' : 'Crear'}
+                </button>
               </div>
-            )}
+            </form>
 
             {/* Sección 3: Eliminar Sala */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -4895,13 +5141,11 @@ export default function App() {
               </button>
             </div>
 
-            {myFeedback && (
-              <div className="login-disclosure" style={{ textAlign: 'left' }}>
-                {myFeedback.status === 'pending' && 'Tu reseña anterior está pendiente de revisión.'}
-                {myFeedback.status === 'approved' && 'Tu reseña ya está publicada en la web. Si la editás, vuelve a pasar por revisión.'}
-                {myFeedback.status === 'rejected' && 'Tu reseña anterior no se publicó. Podés volver a intentarlo.'}
-              </div>
-            )}
+            {/* Acá iba un aviso de que la reseña pasa por revisión. Se quitó:
+                escribir una opinión no debería sentirse como presentar un
+                trámite. La moderación sigue igual del lado del servidor —solo
+                el administrador de plataforma aprueba lo que se publica—, pero
+                eso es asunto nuestro y no una advertencia para quien escribe. */}
 
             <div className="feedback-star-picker" role="radiogroup" aria-label="Puntuación de 1 a 5 estrellas">
               {[1, 2, 3, 4, 5].map(n => (
@@ -4923,7 +5167,7 @@ export default function App() {
               className="form-input"
               rows={4}
               maxLength={600}
-              placeholder="Contanos qué te parece la app. Si la aprobamos, puede aparecer con tu nombre y foto en la web pública."
+              placeholder="Contanos qué te parece la app. Puede aparecer con tu nombre y foto en la web pública."
               value={feedbackComment}
               onChange={(e) => setFeedbackComment(e.target.value)}
               style={{ width: '100%', resize: 'vertical', boxSizing: 'border-box', padding: '10px 14px', fontFamily: 'inherit' }}
