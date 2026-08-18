@@ -352,6 +352,12 @@ Deno.serve(async (req) => {
       p_name: 'weekly-matcher',
       p_ttl_seconds: 900
     });
+    // Se compara contra `false` a propósito, y no `if (!gotLock)`: si la RPC
+    // falla —por ejemplo porque la migración del lock todavía no se aplicó—
+    // `data` viene null y el emparejador tiene que SEGUIR funcionando. Solapar
+    // dos corridas es un riesgo acotado; dejar la sala sin emparejamientos por
+    // una pieza de infraestructura ausente ya rompió el sistema una vez
+    // (ver 20260718170000, el incidente del CRON_SECRET).
     if (gotLock === false) {
       return new Response(
         JSON.stringify({ ok: true, skipped: 'already_running' }),
