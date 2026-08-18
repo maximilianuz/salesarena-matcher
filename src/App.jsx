@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import { supabase } from './supabaseClient';
-import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs } from './matcher';
+import { buildWeeklyPairsMultiRound, currentWeekStartISO, MIN_LEAD_MS, respondByMs, MAX_SESSIONS_PER_WEEK } from './matcher';
 import { computeSlotSets, buildHeatmapGrid, ruleBelongsTo } from './slots';
 import { isInAppBrowser, friendlyAuthError } from './utils/supabaseAuth';
 import {
@@ -49,9 +49,6 @@ import {
   Eraser,
   Target,
   UserPlus,
-  Briefcase,
-  Sunrise,
-  Sunset,
   Lock,
   RefreshCw,
   ShieldCheck,
@@ -2785,30 +2782,6 @@ export default function App() {
     setWizardGrid([]);
   };
 
-  // Presets rápidos de disponibilidad (se suman a la selección actual)
-  const applyPreset = (preset) => {
-    const slots = [];
-    const addRange = (days, from, to) => {
-      days.forEach(d => {
-        for (let h = from; h < to; h++) slots.push({ dayIdx: d, hour: h });
-      });
-    };
-    const WORKDAYS = [0, 1, 2, 3, 4];
-    const ALLDAYS = [0, 1, 2, 3, 4, 5, 6];
-
-    if (preset === 'work') addRange(WORKDAYS, 9, 18);
-    if (preset === 'mornings') addRange(ALLDAYS, 8, 12);
-    if (preset === 'evenings') addRange(ALLDAYS, 18, 22);
-
-    setWizardGrid(prev => {
-      const merged = [...prev];
-      slots.forEach(s => {
-        if (!merged.some(m => m.dayIdx === s.dayIdx && m.hour === s.hour)) merged.push(s);
-      });
-      return merged;
-    });
-  };
-
   const handleTabClick = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false); // Cierra el menú al cambiar de pestaña en móvil
@@ -3930,8 +3903,13 @@ export default function App() {
               {wizardStep === 3 && (
                 <div className="editor-grid-container">
                   <h3 className="wizard-title">Marca tu Disponibilidad</h3>
+                  {/* Decir el tope acá evita el malentendido de fondo: marcar
+                      muchas horas NO agenda muchas sesiones. Sin esta frase la
+                      gente marcaba el día entero creyendo que era necesario. */}
                   <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
-                    Haz clic o arrastra sobre el calendario para marcar los horarios en los que podés hacer un role-play.
+                    Marcá las horas en las que podrías hacer un role-play. Son opciones, no compromisos:
+                    vas a tener hasta {MAX_SESSIONS_PER_WEEK} sesiones por semana, en los horarios donde
+                    coincidas con alguien.
                   </p>
 
                   <div className="editor-toolbar">
@@ -3943,20 +3921,20 @@ export default function App() {
                     </span>
                   </div>
 
-                  <div className="preset-bar">
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('work')} title="Lunes a Viernes, 9:00 a 18:00">
-                      <Briefcase size={12} /> Laboral 9–18
-                    </button>
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('mornings')} title="Todos los días, 8:00 a 12:00">
-                      <Sunrise size={12} /> Mañanas
-                    </button>
-                    <button type="button" className="preset-btn" onClick={() => applyPreset('evenings')} title="Todos los días, 18:00 a 22:00">
-                      <Sunset size={12} /> Noches
-                    </button>
-                    <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
-                      <Eraser size={12} /> Limpiar
-                    </button>
-                  </div>
+                  {/* Los atajos "Laboral 9–18", "Mañanas" y "Noches" se
+                      quitaron: marcaban 45, 28 y 28 horas de una, y empujaban a
+                      declarar una disponibilidad que no era real. Además hacían
+                      creer que había que elegir un "tipo" de horario. Marcar a
+                      mano las horas que de verdad sirven es más claro y da
+                      mejores coincidencias. Queda solo el borrado, que no
+                      interpreta nada. */}
+                  {wizardGrid.length > 0 && (
+                    <div className="preset-bar">
+                      <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
+                        <Eraser size={12} /> Limpiar
+                      </button>
+                    </div>
+                  )}
 
                   <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
                     <table className="editor-table">
