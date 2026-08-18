@@ -616,6 +616,10 @@ html.dark .profile-card {
   font-size: 12.5px;
   font-weight: 700;
   box-shadow: 0 4px 14px rgba(255, 159, 10, 0.3);
+  /* La estrella se agranda hasta desbordar el botón: sin recorte se saldría
+     por encima del resto del menú. */
+  position: relative;
+  overflow: hidden;
 }
 
 .profile-review-btn:hover {
@@ -624,6 +628,48 @@ html.dark .profile-card {
   color: #3d2600;
   box-shadow: 0 6px 18px rgba(255, 159, 10, 0.42);
   transform: translateY(-1px);
+}
+
+/* La estrella barre el botón al pasar el mouse. Escala 18: con 14px de base
+   alcanza para tapar los ~200px de ancho del botón, y el desplazamiento la
+   corre hacia el centro para que el barrido no deje una esquina sin cubrir. */
+.profile-review-star {
+  flex-shrink: 0;
+  transition: transform 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
+  transform-origin: center;
+}
+
+.profile-review-btn:hover .profile-review-star {
+  transform: scale(18) translate(2px, -0.5px);
+}
+
+/* El texto se corre para dejar pasar la estrella y queda POR ENCIMA de ella:
+   durante el barrido el botón se tiñe entero y la etiqueta tiene que seguir
+   leyéndose. */
+.profile-review-label {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.4s ease, color 0.3s ease;
+}
+
+.profile-review-btn:hover .profile-review-label {
+  transform: translateX(6px);
+}
+
+.profile-review-btn:active {
+  transform: scale(0.96);
+}
+
+/* Quien pidió menos movimiento no recibe el barrido: solo el cambio de tono. */
+@media (prefers-reduced-motion: reduce) {
+  .profile-review-star,
+  .profile-review-label {
+    transition: none;
+  }
+  .profile-review-btn:hover .profile-review-star,
+  .profile-review-btn:hover .profile-review-label {
+    transform: none;
+  }
 }
 
 /* Ya dejó su reseña: la invitación cumplió su función, así que el botón baja
@@ -637,11 +683,18 @@ html.dark .profile-card {
   box-shadow: none;
 }
 
+/* Con reseña ya dejada el botón es ámbar translúcido con texto ámbar, así que
+   al barrer la estrella el texto quedaría del mismo color que el fondo. La
+   etiqueta pasa a oscuro para seguir leyéndose sobre el relleno. */
 .profile-review-btn.has-review:hover {
   background-color: rgba(255, 159, 10, 0.22);
   border-color: rgba(255, 159, 10, 0.55);
   color: var(--color-warning);
   box-shadow: none;
+}
+
+.profile-review-btn.has-review:hover .profile-review-label {
+  color: #3d2600;
 }
 
 .profile-review-label {
@@ -656,6 +709,10 @@ html.dark .profile-card {
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
+  /* Por encima del barrido de la estrella: si no, el estado de la reseña
+     desaparece justo cuando la persona apunta al botón para consultarlo. */
+  position: relative;
+  z-index: 1;
 }
 
 .profile-review-dot-pending { background-color: var(--color-warning); }

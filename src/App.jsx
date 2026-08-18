@@ -3264,7 +3264,10 @@ export default function App() {
                 ? `Ver o editar tu reseña — ${FEEDBACK_STATUS_LABEL[myFeedback.status] || 'enviada'}`
                 : 'Calificar la app y dejar un comentario'}
             >
-              <Star size={14} fill="currentColor" strokeWidth={0} />
+              {/* La estrella crece hasta llenar el botón al pasar el mouse y el
+                  texto se corre para dejarla pasar. Va detrás del texto (no al
+                  revés) para que la etiqueta siga legible durante el barrido. */}
+              <Star className="profile-review-star" size={14} fill="currentColor" strokeWidth={0} aria-hidden="true" />
               <span className="profile-review-label">
                 {myFeedback ? 'Tu reseña' : 'Calificar la app'}
               </span>

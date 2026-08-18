@@ -307,20 +307,28 @@
         requestRender();
     });
 
-    var resizeObserver = new ResizeObserver(function () {
-        resizeCanvas();
-        requestRender();
-    });
-    resizeObserver.observe(canvas);
-
-    var intersectionObserver = new IntersectionObserver(function (entries) {
-        var entry = entries[0];
-        inView = entry ? entry.isIntersecting : true;
-        if (inView) {
+    // Los dos observers van con feature-check, igual que en los otros scripts
+    // de la landing. Sin él, en un navegador que no los soporta esto lanzaba
+    // antes del requestRender() final y el hero quedaba en blanco para siempre:
+    // el fondo entero de la portada dependía de una API opcional.
+    if ('ResizeObserver' in window) {
+        var resizeObserver = new ResizeObserver(function () {
+            resizeCanvas();
             requestRender();
-        }
-    });
-    intersectionObserver.observe(canvas);
+        });
+        resizeObserver.observe(canvas);
+    }
+
+    if ('IntersectionObserver' in window) {
+        var intersectionObserver = new IntersectionObserver(function (entries) {
+            var entry = entries[0];
+            inView = entry ? entry.isIntersecting : true;
+            if (inView) {
+                requestRender();
+            }
+        });
+        intersectionObserver.observe(canvas);
+    }
 
     document.addEventListener('visibilitychange', function () {
         visible = document.visibilityState === 'visible';
