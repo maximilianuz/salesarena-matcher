@@ -4927,6 +4927,17 @@ export default function App() {
                 bloque estuviera visible para cualquier miembro, copiaría un
                 enlace sin código y quien lo recibiera sería rechazado, mientras
                 el texto le asegura lo contrario. */}
+            {/* A quien no administra esta sala se le explica por qué solo ve el
+                formulario de crear la suya. Sin esta línea, el modal se abre
+                casi vacío y parece que algo falló. */}
+            {!isRoomAdmin && (
+              <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5', paddingBottom: '18px', borderBottom: '1px solid var(--border-color)' }}>
+                <strong>{roomName}</strong> la administra quien la creó: renombrarla o eliminarla le corresponde
+                a esa persona, porque afecta a todo el equipo. Acá podés crear una sala propia, de la que vas a
+                quedar a cargo.
+              </p>
+            )}
+
             {isRoomAdmin && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '18px' }}>
               <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -4978,24 +4989,31 @@ export default function App() {
             </div>
             )}
 
-            {/* Formulario 1: Renombrar Sala */}
-            <form onSubmit={handleRenameRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
-              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Renombrar Sala Actual</label>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={renameRoomInput}
-                  onChange={(e) => setRenameRoomInput(e.target.value)}
-                  placeholder="Ej. Equipo Comercial"
-                  required
-                  style={{ flex: 1, padding: '8px 12px' }}
-                />
-                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
-                  {roomSaving ? 'Guardando...' : 'Guardar'}
-                </button>
-              </div>
-            </form>
+            {/* Renombrar la sala mueve a TODO el equipo a una URL nueva, así que
+                es de quien la administra y de nadie más. La base ya lo impedía
+                (rename_room corta con NOT_ROOM_ADMIN), pero mostrarle el
+                formulario a un invitado lo invita a romper algo ajeno y a
+                comerse un error sin entender por qué. Mismo criterio que el
+                bloque del código de acceso, acá arriba. */}
+            {isRoomAdmin && (
+              <form onSubmit={handleRenameRoom} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>Renombrar Sala Actual</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={renameRoomInput}
+                    onChange={(e) => setRenameRoomInput(e.target.value)}
+                    placeholder="Ej. Equipo Comercial"
+                    required
+                    style={{ flex: 1, padding: '8px 12px' }}
+                  />
+                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
+                    {roomSaving ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             {/* Formulario 2: Crear Nueva Sala. Abierto a cualquiera: quien la
                 crea queda como su dueño y es el único que puede renombrarla o
@@ -5021,32 +5039,36 @@ export default function App() {
               </div>
             </form>
 
-            {/* Sección 3: Eliminar Sala */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-danger-hover, #ff453a)' }}>Zona de Peligro</label>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.4' }}>
-                  Eliminar permanentemente esta sala y todos sus miembros de la base de datos.
-                </span>
-                <button 
-                  onClick={handleDeleteRoom}
-                  disabled={currentRoomId === 'grupo-a'}
-                  className="btn"
-                  style={{ 
-                    backgroundColor: 'rgba(255, 69, 58, 0.15)', 
-                    color: '#ff453a', 
-                    padding: '8px 16px', 
-                    fontSize: '13px', 
-                    fontWeight: '600',
-                    border: '1px solid rgba(255, 69, 58, 0.3)',
-                    cursor: currentRoomId === 'grupo-a' ? 'not-allowed' : 'pointer',
-                    opacity: currentRoomId === 'grupo-a' ? 0.5 : 1
-                  }}
-                >
-                  Eliminar Sala
-                </button>
+            {/* Eliminar la sala borra a todos sus miembros y su historial. Que
+                un invitado siquiera vea el botón es peor que lo de renombrar:
+                lo que ofrece es destruir el espacio de trabajo de otra gente. */}
+            {isRoomAdmin && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-danger-hover, #ff453a)' }}>Zona de Peligro</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', maxWidth: '280px', lineHeight: '1.4' }}>
+                    Eliminar permanentemente esta sala y todos sus miembros de la base de datos.
+                  </span>
+                  <button
+                    onClick={handleDeleteRoom}
+                    disabled={currentRoomId === 'grupo-a'}
+                    className="btn"
+                    style={{
+                      backgroundColor: 'rgba(255, 69, 58, 0.15)',
+                      color: '#ff453a',
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      border: '1px solid rgba(255, 69, 58, 0.3)',
+                      cursor: currentRoomId === 'grupo-a' ? 'not-allowed' : 'pointer',
+                      opacity: currentRoomId === 'grupo-a' ? 0.5 : 1
+                    }}
+                  >
+                    Eliminar Sala
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
