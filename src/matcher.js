@@ -33,8 +33,13 @@ export const respondByMs = (meetingMs, now = new Date()) => {
 };
 
 // Milisegundos (epoch) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
-// >= ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la
-// ocurrencia de esta semana cae antes del piso, rueda a la semana siguiente.
+// posterior a ahora + minLeadMs. Un slot codifica día (0=lunes) y hora UTC. Si la
+// ocurrencia de esta semana cae en el piso o antes, rueda a la semana siguiente.
+//
+// El piso es ESTRICTO (`<=`, no `<`) para que respondByMs nunca devuelva null
+// sobre un slot que este motor ya dio por bueno: una reunión exactamente a
+// minLeadMs de distancia deja una ventana de confirmación de cero, que no le
+// sirve a nadie. Debe coincidir con la Edge Function.
 const nextSlotOccurrenceMs = (slot, now, minLeadMs = 0) => {
   const dayIdx = Math.floor(slot / 24);
   const hourUtc = slot % 24;
@@ -45,7 +50,7 @@ const nextSlotOccurrenceMs = (slot, now, minLeadMs = 0) => {
   const delta = (dayIdx - todayIdx + 7) % 7;
   d.setUTCDate(d.getUTCDate() + delta);
   const floor = now.getTime() + minLeadMs;
-  while (d.getTime() < floor) d.setUTCDate(d.getUTCDate() + 7);
+  while (d.getTime() <= floor) d.setUTCDate(d.getUTCDate() + 7);
   return d.getTime();
 };
 

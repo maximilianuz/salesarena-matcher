@@ -97,7 +97,10 @@ function buildRankRow(entry, rank) {
 
   li.appendChild(buildAvatar(entry.member_name, entry.avatar_url, 'top-roleplayer-avatar'));
 
-  const n = Number(entry.sessions_count);
+  // Number(undefined) es NaN y se mostraría literalmente como "NaN role-plays"
+  // en la pastilla y en el aria-label. La página es pública: si algún día la
+  // RPC deja de traer el campo, mejor un 0 que un error a la vista de todos.
+  const n = Number.isFinite(Number(entry.sessions_count)) ? Number(entry.sessions_count) : 0;
 
   const info = document.createElement('div');
   info.className = 'top-roleplayer-info';

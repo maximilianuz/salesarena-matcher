@@ -286,6 +286,14 @@ export default function App() {
   // administra: get_room_access_code() rechaza a cualquier otro.
   const [roomAccessCode, setRoomAccessCode] = useState('');
 
+  // Acciones de administración en vuelo. Sin esto, dos clics seguidos en
+  // "Renovar código" rotaban el código DOS veces y el enlace que se acababa de
+  // repartir quedaba muerto; renombrar dos veces disparaba dos migraciones de
+  // sala concurrentes.
+  const [addingMember, setAddingMember] = useState(false);
+  const [roomSaving, setRoomSaving] = useState(false);
+  const [codeRotating, setCodeRotating] = useState(false);
+
   // Estado de Usuario Logueado (Simulado)
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('salesarena-user');
@@ -1069,7 +1077,12 @@ export default function App() {
         const pct = denom ? Math.round((common / denom) * 100) : 0;
         return { name: partner.name, email: partner.email, pct };
       });
-      return { name: member.name, stats: partnerStats };
+      // El email va en la fila, no solo en los stats: es la única forma de que
+      // quien mira encuentre SU fila. Filtrar por nombre hacía que dos
+      // homónimos de la misma sala vieran la afinidad del otro como propia,
+      // igual que el bug que ruleBelongsTo (src/slots.js) ya corrigió para el
+      // mapa de calor.
+      return { name: member.name, email: member.email, stats: partnerStats };
     });
     setAffinity(calculatedAffinity);
   };
@@ -1229,10 +1242,22 @@ export default function App() {
           showNotification('✨ ¡Se generaron nuevas propuestas de emparejamiento!');
         }
       } else {
+        // Silenciar esto ya costó un incidente: el preflight de CORS fallaba
+        // siempre, nadie se enteraba, y el emparejamiento parecía "no encontrar
+        // a nadie" cuando en realidad la llamada nunca llegaba. Los horarios SÍ
+        // quedaron guardados, así que el aviso dice qué se perdió y qué no.
         console.error('Weekly-matcher error:', response.statusText);
+        showNotification(
+          'Tus horarios se guardaron, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.',
+          'error'
+        );
       }
     } catch (err) {
       console.error('Failed to trigger weekly-matcher:', err);
+      showNotification(
+        'Tus horarios se guardaron, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.',
+        'error'
+      );
     }
   };
 
@@ -1495,6 +1520,24 @@ export default function App() {
     setIsLoggedIn(false);
     setLoginEmail('');
     setLoginStep(1);
+
+    // Todo lo que sea de ESTA persona se borra acá. La app es una SPA: al
+    // deslogear no se remonta el árbol, así que sin este limpiado el siguiente
+    // usuario que entre en la misma compu ve, hasta que resuelva su carga
+    // asíncrona, el compromiso y los ELOGIOS del anterior — justo lo que el
+    // sobre cerrado existe para no filtrar entre personas.
+    setOpenCloseouts([]);
+    setCloseoutStanding(null);
+    setCloseoutPraise([]);
+    setMyFeedback(null);
+    setMembers([]);
+    setAvailabilities([]);
+    setMeetings([]);
+    setAttendances([]);
+    setProposals([]);
+    setHeatmap([]);
+    setAffinity([]);
+
     localStorage.removeItem('salesarena-logged');
     localStorage.removeItem('salesarena-user');
   };
@@ -1503,6 +1546,7 @@ export default function App() {
   const handleRenameRoom = async (e) => {
     e.preventDefault();
     if (!renameRoomInput.trim()) return;
+    if (roomSaving) return;
 
     if (!isRoomAdmin) {
       showNotification('Solo quien administra la sala puede renombrarla.', 'error');
@@ -1520,37 +1564,42 @@ export default function App() {
     const previousName = roomName;
     setRoomName(nextName);
 
-    if (!useMockDb) {
-      // Renombrar mueve la sala entera a un slug nuevo (miembros, horarios,
-      // plantillas, reuniones, asistencia y propuestas). Va por rename_room
-      // para que ocurra en UNA transacción: antes eran seis escrituras sueltas
-      // y un corte de red a mitad de camino partía la sala entre dos slugs.
-      const { error } = await supabase.rpc('rename_room', {
-        p_room_id: currentRoomId,
-        p_new_slug: newSlug,
-        p_new_name: nextName
-      });
-      if (error) {
-        const raw = `${error.message || ''} ${error.details || ''}`;
-        setRoomName(previousName);
-        if (raw.includes('SLUG_TAKEN')) {
-          showNotification(`Ya existe una sala con el nombre "${nextName}". Elegí otro nombre.`, 'error');
-        } else if (raw.includes('NOT_ROOM_ADMIN')) {
-          showNotification('Solo quien administra la sala puede renombrarla.', 'error');
-        } else {
-          showNotification('No pudimos renombrar la sala. Intentá de nuevo en un momento.', 'error');
+    setRoomSaving(true);
+    try {
+      if (!useMockDb) {
+        // Renombrar mueve la sala entera a un slug nuevo (miembros, horarios,
+        // plantillas, reuniones, asistencia y propuestas). Va por rename_room
+        // para que ocurra en UNA transacción: antes eran seis escrituras sueltas
+        // y un corte de red a mitad de camino partía la sala entre dos slugs.
+        const { error } = await supabase.rpc('rename_room', {
+          p_room_id: currentRoomId,
+          p_new_slug: newSlug,
+          p_new_name: nextName
+        });
+        if (error) {
+          const raw = `${error.message || ''} ${error.details || ''}`;
+          setRoomName(previousName);
+          if (raw.includes('SLUG_TAKEN')) {
+            showNotification(`Ya existe una sala con el nombre "${nextName}". Elegí otro nombre.`, 'error');
+          } else if (raw.includes('NOT_ROOM_ADMIN')) {
+            showNotification('Solo quien administra la sala puede renombrarla.', 'error');
+          } else {
+            showNotification('No pudimos renombrar la sala. Intentá de nuevo en un momento.', 'error');
+          }
+          return;
         }
-        return;
       }
-    }
 
-    if (newSlug !== currentRoomId) {
-      showNotification(`¡Sala renombrada a "${nextName}"! Actualizando enlace a /room/${newSlug}...`);
-      setIsRoomModalOpen(false);
-      window.location.href = `/room/${newSlug}`;
-    } else {
-      showNotification(`Sala renombrada con éxito a "${nextName}"`);
-      setIsRoomModalOpen(false);
+      if (newSlug !== currentRoomId) {
+        showNotification(`¡Sala renombrada a "${nextName}"! Actualizando enlace a /room/${newSlug}...`);
+        setIsRoomModalOpen(false);
+        window.location.href = `/room/${newSlug}`;
+      } else {
+        showNotification(`Sala renombrada con éxito a "${nextName}"`);
+        setIsRoomModalOpen(false);
+      }
+    } finally {
+      setRoomSaving(false);
     }
   };
 
@@ -1561,6 +1610,7 @@ export default function App() {
       return;
     }
     if (!newRoomNameInput.trim()) return;
+    if (roomSaving) return;
 
     const rawName = newRoomNameInput.trim();
     const slug = slugifyRoomName(rawName);
@@ -1570,32 +1620,37 @@ export default function App() {
       return;
     }
 
-    if (!useMockDb) {
-      // No se permiten dos salas con el mismo nombre (mismo slug resultante)
-      const { data: existingRoom } = await supabase.from('rooms').select('id').eq('id', slug).maybeSingle();
-      if (existingRoom) {
-        showNotification(`Ya existe una sala con el nombre "${rawName}". Elegí otro nombre.`, 'error');
-        return;
+    setRoomSaving(true);
+    try {
+      if (!useMockDb) {
+        // No se permiten dos salas con el mismo nombre (mismo slug resultante)
+        const { data: existingRoom } = await supabase.from('rooms').select('id').eq('id', slug).maybeSingle();
+        if (existingRoom) {
+          showNotification(`Ya existe una sala con el nombre "${rawName}". Elegí otro nombre.`, 'error');
+          return;
+        }
+        // founder_email deja registrado quién administra la sala: es lo que leen
+        // las políticas RLS para autorizar renombrarla, eliminarla o sacar
+        // miembros. Sin esto, la sala nueva no tendría dueño.
+        const { error } = await supabase.from('rooms').insert({
+          id: slug,
+          name: rawName,
+          founder_email: currentUser.email.toLowerCase()
+        });
+        if (error) {
+          showNotification('No pudimos crear la sala. Revisá el nombre e intentá de nuevo.', 'error');
+          return;
+        }
       }
-      // founder_email deja registrado quién administra la sala: es lo que leen
-      // las políticas RLS para autorizar renombrarla, eliminarla o sacar
-      // miembros. Sin esto, la sala nueva no tendría dueño.
-      const { error } = await supabase.from('rooms').insert({
-        id: slug,
-        name: rawName,
-        founder_email: currentUser.email.toLowerCase()
-      });
-      if (error) {
-        showNotification('No pudimos crear la sala. Revisá el nombre e intentá de nuevo.', 'error');
-        return;
-      }
+
+      showNotification(`¡Sala "${rawName}" creada con éxito! Redirigiendo...`);
+      setIsRoomModalOpen(false);
+      setNewRoomNameInput('');
+
+      window.location.href = `/room/${slug}`;
+    } finally {
+      setRoomSaving(false);
     }
-
-    showNotification(`¡Sala "${rawName}" creada con éxito! Redirigiendo...`);
-    setIsRoomModalOpen(false);
-    setNewRoomNameInput('');
-
-    window.location.href = `/room/${slug}`;
   };
 
   const handleDeleteRoom = async () => {
@@ -1645,24 +1700,40 @@ export default function App() {
       .then(({ data, error }) => {
         if (cancelled) return;
         setRoomAccessCode(error ? '' : (data || ''));
+        // Sin este aviso, un fallo de red se ve idéntico a "esta sala todavía
+        // no tiene código": quien administra copiaría el enlace SIN el código
+        // y se lo mandaría a alguien que después no puede entrar.
+        if (error) {
+          console.error('get_room_access_code:', error);
+          showNotification(
+            'No pudimos cargar el código de acceso. Cerrá y volvé a abrir esta ventana antes de compartir el enlace.',
+            'error'
+          );
+        }
       });
     return () => { cancelled = true; };
   }, [isRoomModalOpen, isRoomAdmin, currentRoomId]);
 
   const handleRegenerateAccessCode = async () => {
+    if (codeRotating) return;
     const confirmed = await showConfirm(
       'Al generar un código nuevo, los enlaces de invitación que ya compartiste dejan de funcionar. Quienes ya son miembros de la sala no se ven afectados. ¿Continuar?',
       'Sí, generar'
     );
     if (!confirmed) return;
 
-    const { data, error } = await supabase.rpc('rotate_room_access_code', { p_room_id: currentRoomId });
-    if (error) {
-      showNotification('No pudimos generar un código nuevo. Intentá de nuevo en un momento.', 'error');
-      return;
+    setCodeRotating(true);
+    try {
+      const { data, error } = await supabase.rpc('rotate_room_access_code', { p_room_id: currentRoomId });
+      if (error) {
+        showNotification('No pudimos generar un código nuevo. Intentá de nuevo en un momento.', 'error');
+        return;
+      }
+      setRoomAccessCode(data || '');
+      showNotification('Código de acceso renovado. Compartí el enlace nuevo con quien quieras invitar.', 'success');
+    } finally {
+      setCodeRotating(false);
     }
-    setRoomAccessCode(data || '');
-    showNotification('Código de acceso renovado. Compartí el enlace nuevo con quien quieras invitar.', 'success');
   };
 
   const handleCopyRoomInvite = async () => {
@@ -1701,7 +1772,15 @@ export default function App() {
       setMyFeedback(mine || null);
       return;
     }
-    const { data } = await supabase.rpc('my_app_feedback');
+    const { data, error } = await supabase.rpc('my_app_feedback');
+    // Un fallo de red no significa "no dejaste reseña": si se blanquea, el
+    // formulario se abre vacío y quien ya había escrito la suya cree que se
+    // perdió. Ante error se deja lo que había y se avisa.
+    if (error) {
+      console.error('my_app_feedback:', error);
+      showNotification('No pudimos cargar tu reseña. Revisá tu conexión.', 'error');
+      return;
+    }
     setMyFeedback(data || null);
   };
 
@@ -1913,10 +1992,14 @@ export default function App() {
     if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
   };
 
+  // `members` entra en las dependencias porque el nombre y la foto del compañero
+  // que muestra la tarjeta de cierre salen de ahí: sin esto, quien actualizaba
+  // su avatar seguía apareciendo con el viejo en el pendiente de la otra persona
+  // hasta que cambiara alguna reunión por otro motivo.
   useEffect(() => {
     if (!isLoggedIn || !currentUser) return;
     loadCloseoutState();
-  }, [isLoggedIn, currentUser?.email, meetings, attendances]);
+  }, [isLoggedIn, currentUser?.email, meetings, attendances, members]);
 
   // Plazo del cierre en la hora local de quien mira ("mañana 14:30", "hoy
   // 20:00"). Es un dato de urgencia, así que importa el día relativo más que
@@ -2015,11 +2098,22 @@ export default function App() {
   const handleAddMember = async (e) => {
     e.preventDefault();
     if (!newMemberName || !newMemberEmail) return;
+    if (addingMember) return;
 
     // Dar de alta a otra persona a mano es una acción de administración: la
     // política de INSERT de members la restringe a quien administra la sala.
     if (!isRoomAdmin) {
       showNotification('Solo quien administra la sala puede agregar miembros a mano. Compartí el enlace de invitación para que se registren.', 'error');
+      return;
+    }
+
+    // El email es la identidad de la persona en toda la app (el emparejamiento,
+    // la asistencia y el cierre se cruzan por ahí). Uno mal escrito da de alta a
+    // alguien que nunca va a poder entrar, y encima ocupa un lugar en la
+    // rotación. Se valida acá para poder decir QUÉ está mal, en vez de mostrar
+    // el error crudo que devuelve la base.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newMemberEmail.trim())) {
+      showNotification('Ese email no parece válido. Revisalo antes de agregar a la persona.', 'error');
       return;
     }
 
@@ -2045,30 +2139,35 @@ export default function App() {
       active: false
     };
 
-    if (!useMockDb) {
-      const { error } = await supabase.from('members').insert({
-        room_id: currentRoomId,
-        email: newMember.email,
-        name: newMember.name,
-        country: newMember.country,
-        timezone: newMember.tz,
-        active: newMember.active
-      });
-      if (error) {
-        showNotification(
-          error.code === '23505'
-            ? `${newMember.email} ya forma parte de esta sala.`
-            : 'No pudimos agregar a esa persona. Revisá el email e intentá de nuevo.',
-          'error'
-        );
-        return;
+    setAddingMember(true);
+    try {
+      if (!useMockDb) {
+        const { error } = await supabase.from('members').insert({
+          room_id: currentRoomId,
+          email: newMember.email,
+          name: newMember.name,
+          country: newMember.country,
+          timezone: newMember.tz,
+          active: newMember.active
+        });
+        if (error) {
+          showNotification(
+            error.code === '23505'
+              ? `${newMember.email} ya forma parte de esta sala.`
+              : 'No pudimos agregar a esa persona. Revisá el email e intentá de nuevo.',
+            'error'
+          );
+          return;
+        }
       }
-    }
 
-    setMembers([...members, newMember]);
-    setNewMemberName('');
-    setNewMemberEmail('');
-    showNotification(`${newMember.name} quedó agregado a la sala. Va a entrar en los emparejamientos cuando inicie sesión y cargue su disponibilidad — pasale el enlace de invitación.`, 'success');
+      setMembers([...members, newMember]);
+      setNewMemberName('');
+      setNewMemberEmail('');
+      showNotification(`${newMember.name} quedó agregado a la sala. Va a entrar en los emparejamientos cuando inicie sesión y cargue su disponibilidad — pasale el enlace de invitación.`, 'success');
+    } finally {
+      setAddingMember(false);
+    }
   };
 
   const deleteMember = async (emailToDelete) => {
@@ -3585,8 +3684,12 @@ export default function App() {
                               </div>
                             )}
                           </div>
+                          {/* El plazo va en la zona del PERFIL, no en la del
+                              dispositivo: el resto de la tarjeta ya usa
+                              currentUser.tz, y quien viaja veía dos horas
+                              distintas para el mismo vencimiento. */}
                           {!isConfirmed && (
-                            <div className="match-deadline-chip" title={`Vence el ${new Date(effectiveDeadline).toLocaleString()}`}>
+                            <div className="match-deadline-chip" title={`Vence el ${new Date(effectiveDeadline).toLocaleString('es-AR', { timeZone: currentUser?.tz || 'UTC' })}`}>
                               <AlertCircle size={12} />
                               Respondé {formatRespondByRelative(effectiveDeadline)} o el cupo se reasigna
                             </div>
@@ -4072,12 +4175,12 @@ export default function App() {
                       <tr>
                         <th className="affinity-th" style={{ backgroundColor: 'var(--bg-card-hover)' }}>Jugador</th>
                         {members.filter(m => m.active).map(m => (
-                          <th className="affinity-th" key={m.name}>{m.name.split(' ')[0]}</th>
+                          <th className="affinity-th" key={m.email}>{m.name.split(' ')[0]}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => (
+                      {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => (
                         <tr key={i}>
                           <td className="affinity-td-label">{row.name}</td>
                           {row.stats.map((col, j) => {
@@ -4107,7 +4210,7 @@ export default function App() {
                   Tus Compañeros con Mayor Afinidad
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {affinity.filter(row => row.name.toLowerCase() === currentUser.name.toLowerCase()).map((row, i) => {
+                  {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => {
                     const sortedStats = [...row.stats]
                       .filter(s => s.pct !== null)
                       .sort((a, b) => b.pct - a.pct);
@@ -4297,8 +4400,8 @@ export default function App() {
                     )}
                   </div>
 
-                  <button type="submit" className="btn btn-indigo" style={{ marginTop: '8px', width: '100%' }}>
-                    <UserPlus size={16} /> Agregar a la Sala
+                  <button type="submit" className="btn btn-indigo" style={{ marginTop: '8px', width: '100%' }} disabled={addingMember}>
+                    <UserPlus size={16} /> {addingMember ? 'Agregando...' : 'Agregar a la Sala'}
                   </button>
                 </form>
               </div>
@@ -4561,10 +4664,11 @@ export default function App() {
                   type="button"
                   className="btn-small"
                   onClick={handleRegenerateAccessCode}
+                  disabled={codeRotating}
                   title="Genera un código nuevo e invalida los enlaces ya compartidos"
                   style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
                 >
-                  <RefreshCw size={12} aria-hidden="true" /> Renovar
+                  <RefreshCw size={12} aria-hidden="true" /> {codeRotating ? 'Generando...' : 'Renovar'}
                 </button>
               </div>
             </div>
@@ -4583,8 +4687,8 @@ export default function App() {
                   required
                   style={{ flex: 1, padding: '8px 12px' }}
                 />
-                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                  Guardar
+                <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
+                  {roomSaving ? 'Guardando...' : 'Guardar'}
                 </button>
               </div>
             </form>
@@ -4606,8 +4710,8 @@ export default function App() {
                     required
                     style={{ flex: 1, padding: '8px 12px' }}
                   />
-                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                    Crear
+                  <button type="submit" className="btn btn-indigo" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={roomSaving}>
+                    {roomSaving ? 'Creando...' : 'Crear'}
                   </button>
                 </div>
               </form>
@@ -5081,8 +5185,10 @@ export default function App() {
             </div>
 
             {/* "Enviar cierre" y no "Cerrar sesión": ese texto se confunde con
-                salir de la cuenta, que además es un botón real del menú. */}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                salir de la cuenta, que además es un botón real del menú.
+                flexShrink 0: el cuerpo de preguntas scrollea, este pie no se
+                comprime — en mobile con el teclado abierto quedaba aplastado. */}
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexShrink: 0 }}>
               <button type="button" className="btn btn-secondary" onClick={closeCloseoutForm}>
                 Ahora no
               </button>

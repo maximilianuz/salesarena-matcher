@@ -222,3 +222,17 @@ test('heatmap: offsets de hora entera siguen dando una sola celda por slot', () 
   assert.equal(grid[0][9].count, 0);
   assert.equal(grid[0][11].count, 0);
 });
+
+test('regla degenerada (startHour === endHour) no genera ningún slot', () => {
+  // Dato legado o corrupto: una franja de duración cero no describe ninguna
+  // disponibilidad real. Con un offset fraccionario (India +5:30) la lógica de
+  // solapamiento igual llegaba a marcar una celda si no se corta antes.
+  // La Edge Function replica esta guarda: si acá cambia, allá también.
+  const IN = 'Asia/Kolkata'; // UTC+5:30
+  for (const tz of ['UTC', AR, IN]) {
+    const vacia = memberSlotSet([{ dayIdx: 2, startHour: 14, endHour: 14 }], tz);
+    assert.equal(vacia.size, 0, `franja de cero horas en ${tz}`);
+    const invertida = memberSlotSet([{ dayIdx: 2, startHour: 18, endHour: 9 }], tz);
+    assert.equal(invertida.size, 0, `franja invertida en ${tz}`);
+  }
+});
