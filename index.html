@@ -470,26 +470,9 @@
             display: inline-flex;
             align-items: center;
             gap: 0.75rem;
-            margin-bottom: 1rem;
+            margin-bottom: 3rem;
             font-size: 1.1rem;
             animation: pulseGlow 5s ease-in-out infinite;
-        }
-
-        /* Aclaración de que hace falta invitación. Va debajo del botón: quien
-           ya tiene su enlace no necesita leerla, y quien no lo tiene la
-           encuentra justo cuando el botón no le funcionó. */
-        .hero-access-note {
-            margin: 0 auto 3rem;
-            max-width: 34rem;
-            font-size: 0.92rem;
-            line-height: 1.6;
-            color: rgba(255, 255, 255, 0.72);
-        }
-
-        .hero-access-note a {
-            color: #fff;
-            text-decoration: underline;
-            text-underline-offset: 3px;
         }
 
         @keyframes pulseGlow {
@@ -1735,14 +1718,6 @@
             <a href="/app" class="cta-button hero-cta">
                 Entrar a mi sala →
             </a>
-            <!-- Las salas son privadas y se entra por invitación: sin esta
-                 aclaración, alguien sin código llegaba hasta acá con la
-                 promesa de "Comenzar Ahora" y se topaba con un error sin
-                 ninguna explicación. -->
-            <p class="hero-access-note">
-                Se entra con el enlace de invitación de tu sala.
-                ¿Todavía no tenés uno? <a href="mailto:community.argen.manager@gmail.com?subject=Quiero%20sumarme%20a%20Sales%20Arena%20Matcher">Pedí acceso</a>.
-            </p>
         </div>
     </section>
 
