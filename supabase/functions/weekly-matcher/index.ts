@@ -573,6 +573,16 @@ Deno.serve(async (req) => {
       const ENGAGEMENT_VALUE: Record<string, number> = {
         preparado: 1, a_medias: 0.5, no_participo: 0
       };
+      // Reuniones caídas por cancelación de algún asistente: nadie tiene nada
+      // que cerrar ahí, así que no pueden sumar al denominador de reciprocidad.
+      // Debe coincidir con la CTE me_tocaba en 20260815120000_session_closeouts.sql
+      // y con getOwedCloseouts en src/closeouts.js.
+      const cancelledMeetingIds = new Set(
+        [...byMeeting.entries()]
+          .filter(([, rows]) => rows.some(r =>
+            r.status === 'cancelado_con_aviso' || r.status === 'cancelado_tarde'))
+          .map(([meetingId]) => meetingId)
+      );
       const engagementScores = new Map<string, number | null>();
       const reciprocity = new Map<string, number | null>();
       for (const m of pool) {
@@ -588,10 +598,12 @@ Deno.serve(async (req) => {
         engagementScores.set(m.email,
           vals.length === 0 ? null : Math.round((vals.reduce((s, x) => s + x, 0) / vals.length) * 100));
 
-        // Cierres que le tocaba responder: reuniones suyas ya terminadas.
+        // Cierres que le tocaba responder: reuniones suyas ya terminadas, sin
+        // contar las que se cayeron por cancelación.
         const meTocaba = (attRows || [])
           .filter(r => r.member_email.toLowerCase() === email)
           .map(r => r.meeting_id)
+          .filter(id => !cancelledMeetingIds.has(id))
           .filter(id => {
             const end = meetingEndMs.get(id);
             return end !== undefined && nowMs > end;
