@@ -74,7 +74,7 @@ import {
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
-import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessCountryFromBrowserTz } from './domain/zones';
+import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessLocationFromBrowser } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
 import {
@@ -384,6 +384,12 @@ export default function App() {
   // Estados de carga del Wizard
   const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  // Corrección de la zona horaria detectada, desde el asistente.
+  const [editingTz, setEditingTz] = useState(false);
+  const [savingTz, setSavingTz] = useState(false);
+  // Propuesta cuyo Meet se está creando ahora mismo, para no dispararlo dos
+  // veces desde esta misma pantalla.
+  const [creatingMeetFor, setCreatingMeetFor] = useState(null);
   // Cuántos role-plays quiere esta semana. Se precarga con lo que ya eligió
   // para que reabrir el asistente no le pise su preferencia con el valor base.
   const [wizardWeeklyTarget, setWizardWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
@@ -1050,7 +1056,7 @@ export default function App() {
         // trae— y país/zona horaria del navegador.
         const googleName = (session.user.user_metadata?.full_name ||
           session.user.user_metadata?.name || nameFromEmail(email)).trim();
-        await registerMember(googleName, guessCountryFromBrowserTz(), email, googleAvatarUrl(session));
+        await registerMember(googleName, guessLocationFromBrowser(), email, googleAvatarUrl(session));
       }
     } catch (err) {
       console.error('Error verificando usuario OAuth:', err);
@@ -1508,21 +1514,23 @@ export default function App() {
       applyLoggedInUser(existing);
       showNotification(`¡Bienvenido de vuelta, ${existing.name}!`);
     } else {
-      await registerMember(nameFromEmail(emailToUse), guessCountryFromBrowserTz(), emailToUse);
+      await registerMember(nameFromEmail(emailToUse), guessLocationFromBrowser(), emailToUse);
     }
   };
 
   // Registra un miembro nuevo en Supabase y actualiza el estado local.
   // Se usa desde el auto-registro OAuth, el flujo mock y el paso de
   // código de invitación.
-  const registerMember = async (rawName, rawCountry, emailOverride, avatarUrl = null) => {
+  const registerMember = async (rawName, rawLocation, emailOverride, avatarUrl = null) => {
     const email = (emailOverride || loginEmail).trim().toLowerCase();
-    // El país siempre llega resuelto por guessCountryFromBrowserTz (un país de
-    // ZONAS o Argentina como fallback). Antes había una rama para el valor
-    // 'Otro' que leía un estado que ya nadie escribía: si alguna vez se
-    // alcanzaba, registraba a la persona con el país en blanco.
-    const finalCountry = rawCountry;
-    const finalTz = resolveTimezone(finalCountry);
+    // rawLocation viene de guessLocationFromBrowser: trae el país Y la zona.
+    // La zona se toma de ahí y NO se re-deriva del nombre del país, porque para
+    // alguien cuya zona no está en la tabla el nombre es el de su ciudad y
+    // resolveTimezone no sabría traducirlo — terminaba cayendo a otro país.
+    const finalCountry = typeof rawLocation === 'string' ? rawLocation : rawLocation.country;
+    const finalTz = (typeof rawLocation === 'object' && rawLocation.tz)
+      ? rawLocation.tz
+      : resolveTimezone(finalCountry);
     const newUser = {
       name: rawName.trim(),
       email,
@@ -1576,6 +1584,46 @@ export default function App() {
 
     showNotification(`¡Bienvenido a Sales Arena Matcher, ${newUser.name}!`);
     return true;
+  };
+
+  // Cambiar la zona horaria propia. Los horarios ya cargados NO se tocan: se
+  // guardaron como "lunes de 9 a 12 en mi hora local", así que al cambiar la
+  // zona pasan a significar 9 a 12 en la zona nueva, que es justo lo que quiere
+  // alguien que estaba mal detectado. Lo que sí cambia es a qué hora UTC caen,
+  // y eso lo recalcula el motor solo en la próxima corrida.
+  const saveMyTimezone = async (nuevaTz) => {
+    if (!nuevaTz || nuevaTz === currentUser?.tz) { setEditingTz(false); return; }
+    const zona = ZONAS.find(z => z.tz === nuevaTz);
+    if (!zona) { setEditingTz(false); return; }
+
+    setSavingTz(true);
+    try {
+      if (!useMockDb) {
+        const { error } = await supabase
+          .from('members')
+          .update({ country: zona.country, timezone: zona.tz })
+          .eq('room_id', currentRoomId)
+          .ilike('email', escapeLikeLiteral(currentUser.email));
+        if (error) {
+          showNotification('No pudimos guardar tu zona horaria. Intentá de nuevo en un momento.', 'error');
+          return;
+        }
+      }
+      const actualizado = { ...currentUser, country: zona.country, tz: zona.tz };
+      applyLoggedInUser(actualizado);
+      setMembers(prev => prev.map(mem =>
+        mem.email.toLowerCase() === currentUser.email.toLowerCase()
+          ? { ...mem, country: zona.country, tz: zona.tz }
+          : mem
+      ));
+      setEditingTz(false);
+      showNotification(
+        `Listo: tus horarios ahora se leen en ${zona.country}. Revisá el calendario por las dudas.`,
+        'success'
+      );
+    } finally {
+      setSavingTz(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -2166,8 +2214,13 @@ export default function App() {
         }
       }
       closeCloseoutForm();
+      // Si el cierre corrigió una ausencia mal puesta por el barrido, la
+      // asistencia local quedó vieja: se vuelve a leer para que la persona vea
+      // el cambio sin recargar. Es justo el dato que le importa — de eso
+      // dependen sus faltas del mes.
       showNotification('¡Gracias! Tu compañero no ve lo que respondiste.', 'success');
       await loadCloseoutState();
+      setRoomDataVersion(v => v + 1);
     } finally {
       setCloseoutSubmitting(false);
     }
@@ -2382,9 +2435,43 @@ export default function App() {
   // --- AGENDAR REUNIÓN CON APIS REALES DE GOOGLE CALENDAR / MEET ---
   // Crea la reunión real (Meet + registro + compromiso de asistencia) para una
   // propuesta 1:1 confirmada por ambas partes
+  // Marca que esta propuesta está siendo agendada. Es una etiqueta temporal en
+  // match_proposals.meeting_id: sirve de cerrojo entre las DOS personas de la
+  // dupla, que ven el mismo botón al mismo tiempo.
+  const MEET_CLAIM = 'creando';
+
   const createProposalMeeting = async (proposal) => {
+    if (creatingMeetFor === proposal.id) return; // doble clic de la misma persona
     const participantsStr = `${proposal.aName}, ${proposal.bName}`;
     const title = `Roleplay — ${proposal.aName.split(' ')[0]} · ${proposal.bName.split(' ')[0]}`;
+
+    // El botón "Crear Meet" lo ven los dos integrantes. Si ambos lo tocan se
+    // creaban DOS eventos y dos reuniones; a la huérfana no entraba nadie y el
+    // barrido de asistencia terminaba marcando ausentes a los dos, con la falta
+    // correspondiente. Se reclama la propuesta antes de hablar con Google: el
+    // UPDATE condicionado a meeting_id NULL solo puede ganarlo uno.
+    if (!useMockDb) {
+      const { data: claimed, error: claimError } = await supabase
+        .from('match_proposals')
+        .update({ meeting_id: MEET_CLAIM })
+        .eq('id', proposal.id)
+        .is('meeting_id', null)
+        .select('id');
+
+      if (claimError) {
+        showNotification('No pudimos agendar la reunión ahora. Intentá de nuevo en un momento.', 'error');
+        return;
+      }
+      if (!claimed || claimed.length === 0) {
+        showNotification(
+          'Tu compañero ya está creando el Meet de esta dupla. En unos segundos te aparece el enlace acá.',
+          'info'
+        );
+        setRoomDataVersion(v => v + 1); // traer el enlace cuando esté
+        return;
+      }
+    }
+    setCreatingMeetFor(proposal.id);
 
     setSchedulingStatus('loading');
     setScheduledDetails({
@@ -2483,6 +2570,13 @@ export default function App() {
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
+        setCreatingMeetFor(null);
+        // Se suelta el cerrojo: si quedara puesto, nadie —ni esta persona ni su
+        // compañero— podría volver a intentar agendar esta dupla nunca más.
+        await supabase.from('match_proposals')
+          .update({ meeting_id: null })
+          .eq('id', proposal.id)
+          .eq('meeting_id', MEET_CLAIM);
         showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. ${err.message}`, 'error');
         return;
       }
@@ -2552,10 +2646,15 @@ export default function App() {
       }))]);
     }
 
-    // Vincular la reunión creada a la propuesta
-    if (!useMockDb && newMeeting.id != null) {
-      await supabase.from('match_proposals').update({ meeting_id: newMeeting.id }).eq('id', proposal.id);
+    // Vincular la reunión creada a la propuesta: la etiqueta del cerrojo se
+    // reemplaza por el id real. Si la reunión no llegó a guardarse, se suelta
+    // para que se pueda reintentar.
+    if (!useMockDb) {
+      await supabase.from('match_proposals')
+        .update({ meeting_id: newMeeting.id != null ? String(newMeeting.id) : null })
+        .eq('id', proposal.id);
     }
+    setCreatingMeetFor(null);
     setProposals(prev => prev.map(p => p.id === proposal.id ? { ...p, meetingId: newMeeting.id } : p));
 
     setMeetings(prev => [...prev, newMeeting]);
@@ -3765,8 +3864,14 @@ export default function App() {
                                 <Video size={14} /> Abrir Google Meet
                               </a>
                             ) : (
-                              <button className="btn btn-indigo" style={{ width: '100%' }} onClick={() => createProposalMeeting(proposal)}>
-                                <Video size={14} /> Crear Meet de la dupla
+                              <button
+                                className="btn btn-indigo"
+                                style={{ width: '100%' }}
+                                onClick={() => createProposalMeeting(proposal)}
+                                disabled={creatingMeetFor === proposal.id}
+                              >
+                                <Video size={14} />
+                                {creatingMeetFor === proposal.id ? 'Creando el Meet...' : 'Crear Meet de la dupla'}
                               </button>
                             )
                           ) : mySide === 'pendiente' ? (
@@ -3948,6 +4053,52 @@ export default function App() {
                         <span className="choice-sub">Me excluyo de los emparejamientos</span>
                       </span>
                     </button>
+                  </div>
+
+                  {/* La zona horaria se detecta del navegador y hasta ahora no
+                      había NINGÚN lugar para corregirla. Si la detección erraba,
+                      la persona marcaba "9 a 12" y recibía propuestas a otra
+                      hora, sin forma de darse cuenta de por qué. Va acá, al
+                      inicio del asistente, porque todo lo que sigue —el
+                      calendario, el mapa de calor, las propuestas— se
+                      interpreta con este dato. */}
+                  <div className="wizard-tz-row">
+                    <span className="wizard-tz-current">
+                      <Globe size={13} aria-hidden="true" />
+                      Tus horarios se leen en <strong>{tzCity(currentUser?.tz)}</strong>
+                    </span>
+                    {editingTz ? (
+                      <div className="wizard-tz-edit">
+                        <select
+                          className="form-input"
+                          aria-label="Elegí tu país o zona horaria"
+                          value={ZONAS.some(z => z.tz === currentUser?.tz) ? currentUser.tz : ''}
+                          onChange={(e) => saveMyTimezone(e.target.value)}
+                          disabled={savingTz}
+                        >
+                          <option value="" disabled>
+                            {ZONAS.some(z => z.tz === currentUser?.tz)
+                              ? 'Elegí tu país...'
+                              : `Detectada: ${tzCity(currentUser?.tz)}`}
+                          </option>
+                          {ZONAS.map(z => (
+                            <option key={z.tz} value={z.tz}>{z.flag} {z.country}</option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn-small"
+                          onClick={() => setEditingTz(false)}
+                          disabled={savingTz}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className="btn-small" onClick={() => setEditingTz(true)}>
+                        No es mi zona
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
