@@ -4596,7 +4596,14 @@ export default function App() {
                           </span>
                           <ReliabilityBadge pct={getReliability(m.email)} />
                         </span>
-                        <span className="member-row-details"><Mail size={11} /> {m.email}</span>
+                        {/* El email es un dato de contacto personal y en el
+                            padrón no cumple ninguna función: para practicar con
+                            alguien alcanza con su nombre. Se muestra solo a la
+                            propia persona y a quien administra la sala, que lo
+                            necesita para dar de baja o corregir una ficha. */}
+                        {(isSelf || isRoomAdmin) && (
+                          <span className="member-row-details"><Mail size={11} /> {m.email}</span>
+                        )}
                         <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
                       </div>
 
