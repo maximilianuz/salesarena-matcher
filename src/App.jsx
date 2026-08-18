@@ -689,8 +689,17 @@ export default function App() {
       if (!busySlots.has(k)) busySlots.set(k, new Set());
       busySlots.get(k).add(slot);
     };
+    // Sesiones que cada persona ya tiene esta semana: el tope semanal las cuenta
+    // para no volver a sumarle el tope entero en cada corrida.
+    const sessionCounts = new Map();
+    const addSession = (email) => {
+      const k = email.toLowerCase();
+      sessionCounts.set(k, (sessionCounts.get(k) ?? 0) + 1);
+    };
     for (const p of weekProposals) {
       if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
+      addSession(p.aEmail);
+      addSession(p.bEmail);
       if (p.slot === null || p.slot === undefined) continue;
       markBusy(p.aEmail, p.slot);
       markBusy(p.bEmail, p.slot);
@@ -702,7 +711,7 @@ export default function App() {
     const scores = new Map(pool.map(m => [m.email, getReliability(m.email)]));
     const pairs = buildWeeklyPairsMultiRound(
       pool, slotSets, scores, excludedPairs, new Map(), new Date(),
-      expiredPairs, MIN_LEAD_MS, busySlots
+      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts
     );
     if (pairs.length === 0) return;
 

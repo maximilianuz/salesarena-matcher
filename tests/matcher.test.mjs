@@ -13,7 +13,8 @@ import {
   respondByMs,
   currentWeekStartISO,
   MIN_LEAD_MS,
-  CONFIRM_STEPS_MS
+  CONFIRM_STEPS_MS,
+  MAX_SESSIONS_PER_WEEK
 } from '../src/matcher.js';
 import { computeSlotSets, slotToLocalParts } from '../src/slots.js';
 
@@ -259,18 +260,87 @@ test('multi-ronda: varias propuestas por persona, ninguna en el mismo horario', 
   }
 });
 
-test('multi-ronda: no repite la misma dupla en distintas rondas', () => {
+test('multi-ronda: agota los compañeros NUEVOS antes de repetir uno', () => {
+  // Cuatro personas con la misma franja amplia: hay de sobra con quién
+  // emparejar, así que nadie debería repetir compañero mientras queden caras
+  // nuevas disponibles.
   const members = ['ana', 'beto', 'caro', 'dani']
     .map(n => member(`${n}@x.com`, n, AR));
-  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 12)]);
   const slotSets = computeSlotSets(members, avails);
 
   const pairs = buildWeeklyPairsMultiRound(
     members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS
   );
 
+  // Con 3 horas por persona y 3 compañeros posibles, alcanza para que cada
+  // dupla sea distinta: la primera repetición recién aparecería al agotarlas.
   const keys = pairs.map(p => pairKey(p.a.email, p.b.email));
-  assert.equal(new Set(keys).size, keys.length, 'hay duplas repetidas');
+  assert.equal(new Set(keys).size, keys.length, 'repitió dupla habiendo caras nuevas');
+});
+
+test('multi-ronda: repite la dupla SOLO cuando no queda nadie más', () => {
+  // Dos personas solas en la sala, con tres horas en común. Antes salía una
+  // sola sesión y las otras dos horas se desperdiciaban; ahora se aprovechan.
+  const members = [member('a@x.com', 'Ana', AR), member('b@x.com', 'Beto', AR)];
+  const avails = [rule('Ana', 0, 10, 13), rule('Beto', 0, 10, 13)];
+  const slotSets = computeSlotSets(members, avails);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS
+  );
+
+  assert.equal(pairs.length, 3, 'debe usar las tres horas en común');
+  const slots = pairs.map(p => p.slot);
+  assert.equal(new Set(slots).size, 3, 'cada sesión en una hora distinta');
+});
+
+test('la hora elegida no deja sin sesión a quien tiene una sola disponible', () => {
+  // Ana y Caro tienen dos horas; Beto solo la primera. Si Ana y Caro se quedan
+  // con esa hora, Beto pierde su única chance de la semana. El motor tiene que
+  // correrse a la otra hora, que no le sirve a nadie más.
+  const members = [
+    member('ana@x.com', 'Ana', AR),
+    member('beto@x.com', 'Beto', AR),
+    member('caro@x.com', 'Caro', AR)
+  ];
+  const avails = [
+    rule('Ana', 0, 10, 12),
+    rule('Beto', 0, 10, 11),
+    rule('Caro', 0, 10, 12)
+  ];
+  const slotSets = computeSlotSets(members, avails);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS
+  );
+
+  const emparejados = new Set(pairs.flatMap(p => [p.a.email, p.b.email]));
+  assert.ok(emparejados.has('beto@x.com'), 'Beto quedó sin sesión pudiendo tenerla');
+  assert.ok(pairs.length >= 2, 'debía salir más de un emparejamiento');
+});
+
+test('la rotación no manda a alguien que nunca se conecta por ser cara nueva', () => {
+  // Un compañero confiable con quien ya te juntaste una vez le gana a uno con
+  // el que nunca te juntaste pero que casi nunca aparece. Sin este contrapeso,
+  // la rotación pura premiaba al ausente y dejaba esperando a quien se prepara.
+  const members = [
+    member('ana@x.com', 'Ana', AR),
+    member('fiel@x.com', 'Fiel', AR),
+    member('ausente@x.com', 'Ausente', AR)
+  ];
+  const avails = [rule('Ana', 0, 10, 11), rule('Fiel', 0, 10, 11), rule('Ausente', 0, 10, 11)];
+  const slotSets = computeSlotSets(members, avails);
+  const scores = new Map([['ana@x.com', 80], ['fiel@x.com', 95], ['ausente@x.com', 5]]);
+  const pairCounts = new Map([[pairKey('ana@x.com', 'fiel@x.com'), 1]]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, scores, new Set(), pairCounts, NOW, new Set(), MIN_LEAD_MS
+  );
+
+  assert.equal(pairs.length, 1, 'solo hay una hora, sale una sola dupla');
+  const dupla = [pairs[0].a.name, pairs[0].b.name].sort().join('+');
+  assert.equal(dupla, 'Ana+Fiel');
 });
 
 test('busySlots: no se ofrece un horario que la persona ya tiene comprometido', () => {
@@ -332,4 +402,50 @@ test('multi-ronda: no muta el Map de horarios ocupados que recibe', () => {
   );
   assert.deepEqual([...busy.get('ana@x.com')], [100]);
   assert.equal(busy.size, 1);
+});
+
+test('tope semanal: marcar el día entero no genera una sesión por hora', () => {
+  // "Libre lunes de 9 a 18" significa "cualquiera de esas horas me sirve", no
+  // "agendame nueve role-plays el lunes". Sin tope, seis personas con nueve
+  // horas marcadas generaban 27 propuestas y la misma dupla se repetía once
+  // veces, con lo que la rotación dejaba de significar algo.
+  const members = ['ana', 'beto', 'caro', 'dani', 'eva', 'fito']
+    .map(n => member(`${n}@x.com`, n, AR));
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS
+  );
+
+  const porPersona = new Map();
+  for (const p of pairs) {
+    for (const e of [p.a.email, p.b.email]) {
+      porPersona.set(e, (porPersona.get(e) ?? 0) + 1);
+    }
+  }
+  for (const [email, n] of porPersona) {
+    assert.ok(n <= MAX_SESSIONS_PER_WEEK, `${email} quedó con ${n} sesiones`);
+  }
+});
+
+test('tope semanal: cuenta las propuestas que la persona YA tiene', () => {
+  // El cron corre cada 10 minutos. Si el tope contara solo lo de esta corrida,
+  // cada pasada volvería a sumarle el tope entero a la misma persona.
+  const members = ['ana', 'beto', 'caro', 'dani']
+    .map(n => member(`${n}@x.com`, n, AR));
+  const avails = members.flatMap(m => [rule(m.name, 0, 9, 18)]);
+  const slotSets = computeSlotSets(members, avails);
+
+  // Ana ya llegó al tope en corridas anteriores; el resto no tiene nada.
+  const yaTiene = new Map([['ana@x.com', MAX_SESSIONS_PER_WEEK]]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, new Set(), MIN_LEAD_MS,
+    new Map(), yaTiene
+  );
+
+  const deAna = pairs.filter(p => p.a.email === 'ana@x.com' || p.b.email === 'ana@x.com');
+  assert.equal(deAna.length, 0, 'Ana ya estaba en el tope y volvió a recibir propuestas');
+  assert.ok(pairs.length > 0, 'los demás sí deben seguir emparejándose');
 });

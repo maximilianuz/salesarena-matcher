@@ -53,6 +53,28 @@ const respondByMs = (meetingMs: number, now: Date): number | null => {
 const ATTENDANCE_TOLERANCE_MS = 10 * 60 * 1000;
 const BASELINE_SCORE = 50;
 
+// Cuánto pesa NO haberse juntado antes, medido en puntos de credibilidad. La
+// rotación es el criterio principal, pero no absoluta: con prioridad estricta,
+// quien nunca se conecta ganaba siempre por ser cara nueva y del otro lado
+// quedaba esperando alguien que sí se prepara.
+// Debe coincidir con ROTATION_WEIGHT en src/matcher.js.
+const ROTATION_WEIGHT = 40;
+const partnerDesirability = (timesPaired: number, score: number): number =>
+  score - timesPaired * ROTATION_WEIGHT;
+
+// Tope de role-plays por persona y por semana.
+//
+// Marcar "libre lunes de 9 a 17" significa "cualquiera de esas horas me sirve",
+// NO "agendame ocho sesiones el lunes". Sin este tope el motor llenaba cada hora
+// declarada: una sala de 20 personas con 40 horas marcadas cada una generaba 400
+// propuestas, 40 por persona, y la misma dupla se repetía 22 veces — con lo que
+// la rotación dejaba de significar nada.
+//
+// El tope cuenta las propuestas VIVAS de la semana, no solo las de esta corrida:
+// el cron pasa cada 10 minutos y sin eso sumaría el tope entero en cada pasada.
+// Debe coincidir con MAX_SESSIONS_PER_WEEK en src/matcher.js.
+const MAX_SESSIONS_PER_WEEK = 3;
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -136,6 +158,40 @@ const buildWeeklyPairs = (
   const assigned = new Set<string>();
   const pairs: Pair[] = [];
 
+  const freeSlotsOf = (email: string): number[] => {
+    const all = slotSets.get(email);
+    if (!all) return [];
+    const busy = busyOf(email);
+    return [...all].filter(s => !busy.has(s));
+  };
+
+  // De los horarios comunes de la dupla, cuál ocupar. Tomar siempre el más
+  // próximo dejaba gente afuera: dos personas con varias horas libres se
+  // quedaban con la ÚNICA hora de una tercera y esa tercera perdía su sesión de
+  // la semana. Primero se mira a quién deja sin nada cada opción; entre las que
+  // empatan, la más próxima. Debe coincidir con src/matcher.js.
+  const leastContendedSlot = (common: number[], m: Member, cand: Member): number => {
+    let best: { slot: number; dejaSinNada: number; cuando: number } | null = null;
+    for (const s of common) {
+      let dejaSinNada = 0;
+      for (const otro of ranked) {
+        if (otro.email === m.email || otro.email === cand.email) continue;
+        if (assigned.has(otro.email)) continue;
+        const libres = freeSlotsOf(otro.email);
+        if (libres.length === 1 && libres[0] === s) dejaSinNada++;
+      }
+      const cuando = nextSlotOccurrenceMs(s, now, minLeadMs);
+      if (
+        !best ||
+        dejaSinNada < best.dejaSinNada ||
+        (dejaSinNada === best.dejaSinNada && cuando < best.cuando)
+      ) {
+        best = { slot: s, dejaSinNada, cuando };
+      }
+    }
+    return best!.slot;
+  };
+
   for (const m of ranked) {
     if (assigned.has(m.email)) continue;
     const mySlots = slotSets.get(m.email);
@@ -144,7 +200,7 @@ const buildWeeklyPairs = (
     const myFree = [...mySlots].filter(s => !myBusy.has(s));
     if (myFree.length === 0) continue;
 
-    let best: { cand: Member; count: number; score: number; common: number[]; isSoft: boolean } | null = null;
+    let best: { cand: Member; count: number; score: number; desirability: number; common: number[]; isSoft: boolean } | null = null;
     for (const cand of ranked) {
       if (cand.email === m.email || assigned.has(cand.email)) continue;
       if (excludedPairs.has(pairKey(m.email, cand.email))) continue;
@@ -159,27 +215,28 @@ const buildWeeklyPairs = (
       const isSoft = softExcludedPairs.has(pairKey(m.email, cand.email));
       const count = timesPaired(m.email, cand.email);
       const candScore = scoreOf(cand.email) ?? BASELINE_SCORE;
+      const desirability = partnerDesirability(count, candScore);
       // Prioridad de selección del compañero (anti-amiguismo):
-      //   0º evitar duplas soft-excluidas (expiradas) si hay alternativa
-      //   1º menos veces emparejados históricamente → fuerza "todos con todos"
-      //   2º mayor confiabilidad (premia compromiso)
-      //   3º mayor solapamiento horario
+      //   0º evitar duplas soft-excluidas si hay alternativa: las que ya se
+      //      juntaron esta semana y las que dejaron vencer una propuesta.
+      //   1º mayor deseabilidad: rotación con el peso de ROTATION_WEIGHT y la
+      //      credibilidad como contrapeso.
+      //   2º mayor solapamiento horario
       if (
         !best ||
         (best.isSoft && !isSoft) ||
         (best.isSoft === isSoft && (
-          count < best.count ||
-          (count === best.count && candScore > best.score) ||
-          (count === best.count && candScore === best.score && common.length > best.common.length)
+          desirability > best.desirability ||
+          (desirability === best.desirability && common.length > best.common.length)
         ))
       ) {
-        best = { cand, count, score: candScore, common, isSoft };
+        best = { cand, count, score: candScore, desirability, common, isSoft };
       }
     }
     if (best) {
       assigned.add(m.email);
       assigned.add(best.cand.email);
-      pairs.push({ a: m, b: best.cand, slot: soonestSlot(best.common, now, minLeadMs) });
+      pairs.push({ a: m, b: best.cand, slot: leastContendedSlot(best.common, m, best.cand) });
     }
   }
   return { pairs };
@@ -295,6 +352,12 @@ Deno.serve(async (req) => {
       p_name: 'weekly-matcher',
       p_ttl_seconds: 900
     });
+    // Se compara contra `false` a propósito, y no `if (!gotLock)`: si la RPC
+    // falla —por ejemplo porque la migración del lock todavía no se aplicó—
+    // `data` viene null y el emparejador tiene que SEGUIR funcionando. Solapar
+    // dos corridas es un riesgo acotado; dejar la sala sin emparejamientos por
+    // una pieza de infraestructura ausente ya rompió el sistema una vez
+    // (ver 20260718170000, el incidente del CRON_SECRET).
     if (gotLock === false) {
       return new Response(
         JSON.stringify({ ok: true, skipped: 'already_running' }),
@@ -474,13 +537,19 @@ Deno.serve(async (req) => {
       // BLANDA. Se prefiere REASIGNAR a otro compañero disponible del mapa de
       // calor; solo si no hay alternativa se re-ofrece la misma dupla,
       // REACTIVANDO la fila vencida (evita violar el UNIQUE por sala/semana/dupla).
+      // Una MISMA dupla puede tener varias propuestas vencidas en la semana
+      // (ahora que pueden juntarse más de una vez), así que se guardan en cola:
+      // cada sesión nueva reutiliza una fila vencida distinta y, cuando se
+      // acaban, se insertan filas nuevas. Con un solo id por dupla, la segunda
+      // sesión pisaba la reactivación de la primera y se perdía una propuesta.
       const softExcluded = new Set<string>();
-      const expiredByPair = new Map<string, number>();
+      const expiredByPair = new Map<string, number[]>();
       for (const p of weekProposals || []) {
         if (p.status === 'expirado') {
           const k = pairKeyOf(p.member_a_email, p.member_b_email);
           softExcluded.add(k);
-          expiredByPair.set(k, p.id);
+          if (!expiredByPair.has(k)) expiredByPair.set(k, []);
+          expiredByPair.get(k)!.push(p.id);
         }
       }
 
@@ -675,34 +744,57 @@ Deno.serve(async (req) => {
         if (!busySlots.has(k)) busySlots.set(k, new Set<number>());
         busySlots.get(k)!.add(slot);
       };
+      // Sesiones que cada persona YA tiene esta semana. El cron corre cada 10
+      // minutos: si el tope contara solo lo de esta corrida, cada pasada le
+      // sumaría el tope entero a la misma persona.
+      const sessionCount = new Map<string, number>();
+      const addSession = (email: string) => {
+        const k = email.toLowerCase();
+        sessionCount.set(k, (sessionCount.get(k) ?? 0) + 1);
+      };
+      const sessionsOf = (email: string) => sessionCount.get(email.toLowerCase()) ?? 0;
       for (const p of weekProposals || []) {
         if (p.status !== 'propuesto' && p.status !== 'confirmado') continue;
+        addSession(p.member_a_email);
+        addSession(p.member_b_email);
         if (p.slot_start === null || p.slot_start === undefined) continue;
         markBusy(p.member_a_email, p.slot_start);
         markBusy(p.member_b_email, p.slot_start);
       }
 
-      // Emparejar en rondas: se permiten varias propuestas por miembro (con
-      // personas diferentes). No hay tope fijo — el límite lo pone la
-      // disponibilidad, porque cada horario asignado queda tomado para esas dos
-      // personas y las rondas se cortan solas cuando no quedan horas libres en
-      // común. Debe coincidir con buildWeeklyPairsMultiRound en src/matcher.js.
+      // Emparejar en rondas: se permiten varias propuestas por miembro. No hay
+      // tope fijo — el límite lo pone la disponibilidad, porque cada horario
+      // asignado queda tomado para esas dos personas y las rondas se cortan
+      // solas cuando no quedan horas libres en común.
+      //
+      // Las duplas ya armadas en esta corrida se EVITAN, no se prohíben: si a
+      // los dos les quedan horas libres y no hay nadie nuevo con quien
+      // emparejarlos, una segunda sesión juntos es mejor que desperdiciar la
+      // disponibilidad de ambos. Cara nueva siempre gana primero.
+      // Debe coincidir con buildWeeklyPairsMultiRound en src/matcher.js.
       const allPairs: Pair[] = [];
-      const roundExcluded = new Set(excluded);
-      const maxRounds = Math.max(1, pool.length - 1); // techo de seguridad
+      const roundSoftExcluded = new Set(softExcluded);
+      // Cada ronda consume al menos una hora libre de dos personas, así que no
+      // puede haber más rondas que horas en la semana.
+      const maxRounds = 168;
 
       for (let round = 0; round < maxRounds; round++) {
+        // Quien ya llegó a su tope semanal no entra a esta ronda.
+        const disponibles = pool.filter(m => sessionsOf(m.email) < MAX_SESSIONS_PER_WEEK);
+        if (disponibles.length < 2) break;
+
         const { pairs } = buildWeeklyPairs(
-          pool, slotSets, scores, roundExcluded, pairCounts, now, softExcluded, MIN_LEAD_MS, busySlots
+          disponibles, slotSets, scores, excluded, pairCounts, now, roundSoftExcluded, MIN_LEAD_MS, busySlots
         );
         if (pairs.length === 0) break; // No hay más parejas posibles
 
         allPairs.push(...pairs);
         for (const p of pairs) {
-          // La dupla no se repite, y el horario queda ocupado para los dos.
-          roundExcluded.add(pairKeyOf(p.a.email, p.b.email));
+          roundSoftExcluded.add(pairKeyOf(p.a.email, p.b.email));
           markBusy(p.a.email, p.slot);
           markBusy(p.b.email, p.slot);
+          addSession(p.a.email);
+          addSession(p.b.email);
         }
       }
 
@@ -718,7 +810,10 @@ Deno.serve(async (req) => {
         const rbMs = respondByMs(meetingMs, now);
         if (rbMs === null) continue;
         const respondBy = new Date(rbMs).toISOString();
-        const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email));
+        // shift() y no get(): la fila vencida se consume. Si esta dupla tiene
+        // una segunda sesión esta semana, va a buscar la siguiente de la cola o
+        // a insertar una nueva, en vez de sobrescribir la que se acaba de usar.
+        const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email))?.shift();
         if (revivedId !== undefined) {
           revived++;
           await supabase.from('match_proposals').update({

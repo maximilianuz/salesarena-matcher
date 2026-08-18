@@ -60,22 +60,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS meeting_attendees_meeting_email_uniq
   ON public.meeting_attendees (meeting_id, lower(member_email));
 
 -- ============================================================
--- 2. PROPUESTAS: una dupla, una propuesta por sala y semana
+-- 2. PROPUESTAS: una dupla no se propone dos veces al MISMO horario
 -- ============================================================
 -- El UNIQUE original era (room_id, week_start, member_a_email, member_b_email),
 -- sensible al orden: la misma dupla insertada como (B,A) no chocaba con (A,B).
--- La aplicación lo compensa ordenando alfabéticamente antes de excluir
--- (pairKeyOf), pero eso es una garantía de código, no de base: dos corridas
--- solapadas del cron que difieran en el orden interno del pool podían crear dos
--- propuestas "distintas" para la misma pareja y dejar a esas dos personas con
--- dos role-plays superpuestos.
+-- La aplicación lo compensa ordenando alfabéticamente (pairKeyOf), pero eso es
+-- una garantía de código, no de base: dos escrituras que difieran en el orden
+-- creaban dos propuestas "distintas" para la misma pareja.
+--
+-- Además ese UNIQUE era DEMASIADO estricto en el otro eje: una dupla puede
+-- juntarse más de una vez en la semana cuando a los dos les sobran horas libres
+-- y no queda nadie nuevo con quien emparejarlos. Lo que nunca puede repetirse
+-- es la misma dupla en el MISMO horario — eso sí es un duplicado.
+--
+-- Por eso la clave incluye slot_start: permite varias sesiones de la misma
+-- pareja en horarios distintos, y sigue bloqueando el duplicado real.
 
--- Se conserva la propuesta MÁS AVANZADA de cada dupla (una confirmada le gana a
--- una propuesta, que le gana a una expirada) y, a igualdad, la más reciente.
+-- Se conserva la propuesta MÁS AVANZADA de cada (dupla, horario): una
+-- confirmada le gana a una propuesta, que le gana a una expirada; a igualdad,
+-- la más reciente.
 WITH ranked AS (
   SELECT id,
          row_number() OVER (
-           PARTITION BY room_id, week_start,
+           PARTITION BY room_id, week_start, slot_start,
                         LEAST(lower(member_a_email), lower(member_b_email)),
                         GREATEST(lower(member_a_email), lower(member_b_email))
            ORDER BY CASE status
@@ -108,10 +115,11 @@ END $$;
 
 -- LEAST/GREATEST sobre los dos emails en minúsculas: la dupla queda identificada
 -- por sus dos integrantes y no por el orden en que los recorrió el emparejador.
-CREATE UNIQUE INDEX IF NOT EXISTS match_proposals_pair_week_uniq
+CREATE UNIQUE INDEX IF NOT EXISTS match_proposals_pair_week_slot_uniq
   ON public.match_proposals (
     room_id,
     week_start,
+    slot_start,
     LEAST(lower(member_a_email), lower(member_b_email)),
     GREATEST(lower(member_a_email), lower(member_b_email))
   );
