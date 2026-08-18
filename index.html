@@ -470,9 +470,26 @@
             display: inline-flex;
             align-items: center;
             gap: 0.75rem;
-            margin-bottom: 3rem;
+            margin-bottom: 1rem;
             font-size: 1.1rem;
             animation: pulseGlow 5s ease-in-out infinite;
+        }
+
+        /* Aclaración de que hace falta invitación. Va debajo del botón: quien
+           ya tiene su enlace no necesita leerla, y quien no lo tiene la
+           encuentra justo cuando el botón no le funcionó. */
+        .hero-access-note {
+            margin: 0 auto 3rem;
+            max-width: 34rem;
+            font-size: 0.92rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .hero-access-note a {
+            color: #fff;
+            text-decoration: underline;
+            text-underline-offset: 3px;
         }
 
         @keyframes pulseGlow {
@@ -1716,8 +1733,16 @@
                 Sales Arena Matcher cruza disponibilidades, maneja zonas horarias y crea videollamadas de Google Meet automáticamente. Todo en un solo lugar.
             </p>
             <a href="/app" class="cta-button hero-cta">
-                Comenzar Ahora →
+                Entrar a mi sala →
             </a>
+            <!-- Las salas son privadas y se entra por invitación: sin esta
+                 aclaración, alguien sin código llegaba hasta acá con la
+                 promesa de "Comenzar Ahora" y se topaba con un error sin
+                 ninguna explicación. -->
+            <p class="hero-access-note">
+                Se entra con el enlace de invitación de tu sala.
+                ¿Todavía no tenés uno? <a href="mailto:community.argen.manager@gmail.com?subject=Quiero%20sumarme%20a%20Sales%20Arena%20Matcher">Pedí acceso</a>.
+            </p>
         </div>
     </section>
 
@@ -1808,32 +1833,32 @@
                         <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
                         <span class="vtabs-tab-number">/01</span>
                         <span class="vtabs-tab-body">
-                            <span class="vtabs-tab-title">Configura tu Equipo</span>
-                            <span class="vtabs-tab-desc">Añade los miembros de tu equipo de ventas a la plataforma.</span>
+                            <span class="vtabs-tab-title">Entrá con tu invitación</span>
+                            <span class="vtabs-tab-desc">Las salas son privadas: entrás con el enlace que te comparte quien la administra.</span>
                         </span>
                     </button>
                     <button type="button" class="vtabs-tab" data-index="1">
                         <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
                         <span class="vtabs-tab-number">/02</span>
                         <span class="vtabs-tab-body">
-                            <span class="vtabs-tab-title">Indica Disponibilidad</span>
-                            <span class="vtabs-tab-desc">Cada miembro comparte su disponibilidad y zona horaria.</span>
+                            <span class="vtabs-tab-title">Decí cuándo y cuántos</span>
+                            <span class="vtabs-tab-desc">Marcás las horas que te sirven y cuántos role-plays querés por semana.</span>
                         </span>
                     </button>
                     <button type="button" class="vtabs-tab" data-index="2">
                         <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
                         <span class="vtabs-tab-number">/03</span>
                         <span class="vtabs-tab-body">
-                            <span class="vtabs-tab-title">Matcher Coordina</span>
-                            <span class="vtabs-tab-desc">Nuestro algoritmo encuentra los mejores matches entre equipos.</span>
+                            <span class="vtabs-tab-title">El matcher te propone</span>
+                            <span class="vtabs-tab-desc">Busca con quién coincidís y rota los compañeros para que no siempre sean los mismos.</span>
                         </span>
                     </button>
                     <button type="button" class="vtabs-tab" data-index="3">
                         <span class="vtabs-progress-track"><span class="vtabs-progress-fill"></span></span>
                         <span class="vtabs-tab-number">/04</span>
                         <span class="vtabs-tab-body">
-                            <span class="vtabs-tab-title">¡A Practicar!</span>
-                            <span class="vtabs-tab-desc">Google Meet se crea automáticamente. ¡Comienza tu sesión!</span>
+                            <span class="vtabs-tab-title">Practicá y cerrá la sesión</span>
+                            <span class="vtabs-tab-desc">Al aceptar se crea el Meet en el calendario de los dos. Al terminar, cada uno responde cómo fue.</span>
                         </span>
                     </button>
                 </div>
@@ -1842,19 +1867,19 @@
                 <div class="vtabs-gallery" id="vtabs-gallery">
                     <div class="vtabs-panel is-active" style="--panel-a: var(--primary); --panel-b: var(--accent-purple);">
                         <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                        <span class="vtabs-panel-tag">01 · Configura tu Equipo</span>
+                        <span class="vtabs-panel-tag">01 · Entrá con tu invitación</span>
                     </div>
                     <div class="vtabs-panel" style="--panel-a: var(--accent-cyan); --panel-b: var(--primary);">
                         <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                        <span class="vtabs-panel-tag">02 · Indica Disponibilidad</span>
+                        <span class="vtabs-panel-tag">02 · Decí cuándo y cuántos</span>
                     </div>
                     <div class="vtabs-panel" style="--panel-a: var(--accent-purple); --panel-b: var(--secondary);">
                         <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                        <span class="vtabs-panel-tag">03 · Matcher Coordina</span>
+                        <span class="vtabs-panel-tag">03 · El matcher te propone</span>
                     </div>
                     <div class="vtabs-panel" style="--panel-a: var(--secondary); --panel-b: var(--accent-cyan);">
                         <svg class="vtabs-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>
-                        <span class="vtabs-panel-tag">04 · ¡A Practicar!</span>
+                        <span class="vtabs-panel-tag">04 · Practicá y cerrá la sesión</span>
                     </div>
                     <div class="vtabs-gallery-nav">
                         <button type="button" id="vtabs-prev" aria-label="Paso anterior">
@@ -1939,8 +1964,8 @@
     <section class="cta-section">
         <h2>¿Listo para Mejorar tu Equipo?</h2>
         <p>Closers y estudiantes de distintos países ya lo están usando para mejorar</p>
-        <a href="/app" class="cta-button">
-            Sumar a mi Equipo →
+        <a href="mailto:community.argen.manager@gmail.com?subject=Quiero%20una%20sala%20en%20Sales%20Arena%20Matcher" class="cta-button">
+            Pedir una sala para mi equipo →
         </a>
     </section>
 
