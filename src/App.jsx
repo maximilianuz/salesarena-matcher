@@ -931,6 +931,50 @@ export default function App() {
     loadSupabaseData();
   }, [currentRoomId, sessionEmail, roomDataVersion]);
 
+  // --- LA SALA EN VIVO ---
+  //
+  // Antes los datos se leían una sola vez, al abrir. Lo que hacía la otra
+  // persona —aceptar la propuesta, crear el Meet, cancelar— no se veía hasta
+  // recargar a mano, y como el cron corre cada 10 minutos la sensación era que
+  // "la app tarda 10 minutos" cuando el dato ya estaba guardado.
+  //
+  // Se escuchan los cambios de ESTA sala y se refresca. El refetch va demorado
+  // 400ms porque una sola acción dispara varios cambios seguidos (la reunión,
+  // sus dos filas de asistencia, la propuesta): sin eso serían cuatro recargas
+  // para un solo evento.
+  useEffect(() => {
+    if (useMockDb || !isLoggedIn || !currentRoomId) return;
+
+    let pendiente = null;
+    const refrescarPronto = () => {
+      clearTimeout(pendiente);
+      pendiente = setTimeout(() => setRoomDataVersion(v => v + 1), 400);
+    };
+
+    const filtro = `room_id=eq.${currentRoomId}`;
+    const canal = supabase.channel(`sala:${currentRoomId}`);
+    for (const tabla of ['match_proposals', 'meetings', 'meeting_attendees', 'members', 'availabilities']) {
+      canal.on('postgres_changes', { event: '*', schema: 'public', table: tabla, filter: filtro }, refrescarPronto);
+    }
+    canal.subscribe();
+
+    // Respaldo para cuando Realtime no esté disponible (proyecto sin la
+    // publicación, red que corta websockets): al volver a la pestaña se
+    // refresca igual. Es el momento en que la persona vuelve a mirar.
+    const alVolver = () => {
+      if (document.visibilityState === 'visible') refrescarPronto();
+    };
+    document.addEventListener('visibilitychange', alVolver);
+    window.addEventListener('focus', alVolver);
+
+    return () => {
+      clearTimeout(pendiente);
+      supabase.removeChannel(canal);
+      document.removeEventListener('visibilitychange', alVolver);
+      window.removeEventListener('focus', alVolver);
+    };
+  }, [currentRoomId, isLoggedIn]);
+
   // Fila de members → objeto de usuario de la app
   const memberFromRow = (row) => ({
     name: row.name,
