@@ -180,6 +180,19 @@ test('respondByMs: ventana escalonada 4h → 2h → 1h → 30m', () => {
   assert.equal(MIN_LEAD_MS, CONFIRM_STEPS_MS[CONFIRM_STEPS_MS.length - 1]);
 });
 
+test('un slot elegido por el motor SIEMPRE tiene ventana de confirmación', () => {
+  // El borde: "ahora" es 11:30:00.000 exactas y el slot de las 12:00 está a
+  // exactamente MIN_LEAD_MS. El motor lo daba por bueno pero respondByMs
+  // devolvía null para esa misma reunión — una propuesta sin plazo posible.
+  // Ahora el piso es estricto: ese slot rueda a la semana siguiente.
+  const now = new Date(Date.UTC(2026, 6, 16, 11, 30, 0, 0));
+  const thursday12 = 3 * 24 + 12;
+
+  const elegido = slotDateMs(thursday12, now, MIN_LEAD_MS);
+  assert.equal(elegido, Date.UTC(2026, 6, 23, 12), 'rueda a la semana siguiente');
+  assert.notEqual(respondByMs(elegido, now), null, 'y tiene plazo para confirmar');
+});
+
 test('currentWeekStartISO: siempre un lunes (UTC)', () => {
   assert.equal(currentWeekStartISO(NOW), '2026-07-13');
   const sunday = new Date(Date.UTC(2026, 6, 19, 23, 59));

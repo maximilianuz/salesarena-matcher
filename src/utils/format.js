@@ -1,9 +1,13 @@
 // Utilidades de presentación y de texto, sin estado ni dependencias de React.
 
 // Iniciales para avatares (máx. 2 letras)
+// El nombre puede llegar como espacios en blanco desde la base (alta manual con
+// la barra espaciadora). `!name` no atrapa ese caso —un string de espacios es
+// truthy— y sin el filtro de vacíos el split devuelve [''], con lo que las
+// iniciales terminaban siendo el texto literal "UNDEFINED" en el avatar.
 export const getInitials = (name) => {
-  if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
   return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
 };
 

@@ -89,9 +89,11 @@ const currentWeekStartISO = (now = new Date()): string => {
 type Member = { email: string; name: string; tz: string };
 type Pair = { a: Member; b: Member; slot: number };
 
-// Epoch (ms) de la PRÓXIMA ocurrencia de un slot UTC (0..167) que sea
-// >= now + minLeadMs. Si la de esta semana cae antes del piso, rueda a la
-// siguiente. Debe coincidir con nextSlotOccurrenceMs en src/matcher.js.
+// Epoch (ms) de la PRÓXIMA ocurrencia de un slot UTC (0..167) posterior a
+// now + minLeadMs. Si la de esta semana cae en el piso o antes, rueda a la
+// siguiente. El piso es ESTRICTO para que respondByMs nunca devuelva null sobre
+// un slot ya dado por bueno (ventana de confirmación de cero).
+// Debe coincidir con nextSlotOccurrenceMs en src/matcher.js.
 const nextSlotOccurrenceMs = (slot: number, now: Date, minLeadMs = 0): number => {
   const dayIdx = Math.floor(slot / 24);
   const hourUtc = slot % 24;
@@ -102,7 +104,7 @@ const nextSlotOccurrenceMs = (slot: number, now: Date, minLeadMs = 0): number =>
   const delta = (dayIdx - todayIdx + 7) % 7;
   d.setUTCDate(d.getUTCDate() + delta);
   const floor = now.getTime() + minLeadMs;
-  while (d.getTime() < floor) d.setUTCDate(d.getUTCDate() + 7);
+  while (d.getTime() <= floor) d.setUTCDate(d.getUTCDate() + 7);
   return d.getTime();
 };
 
@@ -278,6 +280,29 @@ Deno.serve(async (req) => {
       // sesión válida (cliente).
       return unauthorized('global run without cron secret or session');
     }
+
+    // --- LOCK: una sola corrida a la vez ---
+    // El cron dispara cada 10 minutos y una corrida con muchas salas puede
+    // tardar más que eso. Dos corridas solapadas leen el mismo estado de
+    // propuestas y de horarios ocupados antes de que ninguna escriba, y pueden
+    // terminar agendando a la misma persona dos veces en el mismo horario.
+    //
+    // El lock es la misma llave para la pasada global y para la dirigida:
+    // las dos escriben las mismas tablas. Quien no lo consigue NO es un error
+    // —el trabajo es idempotente y la próxima corrida del cron lo hace igual—,
+    // así que se responde 200 y el cliente no muestra ninguna alarma.
+    const { data: gotLock } = await supabase.rpc('try_acquire_job_lock', {
+      p_name: 'weekly-matcher',
+      p_ttl_seconds: 900
+    });
+    if (gotLock === false) {
+      return new Response(
+        JSON.stringify({ ok: true, skipped: 'already_running' }),
+        { headers: { 'Content-Type': 'application/json', ...cors } }
+      );
+    }
+
+    try {
 
     const now = new Date();
     const week = currentWeekStartISO();
@@ -483,6 +508,12 @@ Deno.serve(async (req) => {
           .forEach(rule => {
             const startUtcMin = rule.day_idx * 1440 + rule.start_hour * 60 - offset;
             const endUtcMin = rule.day_idx * 1440 + rule.end_hour * 60 - offset;
+            // Regla degenerada o invertida (start_hour >= end_hour, dato legado
+            // o corrupto): no describe ninguna franja real. Sin este corte, con
+            // un offset fraccionario (India +5:30) el solapamiento de abajo
+            // igual marcaría un slot que el cliente nunca mostró.
+            // Debe coincidir con addRuleSlots en src/slots.js.
+            if (endUtcMin <= startUtcMin) return;
             // Solapamiento (no contención total): con offsets no múltiplos de 60
             // (ej. India UTC+5:30) un bloque local de 1h nunca cae completamente
             // dentro de un slot UTC de 1h, y con "contención total" ese miembro
@@ -726,6 +757,12 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ ok: true, week, created: summary }), {
       headers: { 'Content-Type': 'application/json', ...cors }
     });
+
+    } finally {
+      // Se suelta pase lo que pase. Si esta corrida se cayera antes de llegar
+      // acá, el lock igual vence solo por TTL y el emparejador no queda trabado.
+      await supabase.rpc('release_job_lock', { p_name: 'weekly-matcher' });
+    }
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err) }), {
       status: 500,
