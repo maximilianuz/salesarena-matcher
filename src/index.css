@@ -630,17 +630,27 @@ html.dark .profile-card {
   transform: translateY(-1px);
 }
 
-/* La estrella barre el botón al pasar el mouse. Escala 18: con 14px de base
-   alcanza para tapar los ~200px de ancho del botón, y el desplazamiento la
-   corre hacia el centro para que el barrido no deje una esquina sin cubrir. */
+/* La estrella barre el botón al pasar el mouse hasta teñirlo entero.
+   Dos cosas que hacen falta para que el barrido no se quede a mitad de camino:
+     · La escala se mide contra el NÚCLEO SÓLIDO de la estrella, no contra su
+       caja. En una estrella de cinco puntas el relleno garantizado llega hasta
+       ~la mitad del radio; el resto son puntas y huecos. Con 14px de base y un
+       botón de ~215×34, el ángulo más lejano está a 109px del centro, así que
+       el núcleo tiene que superar eso: a escala 18 daba 42px y a 40 daba 93px
+       —de ahí que se coloreara solo una parte—; 55 da 128px y cubre con
+       margen. Las puntas se salen del botón, pero overflow:hidden las recorta.
+     · El desplazamiento la lleva al centro. La estrella arranca pegada al borde
+       izquierdo (es el ícono de la etiqueta) y creciendo desde ahí el lado
+       derecho quedaba sin cubrir. En un transform el translate se aplica ANTES
+       del scale, así que estos 1.6px terminan siendo ~88px. */
 .profile-review-star {
   flex-shrink: 0;
-  transition: transform 0.5s cubic-bezier(0.34, 1.2, 0.64, 1);
+  transition: transform 0.55s cubic-bezier(0.34, 1.05, 0.64, 1);
   transform-origin: center;
 }
 
 .profile-review-btn:hover .profile-review-star {
-  transform: scale(18) translate(2px, -0.5px);
+  transform: scale(55) translate(1.6px, 0);
 }
 
 /* El texto se corre para dejar pasar la estrella y queda POR ENCIMA de ella:
