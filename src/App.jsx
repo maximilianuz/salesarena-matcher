@@ -40,6 +40,7 @@ import {
   ChevronLeft,
   Globe,
   CalendarCheck,
+  CalendarPlus,
   CalendarDays,
   Handshake,
   Trophy,
@@ -91,7 +92,8 @@ import {
   escapeLikeLiteral,
   nameFromEmail,
   sleep,
-  slugifyRoomName
+  slugifyRoomName,
+  googleCalendarUrl
 } from './utils/format';
 
 // Unico usuario habilitado para crear salas nuevas, por el momento.
@@ -3904,9 +3906,37 @@ export default function App() {
                         <div className="match-card-footer">
                           {isConfirmed ? (
                             linkedMeeting ? (
-                              <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }} onClick={() => markJoined(linkedMeeting)}>
-                                <Video size={14} /> Abrir Google Meet
-                              </a>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                                <a href={linkedMeeting.meetLink} target="_blank" rel="noopener noreferrer" className="btn btn-indigo" style={{ width: '100%', textDecoration: 'none', boxSizing: 'border-box' }} onClick={() => markJoined(linkedMeeting)}>
+                                  <Video size={14} /> Abrir Google Meet
+                                </a>
+                                {/* Segunda vía para entrar, independiente del
+                                    evento automático: ese lo crea quien aceptó
+                                    segundo con su permiso de Google, y a la otra
+                                    persona le llega como invitación que Google
+                                    agrega o no según su configuración. */}
+                                {googleCalendarUrl({
+                                  title: linkedMeeting.title,
+                                  startsAt: linkedMeeting.startsAt,
+                                  durationMin: linkedMeeting.duration,
+                                  meetLink: linkedMeeting.meetLink
+                                }) && (
+                                  <a
+                                    href={googleCalendarUrl({
+                                      title: linkedMeeting.title,
+                                      startsAt: linkedMeeting.startsAt,
+                                      durationMin: linkedMeeting.duration,
+                                      meetLink: linkedMeeting.meetLink
+                                    })}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn-add-calendar btn-add-calendar-wide"
+                                    title="Agregar este role-play a tu Google Calendar"
+                                  >
+                                    <CalendarPlus size={13} /> Agregar a mi Google Calendar
+                                  </a>
+                                )}
+                              </div>
                             ) : (
                               <button
                                 className="btn btn-indigo"
@@ -4020,6 +4050,32 @@ export default function App() {
                                 >
                                   <Video size={12} /> Meet
                                 </a>
+                                {/* El evento automático lo crea quien aceptó
+                                    segundo, con su permiso de Google; a la otra
+                                    persona le llega como invitación y Google la
+                                    agrega o no según su configuración. Este
+                                    enlace no depende de nada de eso. */}
+                                {googleCalendarUrl({
+                                  title: meet.title,
+                                  startsAt: meet.startsAt,
+                                  durationMin: meet.duration,
+                                  meetLink: meet.meetLink
+                                }) && (
+                                  <a
+                                    href={googleCalendarUrl({
+                                      title: meet.title,
+                                      startsAt: meet.startsAt,
+                                      durationMin: meet.duration,
+                                      meetLink: meet.meetLink
+                                    })}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="btn-add-calendar"
+                                    title="Agregar este role-play a tu Google Calendar"
+                                  >
+                                    <CalendarPlus size={11} /> Agendar
+                                  </a>
+                                )}
                                 {canCancel && (
                                   <button
                                     type="button"
