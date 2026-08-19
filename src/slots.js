@@ -109,7 +109,8 @@ export const slotToLocalParts = (slot, tz) => {
 // Devuelve grid[day][hour] = { count, names }. Cada miembro cuenta a lo sumo
 // UNA vez por celda aunque tenga reglas superpuestas (p.ej. plantilla + carga
 // manual duplicada) o aunque la celda pise más de un slot UTC.
-export const buildHeatmapGrid = (members, avails, viewTz) => {
+export const buildHeatmapGrid = (members, avails, viewTz, selfEmail = null) => {
+  const selfKey = selfEmail ? selfEmail.toLowerCase() : null;
   const slotSets = computeSlotSets(members, avails);
   // Se guarda email + nombre y no solo el nombre: el conteo se deduplica por
   // email, así dos personas que se llaman igual siguen contando como dos.
@@ -144,7 +145,14 @@ export const buildHeatmapGrid = (members, avails, viewTz) => {
           names.push(m.name);
         }
       }
-      hoursRow.push({ count: names.length, names: names.join(', ') });
+      // `mine` marca las celdas donde está quien mira el mapa. Sin esto, en una
+      // grilla llena de números iguales no hay forma de reconocer las horas
+      // propias: se ve cuánta gente hay libre, pero no si uno está entre ellos.
+      hoursRow.push({
+        count: names.length,
+        names: names.join(', '),
+        mine: selfKey ? seen.has(selfKey) : false
+      });
     }
     grid.push(hoursRow);
   }

@@ -236,3 +236,37 @@ test('regla degenerada (startHour === endHour) no genera ningún slot', () => {
     assert.equal(invertida.size, 0, `franja invertida en ${tz}`);
   }
 });
+
+test('heatmap: marca las celdas donde está quien mira el mapa', () => {
+  // En una grilla llena de números iguales no hay forma de reconocer las horas
+  // propias sin esta marca: se ve cuánta gente hay libre, pero no si uno está
+  // entre ellos.
+  const yo = { email: 'yo@x.com', name: 'Yo', tz: 'UTC' };
+  const otro = { email: 'otro@x.com', name: 'Otro', tz: 'UTC' };
+  const avails = [
+    { memberEmail: 'yo@x.com', user: 'Yo', dayIdx: 0, startHour: 10, endHour: 11 },
+    { memberEmail: 'otro@x.com', user: 'Otro', dayIdx: 0, startHour: 10, endHour: 12 }
+  ];
+
+  const { grid } = buildHeatmapGrid([yo, otro], avails, 'UTC', 'yo@x.com');
+  assert.equal(grid[0][10].count, 2);
+  assert.equal(grid[0][10].mine, true, 'la hora 10 la marcó "yo"');
+  assert.equal(grid[0][11].count, 1);
+  assert.equal(grid[0][11].mine, false, 'la hora 11 solo la marcó el otro');
+  assert.equal(grid[1][10].mine, false, 'otro día, sin marcas');
+});
+
+test('heatmap: sin saber quién mira, ninguna celda queda marcada', () => {
+  const yo = { email: 'yo@x.com', name: 'Yo', tz: 'UTC' };
+  const avails = [{ memberEmail: 'yo@x.com', user: 'Yo', dayIdx: 0, startHour: 10, endHour: 11 }];
+  const { grid } = buildHeatmapGrid([yo], avails, 'UTC');
+  assert.equal(grid[0][10].count, 1);
+  assert.equal(grid[0][10].mine, false);
+});
+
+test('heatmap: la marca propia no depende de mayúsculas en el email', () => {
+  const yo = { email: 'Yo@X.com', name: 'Yo', tz: 'UTC' };
+  const avails = [{ memberEmail: 'Yo@X.com', user: 'Yo', dayIdx: 0, startHour: 10, endHour: 11 }];
+  const { grid } = buildHeatmapGrid([yo], avails, 'UTC', 'yo@x.com');
+  assert.equal(grid[0][10].mine, true);
+});
