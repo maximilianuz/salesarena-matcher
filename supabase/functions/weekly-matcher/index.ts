@@ -502,9 +502,12 @@ Deno.serve(async (req) => {
       ]);
       if (!members || members.length < 2) continue;
 
-      // Reuniones de la sala (base para rotación, faltas y score). La tabla
-      // meeting_attendees NO tiene columna room_id: sus filas se filtran por los
-      // IDs de las reuniones de esta sala.
+      // Reuniones de la sala (base para rotación, faltas y score). La asistencia
+      // se filtra por los IDs de esas reuniones. meeting_attendees TIENE una
+      // columna room_id (la agregó 20260717170200) y filtrar por ella sería
+      // equivalente, pero el vínculo real de una fila de asistencia es su
+      // reunión: si una sala se renombra y el backfill de room_id se atrasara,
+      // ir por los IDs sigue dando el conjunto correcto.
       const { data: meetingsRows } = await supabase
         .from('meetings').select('id, starts_at, duration').eq('room_id', roomId);
       const meetingIds = (meetingsRows || []).map(mt => mt.id);
