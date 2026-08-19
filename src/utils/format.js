@@ -54,3 +54,34 @@ export const slugifyRoomName = (name) =>
     .replace(/[^a-z0-9\s-]/g, '')    // quita símbolos
     .trim()
     .replace(/\s+/g, '-');
+
+// Enlace para agregar un role-play al calendario propio, en el formato de
+// plantilla de Google Calendar.
+//
+// Existe porque el evento automático no siempre llega a las dos personas: lo
+// crea quien acepta segundo, con SU permiso de Google —que vence en una hora y
+// Supabase no renueva—, y la otra lo recibe como invitación, que Google agrega
+// o no según la configuración de cada cuenta. Este enlace no depende de ningún
+// token ni de quién organizó: cada quien lo agrega al suyo con un clic.
+//
+// startsAt es ISO; la duración va en minutos.
+export const googleCalendarUrl = ({ title, startsAt, durationMin = 60, meetLink, details }) => {
+  // El chequeo de vacío va ANTES de construir la fecha: new Date(null) no es
+  // inválida, es el 1 de enero de 1970, así que sin esto una reunión sin
+  // starts_at ofrecía un enlace para agendar medio siglo atrás.
+  if (!startsAt) return null;
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return null;
+  const end = new Date(start.getTime() + durationMin * 60000);
+  // Google espera YYYYMMDDTHHMMSSZ, que es el ISO sin guiones ni milisegundos.
+  const stamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title || 'Role-play',
+    dates: `${stamp(start)}/${stamp(end)}`,
+    details: [details, meetLink ? `Videollamada: ${meetLink}` : '']
+      .filter(Boolean).join('\n\n'),
+    location: meetLink || ''
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+};
