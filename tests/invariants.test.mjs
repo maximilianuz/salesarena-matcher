@@ -139,3 +139,54 @@ test('la Edge Function y src/matcher.js declaran la MISMA ventana de confirmaci�
   );
   assert.equal(MIN_LEAD_MS, edgeSteps[edgeSteps.length - 1]);
 });
+
+// --- ACTUALIZACIÓN EN VIVO DEL TABLERO ---
+//
+// Estas dos guardas cubren un bug real: un match existía en la base y en
+// pantalla no aparecía. Realtime avisaba, `roomDataVersion` subía y se
+// recargaban miembros, horarios y reuniones, pero la carga de match_proposals
+// se había quedado sin esa dependencia, así que el único dato que había
+// cambiado era justamente el que no se volvía a leer. Se arreglaba recargando
+// la página a mano, que es lo que hace que el bug pase desapercibido.
+
+const appSrc = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
+
+test('la carga de propuestas se rehace cuando cambian los datos de la sala', () => {
+  const i = appSrc.indexOf(".from('match_proposals')");
+  assert.ok(i > 0, 'no se encontró la carga de match_proposals en App.jsx');
+
+  // Del inicio de la consulta hasta el cierre del useEffect: `}, [ ... ]);`
+  const resto = appSrc.slice(i);
+  const deps = resto.match(/\}, \[([^\]]*)\]\);/);
+  assert.ok(deps, 'no se encontró el array de dependencias del efecto');
+  assert.match(
+    deps[1],
+    /roomDataVersion/,
+    'el efecto que trae las propuestas no depende de roomDataVersion: un match ' +
+    'nuevo no llegaría a la pantalla hasta recargar la página'
+  );
+});
+
+test('todo lo que devuelve gente al pool vuelve a emparejar en el acto', () => {
+  // El cron corre cada 10 minutos. Si estos caminos no disparan la corrida
+  // dirigida, quien cancela o rechaza se queda mirando una pantalla vacía ese
+  // rato entero aunque el match ya se pudiera formar.
+  const disparos = appSrc.match(/triggerWeeklyMatcher\(/g) || [];
+  assert.ok(
+    disparos.length >= 7, // 1 definición + 6 llamadas
+    `se esperaban al menos 6 llamadas a triggerWeeklyMatcher y hay ${disparos.length - 1}`
+  );
+  for (const motivo of ['Registramos tu rechazo', 'Registramos tu cancelación', 'Registramos tu baja']) {
+    assert.match(appSrc, new RegExp(motivo), `falta el disparo tras "${motivo}"`);
+  }
+});
+
+test('darse de baja cancela las propuestas vivas por los dos caminos', () => {
+  // El asistente ya lo hacía; el interruptor de participación no, y del otro
+  // lado quedaba gente con una sesión confirmada contra alguien que se fue.
+  const bajas = appSrc.match(/cancelStaleProposals\(null\)/g) || [];
+  assert.equal(
+    bajas.length, 2,
+    'la baja debe cancelar propuestas tanto desde el asistente como desde el interruptor'
+  );
+});
