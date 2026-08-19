@@ -523,33 +523,37 @@ Deno.serve(async (req) => {
       const blocked = new Set<string>();
       for (const [email, count] of faltasMes) if (count >= 3) blocked.add(email);
 
-      // Parejas que NO se pueden repetir esta semana:
-      // - RECHAZADO: exclusión DURA (se respeta el "no")
-      // - CANCELADO: no se re-ofrece esta semana
-      // - PROPUESTO/CONFIRMADO: ya tienen propuesta viva con esta persona
+      // Lo ÚNICO que bloquea a una dupla para toda la semana es un RECHAZO:
+      // ahí hubo un "no" explícito y se respeta.
       const excluded = new Set<string>(
         (weekProposals || [])
-          .filter(p => p.status === 'rechazado' || p.status === 'cancelado' ||
-                        p.status === 'propuesto' || p.status === 'confirmado')
+          .filter(p => p.status === 'rechazado')
           .map(p => pairKeyOf(p.member_a_email, p.member_b_email))
       );
-      // Parejas EXPIRADAS (nadie confirmó con 4hs de antelación): exclusión
-      // BLANDA. Se prefiere REASIGNAR a otro compañero disponible del mapa de
-      // calor; solo si no hay alternativa se re-ofrece la misma dupla,
-      // REACTIVANDO la fila vencida (evita violar el UNIQUE por sala/semana/dupla).
-      // Una MISMA dupla puede tener varias propuestas vencidas en la semana
-      // (ahora que pueden juntarse más de una vez), así que se guardan en cola:
-      // cada sesión nueva reutiliza una fila vencida distinta y, cuando se
-      // acaban, se insertan filas nuevas. Con un solo id por dupla, la segunda
-      // sesión pisaba la reactivación de la primera y se perdía una propuesta.
+
+      // Todo lo demás es exclusión BLANDA: se prefiere a alguien con quien no se
+      // haya coincidido todavía, pero si no queda nadie más la dupla se vuelve a
+      // ofrecer, en OTRO horario.
+      //   * EXPIRADO: nadie confirmó a tiempo.
+      //   * CANCELADO: se cayó esa sesión puntual. Que no puedan volver a
+      //     coincidir en otro día por eso dejaba a dos personas disponibles sin
+      //     practicar durante toda la semana.
+      //   * PROPUESTO/CONFIRMADO: ya tienen una sesión juntos. Alcanza para
+      //     preferir a otro, no para negarles una segunda cuando no hay otro.
+      //
+      // Las filas EXPIRADAS y CANCELADAS se reutilizan en vez de insertar una
+      // nueva: son duplas que ya tienen fila para esta semana y reciclarlas
+      // evita chocar contra el índice único de (sala, semana, horario, dupla).
+      // Van en cola porque una misma dupla puede tener varias.
       const softExcluded = new Set<string>();
-      const expiredByPair = new Map<string, number[]>();
+      const revivableByPair = new Map<string, number[]>();
       for (const p of weekProposals || []) {
-        if (p.status === 'expirado') {
-          const k = pairKeyOf(p.member_a_email, p.member_b_email);
-          softExcluded.add(k);
-          if (!expiredByPair.has(k)) expiredByPair.set(k, []);
-          expiredByPair.get(k)!.push(p.id);
+        if (p.status === 'rechazado') continue;
+        const k = pairKeyOf(p.member_a_email, p.member_b_email);
+        softExcluded.add(k);
+        if (p.status === 'expirado' || p.status === 'cancelado') {
+          if (!revivableByPair.has(k)) revivableByPair.set(k, []);
+          revivableByPair.get(k)!.push(p.id);
         }
       }
 
@@ -821,7 +825,7 @@ Deno.serve(async (req) => {
         // shift() y no get(): la fila vencida se consume. Si esta dupla tiene
         // una segunda sesión esta semana, va a buscar la siguiente de la cola o
         // a insertar una nueva, en vez de sobrescribir la que se acaba de usar.
-        const revivedId = expiredByPair.get(pairKeyOf(p.a.email, p.b.email))?.shift();
+        const revivedId = revivableByPair.get(pairKeyOf(p.a.email, p.b.email))?.shift();
         if (revivedId !== undefined) {
           revived++;
           await supabase.from('match_proposals').update({
@@ -848,8 +852,22 @@ Deno.serve(async (req) => {
       let inserted = 0;
       if (toInsert.length) {
         const { error } = await supabase.from('match_proposals').insert(toInsert);
-        if (error) continue;
-        inserted = toInsert.length;
+        if (error) {
+          // El lote es todo-o-nada: una sola fila que choque contra el índice
+          // único dejaría a la sala ENTERA sin propuestas esa corrida. Se
+          // reintenta fila por fila para salvar las que sí entran, y se sigue.
+          console.warn(`Insert en lote falló en ${roomId}, reintentando de a una:`, error.message);
+          for (const fila of toInsert) {
+            const { error: filaError } = await supabase.from('match_proposals').insert(fila);
+            if (filaError) {
+              console.warn('Propuesta descartada:', filaError.message);
+            } else {
+              inserted++;
+            }
+          }
+        } else {
+          inserted = toInsert.length;
+        }
       }
       // Lo que se informa es lo que REALMENTE quedó propuesto: los pares que se
       // descartan por no entrar en la ventana de confirmación no cuentan, y el

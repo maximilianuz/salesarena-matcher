@@ -490,3 +490,58 @@ test('cupo semanal: pedir muchas no fabrica sesiones si nadie más tiene lugar',
 
   assert.equal(pairs.length, 1, 'el cupo del compañero también limita');
 });
+
+test('cancelar una sesión no impide volver a coincidir en OTRO horario', () => {
+  // Ana y Beto cancelan su sesión del lunes. Son los únicos dos de la sala y
+  // les quedan dos horas más en común. Bloquear la dupla por la cancelación
+  // los dejaba sin practicar el resto de la semana.
+  const members = [member('a@x.com', 'Ana', AR), member('b@x.com', 'Beto', AR)];
+  const avails = [rule('Ana', 0, 10, 13), rule('Beto', 0, 10, 13)];
+  const slotSets = computeSlotSets(members, avails);
+
+  // La dupla viene de una cancelación: exclusión blanda, no dura.
+  const soft = new Set([pairKey('a@x.com', 'b@x.com')]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, soft, MIN_LEAD_MS
+  );
+
+  assert.ok(pairs.length > 0, 'la dupla debe poder volver a coincidir');
+  assert.equal(new Set(pairs.map(p => p.slot)).size, pairs.length,
+    'cada sesión nueva en una hora distinta');
+});
+
+test('un RECHAZO sí bloquea a la dupla, aunque no quede nadie más', () => {
+  // La diferencia con cancelar: acá hubo un "no" explícito a esa persona.
+  const members = [member('a@x.com', 'Ana', AR), member('b@x.com', 'Beto', AR)];
+  const avails = [rule('Ana', 0, 10, 13), rule('Beto', 0, 10, 13)];
+  const slotSets = computeSlotSets(members, avails);
+  const rechazada = new Set([pairKey('a@x.com', 'b@x.com')]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), rechazada, new Map(), NOW, new Set(), MIN_LEAD_MS
+  );
+
+  assert.equal(pairs.length, 0, 'el "no" explícito se respeta toda la semana');
+});
+
+test('con alguien nuevo disponible, la dupla cancelada NO se repite', () => {
+  // El orden importa: la cancelada se evita mientras haya cara nueva.
+  const members = [
+    member('a@x.com', 'Ana', AR),
+    member('b@x.com', 'Beto', AR),
+    member('c@x.com', 'Cami', AR)
+  ];
+  const avails = ['Ana', 'Beto', 'Cami'].map(u => rule(u, 0, 10, 11));
+  const slotSets = computeSlotSets(members, avails);
+  const soft = new Set([pairKey('a@x.com', 'b@x.com')]);
+
+  const pairs = buildWeeklyPairsMultiRound(
+    members, slotSets, new Map(), new Set(), new Map(), NOW, soft, MIN_LEAD_MS
+  );
+
+  assert.equal(pairs.length, 1, 'solo hay una hora, sale una dupla');
+  const dupla = [pairs[0].a.email, pairs[0].b.email].sort().join('|');
+  assert.notEqual(dupla, pairKey('a@x.com', 'b@x.com'),
+    'habiendo cara nueva, no se repite la dupla cancelada');
+});

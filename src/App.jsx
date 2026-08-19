@@ -672,21 +672,25 @@ export default function App() {
     const week = currentWeekStartISO();
     const pairKeyOf = (a, b) => [a.toLowerCase(), b.toLowerCase()].sort().join('|');
     const weekProposals = proposals.filter(p => p.weekStart === week);
-    // Se excluyen las duplas RECHAZADAS (se respeta el "no" explícito), las
-    // CANCELADAS esta semana (no re-ofrecer la que se cayó) y las que ya tienen
-    // una propuesta VIVA. Se excluye la dupla, no a la persona: cada integrante
-    // queda libre para matchear con otros, igual que en la Edge Function.
+    // Lo ÚNICO que bloquea a una dupla para toda la semana es un RECHAZO: ahí
+    // hubo un "no" explícito y se respeta. Se excluye la dupla, no a la
+    // persona: cada integrante queda libre para matchear con otros. Debe
+    // coincidir con la Edge Function.
     const excludedPairs = new Set(
       weekProposals
-        .filter(p => p.status === 'rechazado' || p.status === 'cancelado' ||
-                     p.status === 'propuesto' || p.status === 'confirmado')
+        .filter(p => p.status === 'rechazado')
         .map(p => pairKeyOf(p.aEmail, p.bEmail))
     );
-    // Duplas EXPIRADAS (sin respuesta): se evitan si hay otro compañero
-    // disponible; si no, se vuelven a ofrecer.
-    const expiredPairs = new Set(
+    // El resto es exclusión BLANDA: se prefiere a alguien nuevo, pero si no
+    // queda nadie más la dupla se vuelve a ofrecer en OTRO horario.
+    //   * EXPIRADO: nadie confirmó a tiempo.
+    //   * CANCELADO: se cayó esa sesión puntual. Bloquear a la dupla por eso
+    //     dejaba a dos personas disponibles sin practicar toda la semana.
+    //   * PROPUESTO/CONFIRMADO: ya tienen una sesión juntos; alcanza para
+    //     preferir a otro, no para negarles una segunda cuando no hay otro.
+    const softPairs = new Set(
       weekProposals
-        .filter(p => p.status === 'expirado')
+        .filter(p => p.status !== 'rechazado')
         .map(p => pairKeyOf(p.aEmail, p.bEmail))
     );
     // Horarios ya comprometidos por las propuestas vivas: nadie puede terminar
@@ -723,7 +727,7 @@ export default function App() {
     );
     const pairs = buildWeeklyPairsMultiRound(
       pool, slotSets, scores, excludedPairs, new Map(), new Date(),
-      expiredPairs, MIN_LEAD_MS, busySlots, sessionCounts, weeklyTargets
+      softPairs, MIN_LEAD_MS, busySlots, sessionCounts, weeklyTargets
     );
     if (pairs.length === 0) return;
 
