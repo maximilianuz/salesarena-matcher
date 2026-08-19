@@ -558,7 +558,14 @@ export default function App() {
     localStorage.setItem(`salesarena-mock-proposals-${currentRoomId}`, JSON.stringify(proposals));
   }, [meetings, attendances, proposals, currentRoomId]);
 
-  // Producción: cargar SOLO la propuesta propia de la semana actual
+  // Producción: cargar SOLO la propuesta propia de la semana actual.
+  //
+  // Depende de `roomDataVersion` —igual que la carga del resto de la sala— y esa
+  // es la pieza que faltaba para que el tablero se actualizara solo. Realtime
+  // avisaba de la propuesta nueva, la versión subía y se recargaban miembros,
+  // horarios y reuniones... pero NO las propuestas, que era justo el dato que
+  // había cambiado. El match ya estaba en la base y en pantalla no aparecía
+  // hasta recargar la página a mano.
   useEffect(() => {
     if (useMockDb || !currentUser) return;
     const week = currentWeekStartISO();
@@ -590,7 +597,7 @@ export default function App() {
           })));
         }
       });
-  }, [currentUser?.email, currentRoomId]);
+  }, [currentUser?.email, currentRoomId, roomDataVersion]);
 
   // Slot UTC → fecha y hora reales de la próxima ocurrencia en la zona de una
   // persona ("Lunes 17/08/2026 · 14:00"). Reutiliza getNextMatchDateUtc (la
@@ -1213,6 +1220,9 @@ export default function App() {
             ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
             : '¡Registrado! Has sido excluido por esta semana.'
         });
+        // Reasignar a los que quedaron sueltos en el acto, no en la próxima
+        // pasada del cron: es gente que se organizó para practicar hoy.
+        if (caidas > 0) triggerWeeklyMatcher({ yaGuardado: 'Registramos tu baja' });
         setTimeout(() => {
           setActiveTab('dashboard');
           setWizardStep(1);
@@ -1335,8 +1345,15 @@ export default function App() {
     return caducas.length;
   };
 
-  // Dispara el weekly-matcher al instante cuando hay un cambio de disponibilidad
-  const triggerWeeklyMatcher = async () => {
+  // Dispara el weekly-matcher AL INSTANTE. Se llama en todo momento en que
+  // alguien vuelve al pool o cambia lo que el emparejador necesita saber:
+  // horarios nuevos, baja de participación, rechazo de una propuesta,
+  // cancelación de una reunión. Sin esto había que esperar a la próxima pasada
+  // del cron —hasta 10 minutos— para ver un match que ya se podía formar.
+  // `yaGuardado` nombra lo que SÍ quedó guardado, para el aviso de error: la
+  // función se llama desde flujos distintos y decirle "tus horarios se
+  // guardaron" a quien acaba de cancelar una reunión no explica nada.
+  const triggerWeeklyMatcher = async ({ yaGuardado = 'Tus horarios se guardaron' } = {}) => {
     try {
       const url = import.meta.env.VITE_SUPABASE_URL;
       if (!url || url.includes('placeholder')) {
@@ -1350,7 +1367,7 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) return;
 
-      const response = await fetch(
+      const correr = () => fetch(
         `${url}/functions/v1/weekly-matcher?room=${encodeURIComponent(currentRoomId)}`,
         {
           method: 'POST',
@@ -1362,27 +1379,42 @@ export default function App() {
         }
       );
 
+      let response = await correr();
+      let data = response.ok ? await response.json() : null;
+
+      // La sala estaba tomada por otra corrida (el cron, o dos personas que
+      // tocaron algo en el mismo segundo). Dura menos de un segundo, así que se
+      // espera y se reintenta en vez de dejar el cambio para dentro de 10 min.
+      for (let intento = 0; intento < 3 && data?.skipped === 'already_running'; intento++) {
+        await new Promise(r => setTimeout(r, 700 * (intento + 1)));
+        response = await correr();
+        data = response.ok ? await response.json() : null;
+      }
+
       if (response.ok) {
-        const data = await response.json();
         console.log('Weekly-matcher triggered:', data);
-        if (data.created && Object.values(data.created).some(v => v > 0)) {
+        // Refresco explícito: no se espera al evento de Realtime. Es el mismo
+        // refetch que usa la sala en vivo, pero disparado por quien provocó el
+        // cambio, que es justo la persona que está mirando la pantalla.
+        setRoomDataVersion(v => v + 1);
+        if (data?.created && Object.values(data.created).some(v => v > 0)) {
           showNotification('✨ ¡Se generaron nuevas propuestas de emparejamiento!');
         }
       } else {
         // Silenciar esto ya costó un incidente: el preflight de CORS fallaba
         // siempre, nadie se enteraba, y el emparejamiento parecía "no encontrar
-        // a nadie" cuando en realidad la llamada nunca llegaba. Los horarios SÍ
-        // quedaron guardados, así que el aviso dice qué se perdió y qué no.
+        // a nadie" cuando en realidad la llamada nunca llegaba. El cambio SÍ
+        // quedó guardado, así que el aviso dice qué se perdió y qué no.
         console.error('Weekly-matcher error:', response.statusText);
         showNotification(
-          'Tus horarios se guardaron, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.',
+          `${yaGuardado}, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.`,
           'error'
         );
       }
     } catch (err) {
       console.error('Failed to trigger weekly-matcher:', err);
       showNotification(
-        'Tus horarios se guardaron, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.',
+        `${yaGuardado}, pero no pudimos buscar coincidencias ahora. Se reintenta solo en unos minutos.`,
         'error'
       );
     }
@@ -2529,7 +2561,19 @@ export default function App() {
         return;
       }
       setAvailabilities(prev => prev.filter(a => !ruleBelongsTo(a, currentUser)));
-      showNotification('Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.');
+
+      // Darse de baja acá tiene que hacer lo MISMO que darse de baja desde el
+      // asistente: borrar los horarios no alcanzaba, las propuestas vivas
+      // seguían en pie y del otro lado quedaba gente con una sesión confirmada
+      // contra alguien que ya no participa, sin poder reasignarse.
+      const caidas = await cancelStaleProposals(null);
+      showNotification(
+        caidas > 0
+          ? `Desactivaste tu participación. Se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
+          : 'Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.'
+      );
+      // Los que quedaron sueltos vuelven al pool ahora mismo.
+      if (caidas > 0) triggerWeeklyMatcher({ yaGuardado: 'Registramos tu baja' });
     } else {
       // Cargar disponibilidad desde la plantilla habitual
       const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
@@ -2846,7 +2890,10 @@ export default function App() {
     setProposals(prev => prev.map(p => p.id === proposal.id ? updated : p));
 
     if (!accept) {
-      showNotification('Rechazaste la propuesta. El emparejador te asignará otro compañero disponible en la próxima corrida.');
+      showNotification('Rechazaste la propuesta. Estamos buscándote otro compañero disponible.');
+      // Los dos vuelven al pool en este mismo momento: se busca de nuevo ya, sin
+      // esperar la pasada del cron.
+      triggerWeeklyMatcher({ yaGuardado: 'Registramos tu rechazo' });
       return;
     }
     if (newStatus === 'confirmado' && shouldCreateMeeting) {
@@ -2968,8 +3015,9 @@ export default function App() {
 
     // Cerrar la propuesta vinculada: sin esto, la dupla quedaría 'confirmado'
     // toda la semana y el emparejador nunca liberaría a ninguno de los dos.
-    // Con 'cancelado', ambos vuelven al pool y pueden ser reasignados con otro
-    // compañero disponible en la próxima corrida (cada 10 min).
+    // Con 'cancelado', ambos vuelven al pool: pueden reasignarse con otro
+    // compañero y también volver a coincidir ENTRE ELLOS en otro horario, que
+    // es lo único que 'cancelado' no bloquea (solo un rechazo cierra la dupla).
     const linkedProposal = proposals.find(p => p.meetingId === meeting.id);
     if (linkedProposal) {
       if (!useMockDb) {
@@ -2990,6 +3038,13 @@ export default function App() {
         : 'Cancelaste tu asistencia con aviso. No cuenta como falta.',
       isLate ? 'error' : 'success'
     );
+
+    // Se busca reemplazo en el acto. Sin esto había que esperar al cron: el
+    // horario quedaba libre para los dos pero la pantalla no mostraba nada
+    // nuevo hasta 10 minutos después.
+    if (linkedProposal) {
+      triggerWeeklyMatcher({ yaGuardado: 'Registramos tu cancelación' });
+    }
   };
 
   // Los avisos de error NO se autodestruyen: quedan hasta que se cierran a

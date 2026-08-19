@@ -344,13 +344,28 @@ Deno.serve(async (req) => {
     // propuestas y de horarios ocupados antes de que ninguna escriba, y pueden
     // terminar agendando a la misma persona dos veces en el mismo horario.
     //
-    // El lock es la misma llave para la pasada global y para la dirigida:
-    // las dos escriben las mismas tablas. Quien no lo consigue NO es un error
-    // —el trabajo es idempotente y la próxima corrida del cron lo hace igual—,
-    // así que se responde 200 y el cliente no muestra ninguna alarma.
+    // La llave depende del ALCANCE de la corrida:
+    //   * pasada global (cron): llave global, TTL largo, porque recorrer todas
+    //     las salas puede tardar.
+    //   * corrida dirigida (?room=): llave de ESA sala, TTL corto, porque
+    //     termina en menos de un segundo.
+    //
+    // Antes era una sola llave global para las dos, y eso peleaba justo contra
+    // lo que la app necesita. Las corridas dirigidas se disparan al instante
+    // cada vez que alguien cancela, rechaza o cambia sus horarios: con la llave
+    // compartida caían encima del cron y se descartaban sin emparejar nada, y
+    // si una corrida moría sin llegar al finally, el TTL de 900s dejaba el
+    // emparejamiento entero parado 15 minutos. Con la llave por sala, dos salas
+    // distintas no se estorban y la espera máxima es la de la propia sala.
+    //
+    // Quien no consigue la llave NO es un error —el trabajo es idempotente y la
+    // próxima corrida lo hace igual—, así que se responde 200 y el cliente no
+    // muestra ninguna alarma; lo reintenta él mismo enseguida.
+    const roomLockName = (id: string) => `weekly-matcher:room:${id}`;
+    const lockName = onlyRoom ? roomLockName(onlyRoom) : 'weekly-matcher';
     const { data: gotLock } = await supabase.rpc('try_acquire_job_lock', {
-      p_name: 'weekly-matcher',
-      p_ttl_seconds: 900
+      p_name: lockName,
+      p_ttl_seconds: onlyRoom ? 60 : 900
     });
     // Se compara contra `false` a propósito, y no `if (!gotLock)`: si la RPC
     // falla —por ejemplo porque la migración del lock todavía no se aplicó—
@@ -364,6 +379,21 @@ Deno.serve(async (req) => {
         { headers: { 'Content-Type': 'application/json', ...cors } }
       );
     }
+
+    // La pasada global toma ADEMÁS la llave de cada sala mientras la procesa. Si
+    // no, una corrida dirigida que llegue en ese momento emparejaría sobre el
+    // mismo estado de propuestas y podría agendar a la misma persona dos veces
+    // en el mismo horario. En la corrida dirigida la llave ya se tomó arriba.
+    //
+    // Va acá afuera y no dentro del try porque el finally la necesita: lo que se
+    // declara dentro del bloque no existe para el finally.
+    let salaTomada: string | null = null;
+    const soltarSala = async () => {
+      if (!salaTomada) return;
+      const previa = salaTomada;
+      salaTomada = null;
+      await supabase.rpc('release_job_lock', { p_name: roomLockName(previa) });
+    };
 
     try {
 
@@ -451,6 +481,19 @@ Deno.serve(async (req) => {
 
     for (const room of rooms || []) {
       const roomId = room.id;
+
+      // La sala anterior se suelta acá, al empezar la siguiente, y no al final
+      // del ciclo: el cuerpo tiene varios `continue` y así ninguno se saltea la
+      // liberación. La última queda a cargo del finally de abajo.
+      await soltarSala();
+      if (!onlyRoom) {
+        const { data: gotRoom } = await supabase.rpc('try_acquire_job_lock', {
+          p_name: roomLockName(roomId),
+          p_ttl_seconds: 60
+        });
+        if (gotRoom === false) continue; // alguien más está con esta sala
+        salaTomada = roomId;
+      }
 
       const [{ data: members }, { data: avails }, { data: weekProposals }] = await Promise.all([
         supabase.from('members').select('*').eq('room_id', roomId).eq('active', true),
@@ -882,7 +925,8 @@ Deno.serve(async (req) => {
     } finally {
       // Se suelta pase lo que pase. Si esta corrida se cayera antes de llegar
       // acá, el lock igual vence solo por TTL y el emparejador no queda trabado.
-      await supabase.rpc('release_job_lock', { p_name: 'weekly-matcher' });
+      await soltarSala();
+      await supabase.rpc('release_job_lock', { p_name: lockName });
     }
   } catch (err) {
     return new Response(JSON.stringify({ ok: false, error: String(err) }), {
