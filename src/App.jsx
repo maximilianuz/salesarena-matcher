@@ -1127,7 +1127,7 @@ export default function App() {
     }
 
     const { grid, slotSets } = buildHeatmapGrid(
-      activeMembers, availabilities, currentUser?.tz || 'UTC'
+      activeMembers, availabilities, currentUser?.tz || 'UTC', currentUser?.email
     );
     setHeatmap(grid);
 
@@ -1199,7 +1199,16 @@ export default function App() {
         }
         const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
         setAvailabilities(cleanAvail);
-        setWizardStatus({ type: 'success', msg: '¡Registrado! Has sido excluido por esta semana.' });
+        // Quien se da de baja no puede sostener sus role-plays: del otro lado
+        // hay gente que se organizó para estar. Se cancelan para que vuelvan al
+        // emparejamiento y puedan conseguir otro compañero esta misma semana.
+        const caidas = await cancelStaleProposals(null);
+        setWizardStatus({
+          type: 'success',
+          msg: caidas > 0
+            ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
+            : '¡Registrado! Has sido excluido por esta semana.'
+        });
         setTimeout(() => {
           setActiveTab('dashboard');
           setWizardStep(1);
@@ -1275,6 +1284,51 @@ export default function App() {
     );
     if (insError) return 'No pudimos guardar tus horarios. Intentá de nuevo en un momento.';
     return null;
+  };
+
+  // Da de baja las propuestas vivas que dejaron de tener sentido.
+  //
+  // Antes, cambiar la disponibilidad o dejar de participar NO tocaba lo ya
+  // propuesto: quedaba una propuesta apuntando a una hora que la persona ya no
+  // tiene marcada, y del otro lado alguien esperando una sesión que no va a
+  // ocurrir. Se cancela solo lo que corresponde:
+  //   * `rules` con las reglas nuevas → cae lo que quedó fuera de ese horario.
+  //   * `rules` en null (dejó de participar) → caen todas.
+  // Devuelve cuántas se cancelaron, para poder avisarle a quien lo provocó.
+  const cancelStaleProposals = async (rules) => {
+    if (useMockDb || !currentUser) return 0;
+    const myEmail = currentUser.email.toLowerCase();
+
+    const mias = proposals.filter(p =>
+      p.weekStart === currentWeekStartISO() &&
+      (p.status === 'propuesto' || p.status === 'confirmado') &&
+      [p.aEmail, p.bEmail].some(e => e?.toLowerCase() === myEmail)
+    );
+    if (mias.length === 0) return 0;
+
+    let caducas;
+    if (rules === null) {
+      caducas = mias; // se dio de baja: no puede sostener ninguna
+    } else {
+      // Mismo cálculo que usa el emparejador, así lo que se conserva es
+      // exactamente lo que seguiría siendo válido para él.
+      const misSlots = computeSlotSets([currentUser], rules).get(currentUser.email) || new Set();
+      caducas = mias.filter(p => !misSlots.has(p.slot));
+    }
+    if (caducas.length === 0) return 0;
+
+    const ids = caducas.map(p => p.id);
+    const { error } = await supabase
+      .from('match_proposals')
+      .update({ status: 'cancelado' })
+      .in('id', ids);
+    if (error) {
+      console.error('cancelStaleProposals:', error);
+      return 0;
+    }
+    setProposals(prev => prev.map(p =>
+      ids.includes(p.id) ? { ...p, status: 'cancelado' } : p));
+    return caducas.length;
   };
 
   // Dispara el weekly-matcher al instante cuando hay un cambio de disponibilidad
@@ -1358,6 +1412,8 @@ export default function App() {
       setAvailabilities([...cleanAvail, ...userTemplateRules]);
 
       setWizardStatus({ type: 'success', msg: '¡Horario base cargado con éxito para esta semana!' });
+
+      await cancelStaleProposals(userTemplateRules);
 
       // Disparar weekly-matcher al instante para generar propuestas
       triggerWeeklyMatcher();
@@ -1507,6 +1563,19 @@ export default function App() {
     }
 
     setWizardStatus({ type: 'success', msg: '¡Disponibilidad guardada correctamente!' });
+
+    // Lo que ya estaba propuesto fuera de este horario nuevo se cae: sostener
+    // una sesión en una hora que la persona acaba de sacar dejaría al compañero
+    // esperando de gusto.
+    const caidas = await cancelStaleProposals(newRules);
+    if (caidas > 0) {
+      showNotification(
+        caidas === 1
+          ? 'Se canceló 1 role-play que quedaba fuera de tu horario nuevo. Tu compañero vuelve al emparejamiento.'
+          : `Se cancelaron ${caidas} role-plays que quedaban fuera de tu horario nuevo. Tus compañeros vuelven al emparejamiento.`,
+        'info'
+      );
+    }
 
     // 5. Disparar weekly-matcher al instante para generar propuestas
     triggerWeeklyMatcher();
@@ -4423,6 +4492,12 @@ export default function App() {
                         <span className="heatmap-legend-text">{l.label}</span>
                       </div>
                     ))}
+                    {/* La marca propia se explica acá y no en un tooltip: el
+                        borde no significa nada por sí solo la primera vez. */}
+                    <div className="heatmap-legend-item">
+                      <span className="heatmap-legend-swatch heatmap-legend-swatch-mine"></span>
+                      <span className="heatmap-legend-text">Tus horas</span>
+                    </div>
                   </div>
 
                   <div className="table-responsive-wrapper">
@@ -4443,7 +4518,7 @@ export default function App() {
                           <tr key={h}>
                             <th scope="row" className="heatmap-td-hour">{String(h).padStart(2, '0')}:00</th>
                             {Array.from({ length: 7 }).map((_, d) => {
-                              const cellData = heatmap[d]?.[h] || { count: 0, names: '' };
+                              const cellData = heatmap[d]?.[h] || { count: 0, names: '', mine: false };
                               const level = levelFor(cellData.count);
                               const isSelected = selectedHeatmapCell?.day === d && selectedHeatmapCell?.hour === h;
                               // Sin celda elegida, la única tabulable es la primera.
@@ -4455,11 +4530,11 @@ export default function App() {
                                     type="button"
                                     data-heatmap-cell={`${d}-${h}`}
                                     tabIndex={isTabStop ? 0 : -1}
-                                    className={`heatmap-cell-btn ${isSelected ? 'selected' : ''}`}
+                                    className={`heatmap-cell-btn ${isSelected ? 'selected' : ''} ${cellData.mine ? 'is-mine' : ''}`}
                                     style={{ backgroundColor: level.bg, color: level.ink }}
                                     onClick={() => setSelectedHeatmapCell({ day: d, hour: h })}
                                     aria-pressed={isSelected}
-                                    aria-label={`${DIAS[d]} ${String(h).padStart(2, '0')}:00 — ${cellData.count === 0 ? 'nadie disponible' : `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}`}`}
+                                    aria-label={`${DIAS[d]} ${String(h).padStart(2, '0')}:00 — ${cellData.count === 0 ? 'nadie disponible' : `${cellData.count} ${cellData.count === 1 ? 'persona disponible' : 'personas disponibles'}`}${cellData.mine ? ', marcaste esta hora' : ''}`}
                                   >
                                     {cellData.count > 0 ? cellData.count : ''}
                                   </button>
