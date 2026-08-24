@@ -195,7 +195,12 @@ GRANT EXECUTE ON FUNCTION public.submit_session_closeout(uuid, text, text, text,
 -- ============================================================
 -- Compromiso, reciprocidad, veracidad y bloqueo por mentir. No expone en ningún
 -- caso quién dijo qué: el compromiso llega ya promediado.
-CREATE OR REPLACE FUNCTION public.my_closeout_standing()
+--
+-- DROP y no CREATE OR REPLACE: esta función ya existía en 20260815120000 con
+-- menos columnas de salida, y Postgres no permite cambiar el tipo de fila que
+-- definen los parámetros OUT.
+DROP FUNCTION IF EXISTS public.my_closeout_standing();
+CREATE FUNCTION public.my_closeout_standing()
 RETURNS TABLE(
   engagement_pct INT,
   engagement_count BIGINT,
