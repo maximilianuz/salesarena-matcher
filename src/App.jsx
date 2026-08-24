@@ -71,12 +71,13 @@ import {
   // Cierre de sesión (lo que responden los dos después del role-play)
   ClipboardCheck,
   ThumbsUp,
-  Gauge
+  Gauge,
+  AlertTriangle
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
 import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessLocationFromBrowser } from './domain/zones';
-import { getNextMatchDateUtc, formatMeetingDateUtc } from './domain/schedule';
+import { getNextMatchDateUtc, formatMeetingDateUtc, canRecordJoin } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
 import {
   getEngagement,
@@ -84,7 +85,13 @@ import {
   getCredibility,
   getPraiseReceived,
   getOwedCloseouts,
-  CLOSEOUT_WINDOW_MS
+  getVeracity,
+  getProvenLies,
+  getPatternStrikes,
+  getMonthlyLies,
+  isBlockedForLying,
+  CLOSEOUT_WINDOW_MS,
+  MONTHLY_LIES_LIMIT
 } from './closeouts';
 import {
   getInitials,
@@ -231,6 +238,32 @@ export default function App() {
     try { return sessionStorage.getItem(storageKey) || ''; } catch { return ''; }
   });
 
+  // Enlace de ingreso que viaja en el evento de Google Calendar
+  // (?join=<meetingId>). Existe para que el click a la reunión pase por la app
+  // y deje registro en joined_at, en vez de ir derecho a Meet: sin ese registro
+  // el barrido marca no-show a quien sí asistió, y la resolución de disputas
+  // del cierre se queda sin evidencia.
+  //
+  // Se guarda en sessionStorage por lo mismo que el código de invitación: si la
+  // persona no tenía sesión abierta, el login con Google sale del sitio y vuelve
+  // a una URL limpia.
+  const JOIN_STORAGE_KEY = `salesarena-join:${getRoomIdFromUrl() || 'grupo-a'}`;
+  const [joinMeetingId] = useState(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('join');
+    if (fromUrl) {
+      const clean = fromUrl.trim();
+      try { sessionStorage.setItem(JOIN_STORAGE_KEY, clean); } catch { /* modo privado */ }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('join');
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+      return clean;
+    }
+    try { return sessionStorage.getItem(JOIN_STORAGE_KEY) || ''; } catch { return ''; }
+  });
+  // null | 'entrando' | 'error'
+  const [joinState, setJoinState] = useState(null);
+  const [joinError, setJoinError] = useState('');
+  const joinHandledRef = useRef(false);
 
   // Tema (light | dark | system)
   const [theme, setTheme] = useState(() => {
@@ -817,6 +850,17 @@ export default function App() {
 
   const blockedMembersCount = members.filter(m => isBlocked(m.email)).length;
   const activeMembersCount = members.filter(m => m.active).length;
+
+  // Credibilidad propia, con el factor de veracidad ya aplicado. Se calcula acá
+  // y no dentro del JSX porque la tarjeta la muestra y la usa dos veces.
+  const myCredibility = !currentUser || !closeoutStanding
+    ? null
+    : getCredibility(
+        getReliability(currentUser.email),
+        closeoutStanding.engagement,
+        closeoutStanding.reciprocity,
+        closeoutStanding.veracity
+      );
 
   const mySessionsCompleted = !currentUser ? 0 : attendances.filter(a =>
     a.memberEmail.toLowerCase() === currentUser.email.toLowerCase() && a.status === 'asistio'
@@ -2218,10 +2262,17 @@ export default function App() {
         });
       setOpenCloseouts(pendientes);
       setCloseoutStanding({
-        engagement: getEngagement(email, all, meetings, now),
-        reciprocity: getReciprocity(email, all, meetings, attendances, now)
+        engagement: getEngagement(email, all, meetings, attendances, now),
+        reciprocity: getReciprocity(email, all, meetings, attendances, now),
+        veracity: getVeracity(email, all, meetings, attendances, now),
+        monthlyLies: getMonthlyLies(email, all, meetings, attendances, now),
+        provenLies: getProvenLies(email, all, meetings, attendances, now).length,
+        patternStrikes: getPatternStrikes(email, all, meetings, attendances, now),
+        blockedForLying: isBlockedForLying(email, all, meetings, attendances, now)
       });
-      setCloseoutPraise(getPraiseReceived(email, all, meetings, now).map(p => p.praise));
+      setCloseoutPraise(
+        getPraiseReceived(email, all, meetings, attendances, now).map(p => p.praise)
+      );
       return;
     }
 
@@ -2246,7 +2297,13 @@ export default function App() {
         engagement: row.engagement_pct,
         // El servidor la devuelve en porcentaje y la lógica pura la espera 0..1.
         reciprocity: row.reciprocity_pct === null || row.reciprocity_pct === undefined
-          ? null : row.reciprocity_pct / 100
+          ? null : row.reciprocity_pct / 100,
+        veracity: row.veracity_pct === null || row.veracity_pct === undefined
+          ? 1 : row.veracity_pct / 100,
+        monthlyLies: row.monthly_lies ?? 0,
+        provenLies: row.proven_lies ?? 0,
+        patternStrikes: row.pattern_strikes ?? 0,
+        blockedForLying: !!row.blocked_for_lying
       } : null);
     }
     if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
@@ -2354,8 +2411,12 @@ export default function App() {
         if (error) {
           const raw = `${error.message || ''} ${error.details || ''}`;
           showNotification(
+            // Con el sobre sellado el cierre solo se congela por plazo, así que
+            // este caso ya no debería ocurrir. Se conserva para las instancias
+            // que todavía no aplicaron la migración, con un texto que no diga
+            // si el compañero contestó o no.
             raw.includes('CLOSEOUT_ALREADY_OPEN')
-              ? 'Tu compañero ya respondió, así que el cierre quedó firme y no se puede modificar.'
+              ? 'Este cierre ya quedó firme y no se puede modificar.'
               : raw.includes('CLOSEOUT_WINDOW_CLOSED')
                 ? 'El plazo para cerrar esta sesión ya venció.'
                 : 'No pudimos guardar el cierre. Intentá de nuevo en un momento.',
@@ -2653,6 +2714,9 @@ export default function App() {
     setSchedulingStatus('creating');
 
     let meetUrl;
+    // Se guarda para poder volver a tocar el evento una vez que la reunión
+    // tenga id: el enlace de ingreso de la app lo necesita.
+    let calendarEventId = null;
 
     if (useMockDb) {
       // Solo para demo local sin Supabase: enlace simulado
@@ -2730,6 +2794,7 @@ export default function App() {
           throw new Error('Google Calendar creó el evento pero no devolvió un enlace de Meet.');
         }
         meetUrl = eventData.hangoutLink;
+        calendarEventId = eventData.id || null;
       } catch (err) {
         console.error('Error al agendar en Google Calendar:', err);
         setSchedulingStatus(null);
@@ -2793,6 +2858,44 @@ export default function App() {
           showNotification('La reunión quedó agendada, pero no pudimos registrar el compromiso de asistencia. Avisale a tu compañero por las dudas.', 'error');
         } else if (attInserted) {
           setAttendances(prev => [...prev, ...attInserted.map(attendanceFromRow)]);
+        }
+        // Enlace de ingreso por la app, encabezando el evento de Calendar.
+        //
+        // Va en un PATCH aparte porque recién acá existe el id de la reunión, y
+        // el evento hay que crearlo antes para que Google genere el Meet.
+        //
+        // No reemplaza al botón "Unirse con Google Meet": ese lo pone Calendar
+        // por su cuenta y no se puede sacar mientras el evento tenga
+        // conferenceData. Lo que hace es ofrecer un camino visible que sí pasa
+        // por la app, que es donde se registra la asistencia. Quien entre por el
+        // botón azul sigue sin dejar rastro, y para ese caso está la
+        // reincidencia del cierre.
+        //
+        // sendUpdates=none: es un retoque al evento recién creado, no amerita un
+        // segundo mail a las dos personas. Y es fire-and-forget — si falla, el
+        // evento queda como antes de este cambio.
+        if (calendarEventId && newMeeting.id) {
+          const joinUrl = `${window.location.origin}/room/${currentRoomId}?join=${newMeeting.id}`;
+          supabase.auth.getSession().then(({ data: s }) => {
+            const token = s.session?.provider_token;
+            if (!token) return;
+            return fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(calendarEventId)}?sendUpdates=none`,
+              {
+                method: 'PATCH',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  location: joinUrl,
+                  description:
+                    `Entrá por acá para que quede registrada tu asistencia:\n${joinUrl}\n\n` +
+                    'Ese enlace te lleva al mismo Meet. Si entrás por el botón de Google ' +
+                    'Calendar la sesión funciona igual, pero la app no puede registrar que ' +
+                    'estuviste y puede contarte una falta.\n\n' +
+                    'Videollamada de entrenamiento agendada mediante Sales Arena Matcher.'
+                })
+              }
+            );
+          }).catch(err => console.error('No se pudo agregar el enlace de ingreso al evento:', err));
         }
       }
     } else {
@@ -2911,13 +3014,21 @@ export default function App() {
   // asistencia del weekly-matcher usa joined_at para resolver automáticamente,
   // a los 10 min del inicio, quién asistió y quién quedó no-show. Es fire-and-
   // forget: no bloquea la apertura del enlace.
+  //
+  // El límite ya no es "mientras siga 'confirmado'" sino la ventana real de la
+  // reunión (canRecordJoin). Dos motivos: quien entra 20 min tarde igual deja
+  // constancia de que estuvo —el barrido ya lo resolvió, pero la resolución de
+  // disputas del cierre usa joined_at como EVIDENCIA—, y al mismo tiempo nadie
+  // puede abrir el enlace al día siguiente para fabricarse esa prueba.
   const markJoined = (meeting) => {
     if (!meeting || meeting.id == null || !currentUser) return;
     const mine = attendances.find(a =>
       a.meetingId === meeting.id &&
       a.memberEmail.toLowerCase() === currentUser.email.toLowerCase()
     );
-    if (!mine || mine.joinedAt || mine.status !== 'confirmado') return; // ya registrado o ya resuelto
+    if (!mine || mine.joinedAt) return; // ya registrado
+    if (mine.status === 'cancelado_con_aviso' || mine.status === 'cancelado_tarde') return;
+    if (!canRecordJoin(meeting.startsAt, meeting.duration)) return;
     const joinedAt = new Date().toISOString();
     setAttendances(prev => prev.map(a => a.id === mine.id ? { ...a, joinedAt } : a));
     if (!useMockDb) {
@@ -2929,6 +3040,66 @@ export default function App() {
         });
     }
   };
+
+  // Resuelve el enlace de ingreso que viene del evento de Calendar: deja el
+  // registro y manda a Meet.
+  //
+  // Va por consulta directa en vez de esperar a que cargue toda la sala. Quien
+  // llega por acá está tratando de entrar a una llamada que probablemente ya
+  // empezó: hacerlo esperar a que se carguen miembros, horarios y propuestas
+  // sería empujarlo de vuelta al botón de Calendar, que es justo lo que este
+  // camino viene a evitar.
+  useEffect(() => {
+    if (!joinMeetingId || !isLoggedIn || !currentUser || joinHandledRef.current) return;
+    joinHandledRef.current = true;
+    // Se limpia antes de intentar: si algo sale mal, el próximo ingreso a la
+    // sala no tiene que volver a secuestrar la navegación.
+    try { sessionStorage.removeItem(JOIN_STORAGE_KEY); } catch { /* modo privado */ }
+    setJoinState('entrando');
+
+    const fallar = (msg) => { setJoinError(msg); setJoinState('error'); };
+
+    (async () => {
+      if (useMockDb) {
+        const m = meetings.find(x => String(x.id) === String(joinMeetingId));
+        if (!m?.meetLink) return fallar('No encontramos esa reunión.');
+        markJoined(m);
+        window.location.href = m.meetLink;
+        return;
+      }
+
+      const { data: meeting, error } = await supabase
+        .from('meetings')
+        .select('id, starts_at, duration, meet_link')
+        .eq('id', joinMeetingId)
+        .maybeSingle();
+      if (error || !meeting) {
+        return fallar('No encontramos esa reunión. Puede que se haya cancelado.');
+      }
+      if (!meeting.meet_link) {
+        return fallar('Esa reunión todavía no tiene enlace de Meet.');
+      }
+
+      // El registro se intenta, pero nunca frena la entrada: si falla, la
+      // persona igual tiene que poder llegar a su sesión.
+      if (canRecordJoin(meeting.starts_at, meeting.duration)) {
+        const { data: mine } = await supabase
+          .from('meeting_attendees')
+          .select('id, joined_at, status')
+          .eq('meeting_id', meeting.id)
+          .ilike('member_email', currentUser.email)
+          .maybeSingle();
+        const cancelada = mine?.status === 'cancelado_con_aviso' || mine?.status === 'cancelado_tarde';
+        if (mine && !mine.joined_at && !cancelada) {
+          await supabase.from('meeting_attendees')
+            .update({ joined_at: new Date().toISOString() })
+            .eq('id', mine.id);
+        }
+      }
+      window.location.href = meeting.meet_link;
+    })().catch(() => fallar('No pudimos abrir la reunión. Probá de nuevo en un momento.'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinMeetingId, isLoggedIn, currentUser]);
 
   // El compañero reporta el resultado del otro. outcome:
   //   'a_tiempo' → asistió dentro de los 10 min de tolerancia
@@ -3787,7 +3958,8 @@ export default function App() {
                   Cada quien ve la suya y nada más: nunca la de otro, y nunca
                   quién dijo qué. El compromiso llega ya promediado desde el
                   servidor y los elogios vienen sin autor. */}
-              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0) && (
+              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
+                || (closeoutStanding.veracity ?? 1) < 1) && (
                 <div className="section-card glass credibility-card">
                   <h4 className="section-title">
                     <Gauge size={15} className="section-title-icon" /> Tu credibilidad
@@ -3795,12 +3967,8 @@ export default function App() {
                   <div className="credibility-grid">
                     <div className="credibility-metric">
                       <span className="credibility-value">
-                        {getCredibility(
-                          getReliability(currentUser.email),
-                          closeoutStanding.engagement,
-                          closeoutStanding.reciprocity
-                        ) ?? '—'}
-                        {getCredibility(getReliability(currentUser.email), closeoutStanding.engagement, closeoutStanding.reciprocity) !== null && '%'}
+                        {myCredibility ?? '—'}
+                        {myCredibility !== null && '%'}
                       </span>
                       <span className="credibility-label">General</span>
                     </div>
@@ -3826,9 +3994,35 @@ export default function App() {
                     </div>
                   </div>
                   <p className="credibility-note">
-                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver quién dijo qué,
-                    ni ellos lo que respondiste vos.
+                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
+                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
+                    hayan contestado los dos o uno solo.
                   </p>
+
+                  {/* Se avisa con el motivo y el número: una sanción que no se
+                      explica se lee como un error de la app. */}
+                  {(closeoutStanding.veracity ?? 1) < 1 && (
+                    <p className="credibility-warning">
+                      <AlertTriangle size={13} />
+                      <span>
+                        {closeoutStanding.provenLies > 0 && (
+                          closeoutStanding.provenLies === 1
+                            ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
+                            : `Dijiste que ${closeoutStanding.provenLies} sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. `
+                        )}
+                        {closeoutStanding.patternStrikes > 0 && (
+                          'Además venís negando sesiones que tus compañeros dan por hechas, sin haber entrado al Meet desde la app en ninguna. '
+                        )}
+                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
+                        {closeoutStanding.blockedForLying
+                          ? ` Con ${MONTHLY_LIES_LIMIT} comprobadas en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
+                          : ''}
+                        {closeoutStanding.patternStrikes > 0 && !closeoutStanding.provenLies
+                          ? ' Entrá al Meet desde la app y no desde el botón de Calendar: así queda registrado que estuviste y tu palabra pesa.'
+                          : ''}
+                      </span>
+                    </p>
+                  )}
                   {closeoutPraise.length > 0 && (
                     <div className="credibility-praise">
                       <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
@@ -5601,8 +5795,8 @@ export default function App() {
               Cierre de tu role-play con {closeoutTarget.partnerName}
             </h3>
             <p className="closeout-privacy">
-              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver lo que respondas.
-              Solo se comparte el elogio final, y recién cuando los dos hayan cerrado.
+              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver nunca lo que respondas.
+              Lo único que se comparte es el elogio final, y recién 48hs después de la reunión.
             </p>
 
             <div className="closeout-questions">
@@ -5610,6 +5804,12 @@ export default function App() {
                 {
                   key: 'happened',
                   label: '¿La sesión se hizo?',
+                  // Es la única respuesta que se cruza con la del compañero y con
+                  // el registro de ingreso al Meet, así que conviene que quede
+                  // claro dónde está el límite: si arrancó y se cayó, es
+                  // "se cortó antes" y no cuesta nada. "No se hizo" es para
+                  // cuando no hubo sesión.
+                  hint: 'Si empezaron y se cortó por lo que sea, elegí "se cortó antes": eso no penaliza a nadie.',
                   options: [
                     { v: 'completa', t: 'Sí, completa' },
                     { v: 'cortada', t: 'Se cortó antes' },
@@ -5637,6 +5837,7 @@ export default function App() {
               ].map(q => (
                 <fieldset className="closeout-question" key={q.key}>
                   <legend className="closeout-question-label">{q.label}</legend>
+                  {q.hint && <p className="closeout-question-hint">{q.hint}</p>}
                   <div className="closeout-options">
                     {q.options.map(o => (
                       <button
@@ -5719,6 +5920,47 @@ export default function App() {
                   : <>Enviar cierre</>}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* INGRESO DESDE EL EVENTO DE CALENDAR.
+          Tapa la app mientras se registra la asistencia y se redirige a Meet.
+          Es deliberadamente un paso en blanco de un segundo: la persona
+          clickeó "entrar a la reunión", no vino a navegar la sala. */}
+      {joinState && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-live="polite"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1100, padding: '20px'
+          }}
+        >
+          <div className="glass join-card">
+            {joinState === 'entrando' ? (
+              <>
+                <span className="spinner"></span>
+                <h3 className="join-title">Entrando a tu role-play…</h3>
+                <p className="join-desc">Registramos que estuviste y te llevamos a Meet.</p>
+              </>
+            ) : (
+              <>
+                <AlertTriangle size={22} style={{ color: '#ff9500' }} />
+                <h3 className="join-title">No pudimos abrir la reunión</h3>
+                <p className="join-desc">{joinError}</p>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setJoinState(null); setJoinError(''); }}
+                >
+                  Ir a la sala
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
