@@ -4,9 +4,11 @@
 // cada hora. En cada corrida, por sala:
 //   1. Expira propuestas 'propuesto' cuyo respond_by ya pasó (nadie confirmó
 //      con 4hs de antelación) → esos miembros vuelven al pool para REASIGNAR.
-//   2. Excluye del pool a los miembros BLOQUEADOS: 3+ faltas (no-show +
-//      cancelación tardía) dentro del mes calendario, hasta el 1ero del mes
-//      siguiente.
+//   2. Excluye del pool a los miembros BLOQUEADOS, hasta el 1ero del mes
+//      siguiente: 3+ faltas (no-show + cancelación tardía) dentro del mes
+//      calendario, o 2 mentiras comprobadas en el cierre de sesión (dijeron que
+//      la sesión no se hizo mientras el registro de ingreso al Meet mostraba que
+//      los dos habían entrado).
 //   3. Toma los miembros activos SIN propuesta viva esta semana y los empareja
 //      1:1 con criterio ANTI-AMIGUISMO: prioriza duplas que menos veces se
 //      juntaron (rotación "todos con todos"), luego mayor confiabilidad y luego
@@ -511,11 +513,14 @@ Deno.serve(async (req) => {
       const { data: meetingsRows } = await supabase
         .from('meetings').select('id, starts_at, duration').eq('room_id', roomId);
       const meetingIds = (meetingsRows || []).map(mt => mt.id);
+      // joined_at entra acá porque es la evidencia con la que se resuelve una
+      // disputa de cierre: si los dos abrieron el enlace de Meet, negar que la
+      // sesión ocurrió contradice el registro.
       const { data: attRows } = meetingIds.length
         ? await supabase.from('meeting_attendees')
-            .select('meeting_id, member_email, status, punctuality')
+            .select('meeting_id, member_email, status, punctuality, joined_at')
             .in('meeting_id', meetingIds)
-        : { data: [] as Array<{ meeting_id: string; member_email: string; status: string; punctuality: string | null }> };
+        : { data: [] as Array<{ meeting_id: string; member_email: string; status: string; punctuality: string | null; joined_at: string | null }> };
 
       const nowMs = Date.now();
       const meetingStartMs = new Map<string, number>();
@@ -568,6 +573,70 @@ Deno.serve(async (req) => {
       }
       const blocked = new Set<string>();
       for (const [email, count] of faltasMes) if (count >= 3) blocked.add(email);
+
+      // CIERRES DE SESIÓN. Se leen acá arriba —y no junto al cálculo del score—
+      // porque las mentiras comprobadas también bloquean, y el pool se arma
+      // enseguida.
+      //
+      // Debe coincidir con src/closeouts.js y con 20260824120000.
+      const { data: closeoutRows } = await supabase
+        .from('session_closeouts')
+        .select('meeting_id, author_email, subject_email, happened, engagement')
+        .eq('room_id', roomId);
+
+      const closeoutsByMeeting = new Map<string, NonNullable<typeof closeoutRows>>();
+      for (const c of closeoutRows || []) {
+        if (!closeoutsByMeeting.has(c.meeting_id)) closeoutsByMeeting.set(c.meeting_id, []);
+        closeoutsByMeeting.get(c.meeting_id)!.push(c);
+      }
+
+      // ¿Los DOS abrieron el enlace de Meet desde la app? No prueba que hayan
+      // hablado, pero sí que los dos estuvieron ahí. Si falta el dato de alguno
+      // —reunión vieja, o quien entró desde el mail de Calendar— no hay
+      // corroboración: el silencio del registro no acusa a nadie.
+      const joinedByMeeting = new Map<string, { total: number; conRegistro: number }>();
+      for (const r of attRows || []) {
+        const acc = joinedByMeeting.get(r.meeting_id) || { total: 0, conRegistro: 0 };
+        acc.total++;
+        if (r.joined_at) acc.conRegistro++;
+        joinedByMeeting.set(r.meeting_id, acc);
+      }
+      const registroRespalda = (meetingId: string) => {
+        const acc = joinedByMeeting.get(meetingId);
+        return !!acc && acc.total >= 2 && acc.conRegistro === acc.total;
+      };
+
+      // Disputa: una respuesta niega la sesión y la otra la da por hecha.
+      //   sin evidencia → neutra, no puntúa para ninguno de los dos.
+      //   con evidencia → el "no se hizo" queda desmentido: se descarta SOLO la
+      //   respuesta de quien lo dijo y se le descuenta credibilidad.
+      const disputaNeutra = new Set<string>();
+      // meetingId|email de cada respuesta contradicha por el registro.
+      const cierreDescartado = new Set<string>();
+      const mentirasPorEmail = new Map<string, number[]>();
+      for (const [meetingId, rows] of closeoutsByMeeting) {
+        if (rows.length < 2) continue;
+        const niegan = rows.filter(r => r.happened === 'no_se_hizo');
+        if (niegan.length === 0 || niegan.length === rows.length) continue;
+        if (!registroRespalda(meetingId)) { disputaNeutra.add(meetingId); continue; }
+        const startMs = meetingStartMs.get(meetingId);
+        for (const r of niegan) {
+          const email = r.author_email.toLowerCase();
+          cierreDescartado.add(`${meetingId}|${email}`);
+          if (startMs === undefined) continue;
+          if (!mentirasPorEmail.has(email)) mentirasPorEmail.set(email, []);
+          mentirasPorEmail.get(email)!.push(startMs);
+        }
+      }
+
+      // Dos mentiras comprobadas en el mismo mes calendario dejan a la persona
+      // fuera de la rotación hasta el 1°, igual que 3 faltas.
+      const MONTHLY_LIES_LIMIT = 2;
+      for (const [email, cuando] of mentirasPorEmail) {
+        if (cuando.filter(ms => ms >= monthStartMs).length >= MONTHLY_LIES_LIMIT) {
+          blocked.add(email);
+        }
+      }
 
       // Lo ÚNICO que bloquea a una dupla para toda la semana es un RECHAZO:
       // ahí hubo un "no" explícito y se respeta.
@@ -687,38 +756,18 @@ Deno.serve(async (req) => {
       // sobre si la persona sostuvo el ejercicio, y es lo que ordena la fila del
       // emparejamiento junto con la asistencia.
       //
-      // Debe coincidir con getEngagement / getReciprocity / getCredibility en
-      // src/closeouts.js.
-      const { data: closeoutRows } = await supabase
-        .from('session_closeouts')
-        .select('meeting_id, author_email, subject_email, happened, engagement')
-        .eq('room_id', roomId);
-
-      const closeoutsByMeeting = new Map<string, typeof closeoutRows>();
-      for (const c of closeoutRows || []) {
-        if (!closeoutsByMeeting.has(c.meeting_id)) closeoutsByMeeting.set(c.meeting_id, []);
-        closeoutsByMeeting.get(c.meeting_id)!.push(c);
-      }
-
+      // Debe coincidir con getEngagement / getReciprocity / getVeracity /
+      // getCredibility en src/closeouts.js. Los cierres y las disputas ya se
+      // resolvieron más arriba, junto al bloqueo.
       const CLOSEOUT_WINDOW_MS = 48 * 3600e3;
-      // Un sobre abierto es el que ya respondieron los dos, o cuyo plazo venció.
-      // Mientras siga cerrado no puntúa: si contara antes, mirar el propio score
-      // delataría cómo lo calificó a uno el compañero.
-      const sobreAbierto = (meetingId: string) => {
-        const rows = closeoutsByMeeting.get(meetingId) || [];
-        if (rows.length >= 2) return true;
+      // El cierre empieza a contar 48hs después de la reunión, y por reloj: nada
+      // depende de que el compañero haya respondido. Cuando dependía, el puntaje
+      // se movía en el instante en que el otro contestaba y mirarlo antes de
+      // cerrar delataba la nota recibida.
+      const yaCuenta = (meetingId: string) => {
         const endMs = meetingEndMs.get(meetingId);
-        if (endMs === undefined) return false;
-        return nowMs > endMs + CLOSEOUT_WINDOW_MS;
+        return endMs !== undefined && nowMs >= endMs + CLOSEOUT_WINDOW_MS;
       };
-      // Reunión en disputa: una respuesta dice que no se hizo y la otra que sí.
-      // No puntúa para ninguno de los dos, así acusar en falso no hunde al otro.
-      const enDisputa = new Set<string>();
-      for (const [meetingId, rows] of closeoutsByMeeting) {
-        if (rows.length < 2) continue;
-        const noSeHizo = rows.filter(r => r.happened === 'no_se_hizo').length;
-        if (noSeHizo > 0 && noSeHizo < rows.length) enDisputa.add(meetingId);
-      }
 
       const ENGAGEMENT_VALUE: Record<string, number> = {
         preparado: 1, a_medias: 0.5, no_participo: 0
@@ -740,8 +789,13 @@ Deno.serve(async (req) => {
         const vals = (closeoutRows || [])
           .filter(c =>
             c.subject_email.toLowerCase() === email &&
-            !enDisputa.has(c.meeting_id) &&
-            sobreAbierto(c.meeting_id) &&
+            // Disputa sin evidencia: no puntúa para ninguno de los dos.
+            !disputaNeutra.has(c.meeting_id) &&
+            // Disputa con evidencia: la respuesta de quien mintió no califica a
+            // nadie. La de su compañero sí, y ahí está el punto — negar la
+            // sesión ya no borra la mala nota que uno sabía que venía.
+            !cierreDescartado.has(`${c.meeting_id}|${c.author_email.toLowerCase()}`) &&
+            yaCuenta(c.meeting_id) &&
             (meetingStartMs.get(c.meeting_id) ?? 0) >= cutoff60)
           .map(c => ENGAGEMENT_VALUE[c.engagement])
           .filter(v => v !== undefined);
@@ -768,10 +822,17 @@ Deno.serve(async (req) => {
           : meTocaba.filter(id => respondi.has(id)).length / meTocaba.length);
       }
 
-      // Credibilidad: promedio de las señales que EXISTEN, por el factor de
-      // reciprocidad (piso 0.85). Quien recién entra no tiene compromiso y
-      // compite con su asistencia, en vez de quedar último por no tenerlo.
+      // Credibilidad: promedio de las señales que EXISTEN, por los factores de
+      // reciprocidad (piso 0.85) y veracidad (0.4 por mentira, piso 0.2). Quien
+      // recién entra no tiene compromiso y compite con su asistencia, en vez de
+      // quedar último por no tenerlo.
+      //
+      // Mentir pesa mucho más que no contestar a propósito: callarse es no
+      // colaborar, negar una sesión que el registro respalda es intentar
+      // manipular el puntaje del otro.
       const RECIPROCITY_FLOOR = 0.85;
+      const LIE_PENALTY = 0.4;
+      const VERACITY_FLOOR = 0.2;
       const scores = new Map<string, number | null>();
       for (const m of pool) {
         const dims = [attendanceScores.get(m.email), engagementScores.get(m.email)]
@@ -781,7 +842,12 @@ Deno.serve(async (req) => {
         const r = reciprocity.get(m.email);
         const factor = r === null || r === undefined
           ? 1 : RECIPROCITY_FLOOR + (1 - RECIPROCITY_FLOOR) * r;
-        scores.set(m.email, Math.round(base * factor));
+        // Solo las mentiras dentro de la misma ventana de 60 días del score.
+        const mentiras = (mentirasPorEmail.get(m.email.toLowerCase()) || [])
+          .filter(ms => ms >= cutoff60).length;
+        const veracidad = mentiras === 0
+          ? 1 : Math.max(VERACITY_FLOOR, 1 - LIE_PENALTY * mentiras);
+        scores.set(m.email, Math.round(base * factor * veracidad));
       }
 
       // HORARIOS YA COMPROMETIDOS. Las propuestas vivas de esta semana ocupan la

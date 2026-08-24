@@ -71,7 +71,8 @@ import {
   // Cierre de sesión (lo que responden los dos después del role-play)
   ClipboardCheck,
   ThumbsUp,
-  Gauge
+  Gauge,
+  AlertTriangle
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
@@ -84,7 +85,11 @@ import {
   getCredibility,
   getPraiseReceived,
   getOwedCloseouts,
-  CLOSEOUT_WINDOW_MS
+  getVeracity,
+  getMonthlyLies,
+  isBlockedForLying,
+  CLOSEOUT_WINDOW_MS,
+  MONTHLY_LIES_LIMIT
 } from './closeouts';
 import {
   getInitials,
@@ -817,6 +822,17 @@ export default function App() {
 
   const blockedMembersCount = members.filter(m => isBlocked(m.email)).length;
   const activeMembersCount = members.filter(m => m.active).length;
+
+  // Credibilidad propia, con el factor de veracidad ya aplicado. Se calcula acá
+  // y no dentro del JSX porque la tarjeta la muestra y la usa dos veces.
+  const myCredibility = !currentUser || !closeoutStanding
+    ? null
+    : getCredibility(
+        getReliability(currentUser.email),
+        closeoutStanding.engagement,
+        closeoutStanding.reciprocity,
+        closeoutStanding.veracity
+      );
 
   const mySessionsCompleted = !currentUser ? 0 : attendances.filter(a =>
     a.memberEmail.toLowerCase() === currentUser.email.toLowerCase() && a.status === 'asistio'
@@ -2218,10 +2234,15 @@ export default function App() {
         });
       setOpenCloseouts(pendientes);
       setCloseoutStanding({
-        engagement: getEngagement(email, all, meetings, now),
-        reciprocity: getReciprocity(email, all, meetings, attendances, now)
+        engagement: getEngagement(email, all, meetings, attendances, now),
+        reciprocity: getReciprocity(email, all, meetings, attendances, now),
+        veracity: getVeracity(email, all, meetings, attendances, now),
+        monthlyLies: getMonthlyLies(email, all, meetings, attendances, now),
+        blockedForLying: isBlockedForLying(email, all, meetings, attendances, now)
       });
-      setCloseoutPraise(getPraiseReceived(email, all, meetings, now).map(p => p.praise));
+      setCloseoutPraise(
+        getPraiseReceived(email, all, meetings, attendances, now).map(p => p.praise)
+      );
       return;
     }
 
@@ -2246,7 +2267,11 @@ export default function App() {
         engagement: row.engagement_pct,
         // El servidor la devuelve en porcentaje y la lógica pura la espera 0..1.
         reciprocity: row.reciprocity_pct === null || row.reciprocity_pct === undefined
-          ? null : row.reciprocity_pct / 100
+          ? null : row.reciprocity_pct / 100,
+        veracity: row.veracity_pct === null || row.veracity_pct === undefined
+          ? 1 : row.veracity_pct / 100,
+        monthlyLies: row.monthly_lies ?? 0,
+        blockedForLying: !!row.blocked_for_lying
       } : null);
     }
     if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
@@ -2354,8 +2379,12 @@ export default function App() {
         if (error) {
           const raw = `${error.message || ''} ${error.details || ''}`;
           showNotification(
+            // Con el sobre sellado el cierre solo se congela por plazo, así que
+            // este caso ya no debería ocurrir. Se conserva para las instancias
+            // que todavía no aplicaron la migración, con un texto que no diga
+            // si el compañero contestó o no.
             raw.includes('CLOSEOUT_ALREADY_OPEN')
-              ? 'Tu compañero ya respondió, así que el cierre quedó firme y no se puede modificar.'
+              ? 'Este cierre ya quedó firme y no se puede modificar.'
               : raw.includes('CLOSEOUT_WINDOW_CLOSED')
                 ? 'El plazo para cerrar esta sesión ya venció.'
                 : 'No pudimos guardar el cierre. Intentá de nuevo en un momento.',
@@ -3787,7 +3816,8 @@ export default function App() {
                   Cada quien ve la suya y nada más: nunca la de otro, y nunca
                   quién dijo qué. El compromiso llega ya promediado desde el
                   servidor y los elogios vienen sin autor. */}
-              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0) && (
+              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
+                || (closeoutStanding.veracity ?? 1) < 1) && (
                 <div className="section-card glass credibility-card">
                   <h4 className="section-title">
                     <Gauge size={15} className="section-title-icon" /> Tu credibilidad
@@ -3795,12 +3825,8 @@ export default function App() {
                   <div className="credibility-grid">
                     <div className="credibility-metric">
                       <span className="credibility-value">
-                        {getCredibility(
-                          getReliability(currentUser.email),
-                          closeoutStanding.engagement,
-                          closeoutStanding.reciprocity
-                        ) ?? '—'}
-                        {getCredibility(getReliability(currentUser.email), closeoutStanding.engagement, closeoutStanding.reciprocity) !== null && '%'}
+                        {myCredibility ?? '—'}
+                        {myCredibility !== null && '%'}
                       </span>
                       <span className="credibility-label">General</span>
                     </div>
@@ -3826,9 +3852,27 @@ export default function App() {
                     </div>
                   </div>
                   <p className="credibility-note">
-                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver quién dijo qué,
-                    ni ellos lo que respondiste vos.
+                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
+                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
+                    hayan contestado los dos o uno solo.
                   </p>
+
+                  {/* Se avisa con el motivo y el número: una sanción que no se
+                      explica se lee como un error de la app. */}
+                  {(closeoutStanding.veracity ?? 1) < 1 && (
+                    <p className="credibility-warning">
+                      <AlertTriangle size={13} />
+                      <span>
+                        {closeoutStanding.monthlyLies === 1
+                          ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
+                          : 'Dijiste que algunas sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. '}
+                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
+                        {closeoutStanding.blockedForLying
+                          ? ` Con ${MONTHLY_LIES_LIMIT} en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
+                          : ''}
+                      </span>
+                    </p>
+                  )}
                   {closeoutPraise.length > 0 && (
                     <div className="credibility-praise">
                       <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
@@ -5601,8 +5645,8 @@ export default function App() {
               Cierre de tu role-play con {closeoutTarget.partnerName}
             </h3>
             <p className="closeout-privacy">
-              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver lo que respondas.
-              Solo se comparte el elogio final, y recién cuando los dos hayan cerrado.
+              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver nunca lo que respondas.
+              Lo único que se comparte es el elogio final, y recién 48hs después de la reunión.
             </p>
 
             <div className="closeout-questions">
@@ -5610,6 +5654,12 @@ export default function App() {
                 {
                   key: 'happened',
                   label: '¿La sesión se hizo?',
+                  // Es la única respuesta que se cruza con la del compañero y con
+                  // el registro de ingreso al Meet, así que conviene que quede
+                  // claro dónde está el límite: si arrancó y se cayó, es
+                  // "se cortó antes" y no cuesta nada. "No se hizo" es para
+                  // cuando no hubo sesión.
+                  hint: 'Si empezaron y se cortó por lo que sea, elegí "se cortó antes": eso no penaliza a nadie.',
                   options: [
                     { v: 'completa', t: 'Sí, completa' },
                     { v: 'cortada', t: 'Se cortó antes' },
@@ -5637,6 +5687,7 @@ export default function App() {
               ].map(q => (
                 <fieldset className="closeout-question" key={q.key}>
                   <legend className="closeout-question-label">{q.label}</legend>
+                  {q.hint && <p className="closeout-question-hint">{q.hint}</p>}
                   <div className="closeout-options">
                     {q.options.map(o => (
                       <button

@@ -16,6 +16,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildWeeklyPairs, CONFIRM_STEPS_MS, MIN_LEAD_MS } from '../src/matcher.js';
 import { computeSlotSets, memberSlotSet, getOffsetMinutes } from '../src/slots.js';
+import {
+  CLOSEOUT_WINDOW_MS,
+  LIE_PENALTY,
+  VERACITY_FLOOR,
+  MONTHLY_LIES_LIMIT
+} from '../src/closeouts.js';
 
 const AR = 'America/Argentina/Buenos_Aires'; // UTC-3 fijo
 const MX = 'America/Mexico_City';            // UTC-6 fijo
@@ -189,4 +195,88 @@ test('darse de baja cancela las propuestas vivas por los dos caminos', () => {
     bajas.length, 2,
     'la baja debe cancelar propuestas tanto desde el asistente como desde el interruptor'
   );
+});
+
+// --- SOBRE SELLADO Y COSTO DE MENTIR ---
+//
+// Las reglas del cierre viven en TRES implementaciones separadas: la lógica
+// pura (src/closeouts.js), la Edge Function que ordena el emparejamiento, y las
+// funciones SQL que le responden al cliente. Las tres lo dicen en sus
+// comentarios, y una deriva silenciosa acá significa que a alguien se le
+// descuenta credibilidad en pantalla y no en la rotación, o al revés.
+
+const edgeSrc = readFileSync(
+  new URL('../supabase/functions/weekly-matcher/index.ts', import.meta.url),
+  'utf8'
+);
+const sqlSrc = readFileSync(
+  new URL('../supabase/migrations/20260824120000_sealed_closeout_and_lie_penalty.sql', import.meta.url),
+  'utf8'
+);
+
+test('la sanción por mentir es la misma en las tres implementaciones', () => {
+  const edgeNum = (nombre) => {
+    const m = edgeSrc.match(new RegExp(`const ${nombre}\\s*=\\s*([0-9.]+)`));
+    assert.ok(m, `no se encontró ${nombre} en la Edge Function`);
+    return Number(m[1]);
+  };
+  const sqlNum = (fn) => {
+    const m = sqlSrc.match(
+      new RegExp(`FUNCTION public\\.${fn}\\(\\)[\\s\\S]*?SELECT\\s+([0-9.]+)`)
+    );
+    assert.ok(m, `no se encontró ${fn}() en la migración`);
+    return Number(m[1]);
+  };
+
+  assert.equal(edgeNum('LIE_PENALTY'), LIE_PENALTY);
+  assert.equal(sqlNum('lie_penalty'), LIE_PENALTY);
+
+  assert.equal(edgeNum('VERACITY_FLOOR'), VERACITY_FLOOR);
+  assert.equal(sqlNum('veracity_floor'), VERACITY_FLOOR);
+
+  assert.equal(edgeNum('MONTHLY_LIES_LIMIT'), MONTHLY_LIES_LIMIT);
+  assert.equal(sqlNum('monthly_lies_limit'), MONTHLY_LIES_LIMIT);
+});
+
+test('el plazo del cierre es el mismo en las tres implementaciones', () => {
+  const m = edgeSrc.match(/const CLOSEOUT_WINDOW_MS\s*=\s*(\d+)\s*\*\s*3600e3/);
+  assert.ok(m, 'no se encontró CLOSEOUT_WINDOW_MS en la Edge Function');
+  assert.equal(Number(m[1]) * 3600e3, CLOSEOUT_WINDOW_MS);
+  // La migración original define closeout_window_hours(); la nueva la reusa.
+  const horas = readFileSync(
+    new URL('../supabase/migrations/20260815120000_session_closeouts.sql', import.meta.url),
+    'utf8'
+  ).match(/FUNCTION public\.closeout_window_hours\(\)[\s\S]*?SELECT (\d+)/);
+  assert.ok(horas, 'no se encontró closeout_window_hours() en la migración');
+  assert.equal(Number(horas[1]) * 3600e3, CLOSEOUT_WINDOW_MS);
+});
+
+test('ninguna implementación abre el sobre porque el compañero haya contestado', () => {
+  // Este era el filtrado: el puntaje se movía al responder el otro, así que
+  // mirarlo antes de cerrar delataba la nota recibida. El plazo tiene que ser
+  // puro reloj en los tres lados.
+  assert.ok(
+    !/rows\.length\s*>=\s*2/.test(edgeSrc.split('const yaCuenta')[1]?.slice(0, 400) ?? ''),
+    'la Edge Function volvió a abrir el cierre por cantidad de respuestas'
+  );
+  assert.ok(
+    !/count\(\*\)[\s\S]{0,80}>=\s*2\s*\n?\s*OR/.test(sqlSrc),
+    'la migración volvió a abrir el cierre por cantidad de respuestas'
+  );
+  assert.match(
+    sqlSrc,
+    /DROP FUNCTION IF EXISTS public\.closeout_is_open/,
+    'la puerta vieja (closeout_is_open) tiene que quedar borrada'
+  );
+});
+
+test('el bloqueo por mentir saca a la persona del pool del emparejador', () => {
+  // Sin esto la sanción quedaría en un número lindo en pantalla y la persona
+  // seguiría entrando en la rotación como si nada.
+  const bloque = edgeSrc.slice(
+    edgeSrc.indexOf('MONTHLY_LIES_LIMIT'),
+    edgeSrc.indexOf('const excluded')
+  );
+  assert.match(bloque, /blocked\.add\(email\)/,
+    'las mentiras del mes tienen que sumar al conjunto de bloqueados');
 });
