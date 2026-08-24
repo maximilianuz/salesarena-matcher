@@ -34,3 +34,20 @@ export const formatMeetingDateUtc = (date, dayName) => {
   const hh = String(date.getUTCHours()).padStart(2, '0');
   return `${dayName} ${dd}/${mm} · ${hh}:00 UTC`;
 };
+
+// Ventana en la que abrir el enlace del Meet deja registro de asistencia
+// (joined_at): desde media hora antes de empezar hasta media hora después de
+// terminar.
+//
+// El límite existe porque joined_at dejó de ser solo el insumo del barrido de
+// asistencia: la resolución de disputas del cierre lo usa como EVIDENCIA de que
+// la persona estuvo. Sin ventana, alguien podría abrir el enlace al día
+// siguiente y fabricarse una prueba de presencia para desmentir a su compañero.
+export const JOIN_RECORD_MARGIN_MS = 30 * 60000;
+
+export const canRecordJoin = (startsAtIso, durationMin, now = Date.now()) => {
+  const start = startsAtIso ? Date.parse(startsAtIso) : NaN;
+  if (Number.isNaN(start)) return false;
+  const end = start + (durationMin || 60) * 60000;
+  return now >= start - JOIN_RECORD_MARGIN_MS && now <= end + JOIN_RECORD_MARGIN_MS;
+};

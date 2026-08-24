@@ -20,7 +20,9 @@ import {
   CLOSEOUT_WINDOW_MS,
   LIE_PENALTY,
   VERACITY_FLOOR,
-  MONTHLY_LIES_LIMIT
+  MONTHLY_LIES_LIMIT,
+  PATTERN_PENALTY,
+  PATTERN_GRACE
 } from '../src/closeouts.js';
 
 const AR = 'America/Argentina/Buenos_Aires'; // UTC-3 fijo
@@ -213,6 +215,10 @@ const sqlSrc = readFileSync(
   new URL('../supabase/migrations/20260824120000_sealed_closeout_and_lie_penalty.sql', import.meta.url),
   'utf8'
 );
+const patronSrc = readFileSync(
+  new URL('../supabase/migrations/20260824140000_pattern_strikes_without_evidence.sql', import.meta.url),
+  'utf8'
+);
 
 test('la sanción por mentir es la misma en las tres implementaciones', () => {
   const edgeNum = (nombre) => {
@@ -220,8 +226,8 @@ test('la sanción por mentir es la misma en las tres implementaciones', () => {
     assert.ok(m, `no se encontró ${nombre} en la Edge Function`);
     return Number(m[1]);
   };
-  const sqlNum = (fn) => {
-    const m = sqlSrc.match(
+  const sqlNum = (fn, src = sqlSrc) => {
+    const m = src.match(
       new RegExp(`FUNCTION public\\.${fn}\\(\\)[\\s\\S]*?SELECT\\s+([0-9.]+)`)
     );
     assert.ok(m, `no se encontró ${fn}() en la migración`);
@@ -236,6 +242,35 @@ test('la sanción por mentir es la misma en las tres implementaciones', () => {
 
   assert.equal(edgeNum('MONTHLY_LIES_LIMIT'), MONTHLY_LIES_LIMIT);
   assert.equal(sqlNum('monthly_lies_limit'), MONTHLY_LIES_LIMIT);
+
+  // La reincidencia sin evidencia vive en la migración posterior.
+  assert.equal(edgeNum('PATTERN_PENALTY'), PATTERN_PENALTY);
+  assert.equal(sqlNum('pattern_penalty', patronSrc), PATTERN_PENALTY);
+  assert.equal(edgeNum('PATTERN_GRACE'), PATTERN_GRACE);
+  assert.equal(sqlNum('pattern_grace', patronSrc), PATTERN_GRACE);
+});
+
+test('la reincidencia sin evidencia nunca saca a nadie de la rotación', () => {
+  // Es la línea que separa la evidencia dura de la circunstancial: el patrón
+  // mueve el puntaje, el bloqueo pide el registro en contra. Si alguna
+  // implementación empieza a bloquear por patrón, hay que discutirlo, no que
+  // pase inadvertido.
+  const bloque = edgeSrc.slice(
+    edgeSrc.indexOf('const MONTHLY_LIES_LIMIT'),
+    edgeSrc.indexOf('const excluded')
+  );
+  assert.ok(!/sinRespaldoPorEmail/.test(bloque),
+    'el bloqueo del pool no puede mirar las disputas sin respaldo');
+  // La expresión que calcula blocked_for_lying tiene que mirar `mentiras` y
+  // nada más: ni las disputas sin respaldo ni los strikes de patrón.
+  const lineas = patronSrc.split('\n');
+  const i = lineas.findIndex(l => l.includes('>= public.monthly_lies_limit()'));
+  assert.ok(i > 0, 'no se encontró el cálculo de blocked_for_lying en la migración');
+  const expr = lineas.slice(i - 1, i + 1).join('\n');
+  assert.match(expr, /mentiras/,
+    'el bloqueo tiene que salir de las mentiras comprobadas');
+  assert.ok(!/sin_respaldo|strikes/.test(expr),
+    'el bloqueo en la base no puede mirar la reincidencia sin evidencia');
 });
 
 test('el plazo del cierre es el mismo en las tres implementaciones', () => {

@@ -60,6 +60,19 @@ export const RECIPROCITY_FLOOR = 0.85;
 export const LIE_PENALTY = 0.4;
 export const VERACITY_FLOOR = 0.2;
 
+// Reincidencia sin evidencia. El registro de ingreso solo existe si la persona
+// entró al Meet DESDE la app; quien entra desde el mail de Calendar no deja
+// rastro, y sin rastro no hay mentira comprobable. Eso abría un agujero justo
+// para el caso peor: al mentiroso le alcanzaba con no pasar por la app para que
+// nunca hubiera evidencia sobre sí mismo.
+//
+// Contra eso, el patrón ES la evidencia. Una disputa sin respaldo es un
+// malentendido y sale gratis; a partir de la segunda en la ventana, cada una
+// pesa la mitad de una mentira comprobada. Nunca bloquea: la reincidencia
+// mueve el puntaje, pero sacar a alguien de la rotación pide evidencia dura.
+export const PATTERN_PENALTY = 0.2;
+export const PATTERN_GRACE = 1;
+
 // Mentiras comprobadas en el mes calendario que dejan a alguien fuera de la
 // rotación, igual que las faltas. Se recupera solo el 1° del mes siguiente: la
 // sanción es fuerte pero nunca definitiva, y la ventana de 60 días termina de
@@ -91,21 +104,36 @@ export const isDisputed = (happenedA, happenedB) => {
   return (happenedA === 'no_se_hizo') !== (happenedB === 'no_se_hizo');
 };
 
-// ¿El registro respalda que la sesión ocurrió? joined_at guarda cuándo cada
-// persona abrió el enlace de Meet desde la app. Que los dos lo hayan abierto no
-// prueba que hayan hablado, pero sí que los dos estuvieron ahí: contra eso,
-// "no se hizo" deja de ser un malentendido posible.
+// Qué dice el registro de ingreso al Meet sobre una reunión. joined_at guarda
+// cuándo cada persona abrió el enlace DESDE la app; quien entra desde el mail
+// de Calendar no deja rastro, así que el dato puede faltar sin que eso signifique
+// ausencia.
 //
-// Si falta el dato —reuniones viejas, o quien entró desde el mail de Calendar y
-// nunca pasó por la app— no hay corroboración y la disputa queda neutra. El
-// silencio del registro no acusa a nadie.
-const bothJoined = (meetingId, attendances) => {
+// `known` es false cuando ni siquiera hay filas de asistencia cargadas: ahí no
+// se sabe nada y la reunión no cuenta ni a favor ni en contra de nadie.
+const joinRecord = (meetingId, attendances) => {
   const rows = attendances.filter(a => a.meetingId === meetingId);
-  return rows.length >= 2 && rows.every(a => !!a.joinedAt);
+  return {
+    known: rows.length >= 2,
+    todos: rows.length >= 2 && rows.every(a => !!a.joinedAt),
+    entro: new Set(
+      rows.filter(a => a.joinedAt).map(a => (a.memberEmail || '').toLowerCase())
+    )
+  };
 };
 
 // Reuniones cuyas dos respuestas se contradicen, con quién quedó fuera del
-// consenso y si el registro lo desmiente.
+// consenso y qué dice el registro sobre él:
+//
+//   'desmiente' → los DOS abrieron el enlace. Que los dos estuvieran ahí no
+//                 prueba que hayan hablado, pero contra eso "no se hizo" deja
+//                 de ser un malentendido posible. Es mentira comprobada.
+//   'respalda'  → él entró y el otro no. Se presentó y lo dejaron plantado:
+//                 "no se hizo" es exactamente lo que hay que contestar, y no
+//                 puede costarle nada.
+//   'silencio'  → no hay registro suyo. Ni lo desmiente ni lo respalda; solo
+//                 cuenta si se repite.
+//   'sin_datos' → ni siquiera hay filas de asistencia. No se juzga.
 export const getDisputedMeetings = (closeouts, attendances = []) => {
   const byMeeting = new Map();
   for (const c of closeouts) {
@@ -118,10 +146,17 @@ export const getDisputedMeetings = (closeouts, attendances = []) => {
     const [a, b] = rows;
     if (!isDisputed(a.happened, b.happened)) continue;
     const outlier = a.happened === 'no_se_hizo' ? a : b;
+    const reg = joinRecord(meetingId, attendances);
+    const outlierEntro = reg.entro.has((outlier.authorEmail || '').toLowerCase());
+    const evidence = !reg.known ? 'sin_datos'
+      : reg.todos ? 'desmiente'
+      : outlierEntro ? 'respalda'
+      : 'silencio';
     disputed.push({
       meetingId,
       outlierEmail: outlier.authorEmail,
-      corroborated: bothJoined(meetingId, attendances)
+      corroborated: evidence === 'desmiente',
+      evidence
     });
   }
   return disputed;
@@ -171,14 +206,41 @@ export const getProvenLies = (email, closeouts, meetings, attendances = [], now 
     .sort((a, b) => b.when - a.when);
 };
 
+// Disputas en las que la persona quedó fuera del consenso y el registro no dijo
+// nada —ni a favor ni en contra—, dentro de la ventana del score.
+export const getUnbackedDisputes = (email, closeouts, meetings, attendances = [], now = Date.now()) => {
+  const cutoff = now - RELIABILITY_WINDOW_DAYS * 24 * 3600e3;
+  return getDisputedMeetings(closeouts, attendances)
+    .filter(d => d.evidence === 'silencio' && sameEmail(d.outlierEmail, email))
+    .map(d => ({ meetingId: d.meetingId, when: meetingTimeOf(d.meetingId, meetings) }))
+    .filter(l => !Number.isNaN(l.when) && l.when >= cutoff)
+    .sort((a, b) => b.when - a.when);
+};
+
+// Cuántas de esas disputas pesan. La primera es gratis: negar una sesión que el
+// otro dio por hecha puede ser un malentendido honesto, y sin registro no hay
+// forma de saberlo. Lo que no se sostiene como malentendido es la repetición.
+export const getPatternStrikes = (email, closeouts, meetings, attendances = [], now = Date.now()) =>
+  Math.max(0, getUnbackedDisputes(email, closeouts, meetings, attendances, now).length - PATTERN_GRACE);
+
 // Factor de veracidad 0..1 que multiplica la credibilidad.
-//   sin mentiras = 1 · una = 0.6 · dos o más = piso 0.2
-// Quien miente dos veces además queda fuera de la rotación del mes, así que el
-// piso es sobre todo lo que le queda cuando vuelve el 1°.
+//
+//   mentira comprobada (el registro lo desmiente) = -0.4 cada una
+//   reincidencia sin respaldo, de la segunda en más = -0.2 cada una
+//   piso 0.2
+//
+// La reincidencia pesa la mitad porque la evidencia es circunstancial: es un
+// patrón, no un hecho. Por eso tampoco bloquea — para sacar a alguien de la
+// rotación hace falta el registro en contra.
 export const getVeracity = (email, closeouts, meetings, attendances = [], now = Date.now()) => {
   const lies = getProvenLies(email, closeouts, meetings, attendances, now).length;
-  if (lies === 0) return 1;
-  return Math.max(VERACITY_FLOOR, 1 - LIE_PENALTY * lies);
+  const pattern = getPatternStrikes(email, closeouts, meetings, attendances, now);
+  if (lies === 0 && pattern === 0) return 1;
+  const factor = Math.max(VERACITY_FLOOR, 1 - LIE_PENALTY * lies - PATTERN_PENALTY * pattern);
+  // Redondeado a dos decimales: restar 0.4 y 0.2 en binario deja colas como
+  // 0.3999999999999999, que después se arrastran al puntaje y no coinciden con
+  // el porcentaje entero que devuelve la base.
+  return Math.round(factor * 100) / 100;
 };
 
 // Mentiras comprobadas dentro del mes calendario UTC en curso.

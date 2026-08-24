@@ -590,47 +590,61 @@ Deno.serve(async (req) => {
         closeoutsByMeeting.get(c.meeting_id)!.push(c);
       }
 
-      // ¿Los DOS abrieron el enlace de Meet desde la app? No prueba que hayan
-      // hablado, pero sí que los dos estuvieron ahí. Si falta el dato de alguno
-      // —reunión vieja, o quien entró desde el mail de Calendar— no hay
-      // corroboración: el silencio del registro no acusa a nadie.
-      const joinedByMeeting = new Map<string, { total: number; conRegistro: number }>();
+      // Qué dice el registro de ingreso de cada reunión. joined_at solo se
+      // escribe cuando la persona abre el enlace DESDE la app: quien entra por
+      // el botón de Google Calendar no deja rastro, así que la falta del dato
+      // no significa ausencia.
+      const registroPorReunion = new Map<string, { total: number; conRegistro: number; entro: Set<string> }>();
       for (const r of attRows || []) {
-        const acc = joinedByMeeting.get(r.meeting_id) || { total: 0, conRegistro: 0 };
+        const acc = registroPorReunion.get(r.meeting_id)
+          || { total: 0, conRegistro: 0, entro: new Set<string>() };
         acc.total++;
-        if (r.joined_at) acc.conRegistro++;
-        joinedByMeeting.set(r.meeting_id, acc);
+        if (r.joined_at) { acc.conRegistro++; acc.entro.add(r.member_email.toLowerCase()); }
+        registroPorReunion.set(r.meeting_id, acc);
       }
-      const registroRespalda = (meetingId: string) => {
-        const acc = joinedByMeeting.get(meetingId);
-        return !!acc && acc.total >= 2 && acc.conRegistro === acc.total;
-      };
 
-      // Disputa: una respuesta niega la sesión y la otra la da por hecha.
-      //   sin evidencia → neutra, no puntúa para ninguno de los dos.
-      //   con evidencia → el "no se hizo" queda desmentido: se descarta SOLO la
-      //   respuesta de quien lo dijo y se le descuenta credibilidad.
+      // Disputa: una respuesta niega la sesión y la otra la da por hecha. Se
+      // clasifica por lo que el registro diga DEL QUE NIEGA:
+      //   'desmiente' → entraron los dos. Mentira comprobada: se descarta su
+      //                 respuesta, -0.4, y dos en el mes lo sacan del pool.
+      //   'respalda'  → entró él y el otro no. Lo dejaron plantado: "no se
+      //                 hizo" es la respuesta correcta y no cuesta nada.
+      //   'silencio'  → no hay registro suyo. La primera es gratis; después
+      //                 pesa la mitad de una mentira. Es lo que impide que
+      //                 alcance con no pasar nunca por la app para mentir
+      //                 impunemente.
       const disputaNeutra = new Set<string>();
       // meetingId|email de cada respuesta contradicha por el registro.
       const cierreDescartado = new Set<string>();
       const mentirasPorEmail = new Map<string, number[]>();
+      const sinRespaldoPorEmail = new Map<string, number[]>();
       for (const [meetingId, rows] of closeoutsByMeeting) {
         if (rows.length < 2) continue;
         const niegan = rows.filter(r => r.happened === 'no_se_hizo');
         if (niegan.length === 0 || niegan.length === rows.length) continue;
-        if (!registroRespalda(meetingId)) { disputaNeutra.add(meetingId); continue; }
+        const reg = registroPorReunion.get(meetingId);
+        const known = !!reg && reg.total >= 2;
+        const desmiente = known && reg!.conRegistro === reg!.total;
         const startMs = meetingStartMs.get(meetingId);
+        if (!desmiente) disputaNeutra.add(meetingId);
         for (const r of niegan) {
           const email = r.author_email.toLowerCase();
-          cierreDescartado.add(`${meetingId}|${email}`);
-          if (startMs === undefined) continue;
-          if (!mentirasPorEmail.has(email)) mentirasPorEmail.set(email, []);
-          mentirasPorEmail.get(email)!.push(startMs);
+          if (desmiente) {
+            cierreDescartado.add(`${meetingId}|${email}`);
+            if (startMs === undefined) continue;
+            if (!mentirasPorEmail.has(email)) mentirasPorEmail.set(email, []);
+            mentirasPorEmail.get(email)!.push(startMs);
+          } else if (known && !reg!.entro.has(email)) {
+            if (startMs === undefined) continue;
+            if (!sinRespaldoPorEmail.has(email)) sinRespaldoPorEmail.set(email, []);
+            sinRespaldoPorEmail.get(email)!.push(startMs);
+          }
         }
       }
 
       // Dos mentiras comprobadas en el mismo mes calendario dejan a la persona
-      // fuera de la rotación hasta el 1°, igual que 3 faltas.
+      // fuera de la rotación hasta el 1°, igual que 3 faltas. La reincidencia
+      // sin respaldo NO bloquea: es un patrón, no un hecho.
       const MONTHLY_LIES_LIMIT = 2;
       for (const [email, cuando] of mentirasPorEmail) {
         if (cuando.filter(ms => ms >= monthStartMs).length >= MONTHLY_LIES_LIMIT) {
@@ -833,6 +847,8 @@ Deno.serve(async (req) => {
       const RECIPROCITY_FLOOR = 0.85;
       const LIE_PENALTY = 0.4;
       const VERACITY_FLOOR = 0.2;
+      const PATTERN_PENALTY = 0.2;
+      const PATTERN_GRACE = 1;
       const scores = new Map<string, number | null>();
       for (const m of pool) {
         const dims = [attendanceScores.get(m.email), engagementScores.get(m.email)]
@@ -842,11 +858,16 @@ Deno.serve(async (req) => {
         const r = reciprocity.get(m.email);
         const factor = r === null || r === undefined
           ? 1 : RECIPROCITY_FLOOR + (1 - RECIPROCITY_FLOOR) * r;
-        // Solo las mentiras dentro de la misma ventana de 60 días del score.
+        // Solo lo que cae dentro de la misma ventana de 60 días del score.
         const mentiras = (mentirasPorEmail.get(m.email.toLowerCase()) || [])
           .filter(ms => ms >= cutoff60).length;
-        const veracidad = mentiras === 0
-          ? 1 : Math.max(VERACITY_FLOOR, 1 - LIE_PENALTY * mentiras);
+        const sinRespaldo = (sinRespaldoPorEmail.get(m.email.toLowerCase()) || [])
+          .filter(ms => ms >= cutoff60).length;
+        const patron = Math.max(0, sinRespaldo - PATTERN_GRACE);
+        const veracidad = mentiras === 0 && patron === 0
+          ? 1
+          : Math.max(VERACITY_FLOOR,
+                     1 - LIE_PENALTY * mentiras - PATTERN_PENALTY * patron);
         scores.set(m.email, Math.round(base * factor * veracidad));
       }
 

@@ -12,6 +12,8 @@ import {
   getCredibility,
   getProvenLies,
   getVeracity,
+  getUnbackedDisputes,
+  getPatternStrikes,
   getMonthlyLies,
   isBlockedForLying,
   isCountable,
@@ -19,6 +21,8 @@ import {
   CLOSEOUT_WINDOW_MS,
   RECIPROCITY_FLOOR,
   VERACITY_FLOOR,
+  LIE_PENALTY,
+  PATTERN_PENALTY,
   MONTHLY_LIES_LIMIT
 } from '../src/closeouts.js';
 
@@ -74,8 +78,9 @@ test('disputa: señala a quien quedó fuera del consenso', () => {
     cierre('m1', 'a@x.com', 'b@x.com', { happened: 'completa' }),
     cierre('m1', 'b@x.com', 'a@x.com', { happened: 'no_se_hizo' })
   ];
+  // Sin filas de asistencia el registro no dice nada de nadie.
   assert.deepEqual(getDisputedMeetings(closeouts), [
-    { meetingId: 'm1', outlierEmail: 'b@x.com', corroborated: false }
+    { meetingId: 'm1', outlierEmail: 'b@x.com', corroborated: false, evidence: 'sin_datos' }
   ]);
 });
 
@@ -90,7 +95,10 @@ test('disputa: sin registro de ingreso no se corrobora nada', () => {
     { meetingId: 'm1', memberEmail: 'a@x.com', status: 'asistio', joinedAt: hace(72) },
     { meetingId: 'm1', memberEmail: 'b@x.com', status: 'no_show', joinedAt: null }
   ];
-  assert.equal(getDisputedMeetings(closeouts, soloUnoEntro)[0].corroborated, false);
+  const d = getDisputedMeetings(closeouts, soloUnoEntro)[0];
+  assert.equal(d.corroborated, false);
+  // Entró el acusador, no el outlier: el registro calla sobre quien niega.
+  assert.equal(d.evidence, 'silencio');
 });
 
 test('disputa: si los dos entraron al Meet, el "no se hizo" queda desmentido', () => {
@@ -100,7 +108,7 @@ test('disputa: si los dos entraron al Meet, el "no se hizo" queda desmentido', (
   ];
   const att = entraronLosDos('m1', 'a@x.com', 'b@x.com');
   assert.deepEqual(getDisputedMeetings(closeouts, att), [
-    { meetingId: 'm1', outlierEmail: 'b@x.com', corroborated: true }
+    { meetingId: 'm1', outlierEmail: 'b@x.com', corroborated: true, evidence: 'desmiente' }
   ]);
 });
 
@@ -374,4 +382,149 @@ test('elogio: el de quien mintió no se entrega', () => {
   assert.deepEqual(getPraiseReceived('a@x.com', closeouts, meetings, att, AHORA), []);
   // El del compañero honesto sí llega.
   assert.equal(getPraiseReceived('b@x.com', closeouts, meetings, att, AHORA).length, 1);
+});
+
+// --- REINCIDENCIA SIN EVIDENCIA ---
+//
+// El registro de ingreso solo existe si la persona entró al Meet desde la app.
+// Quien entra desde el mail de Calendar no deja rastro, y eso dejaba un agujero
+// justo para el caso peor: al mentiroso le alcanzaba con no pasar por la app
+// para que nunca hubiera evidencia sobre sí mismo. Contra eso, el patrón es la
+// evidencia.
+
+// Disputa donde el outlier NO tiene registro de ingreso (entró por Calendar, o
+// directamente no entró). El registro no lo desmiente ni lo respalda.
+const disputaSinRespaldo = (id, outlier, otro) => ({
+  meeting: cerrada(id),
+  closeouts: [
+    cierre(id, otro, outlier, { happened: 'completa', engagement: 'preparado' }),
+    cierre(id, outlier, otro, { happened: 'no_se_hizo', engagement: 'no_participo' })
+  ],
+  attendances: [
+    { meetingId: id, memberEmail: outlier, status: 'asistio', joinedAt: null },
+    { meetingId: id, memberEmail: otro, status: 'asistio', joinedAt: null }
+  ]
+});
+
+const armar = (...casos) => ({
+  meetings: casos.map(c => c.meeting),
+  closeouts: casos.flatMap(c => c.closeouts),
+  attendances: casos.flatMap(c => c.attendances)
+});
+
+test('reincidencia: la primera disputa sin respaldo sale gratis', () => {
+  const { meetings, closeouts, attendances } = armar(
+    disputaSinRespaldo('m1', 'beto@x.com', 'ana@x.com')
+  );
+  assert.equal(getUnbackedDisputes('beto@x.com', closeouts, meetings, attendances, AHORA).length, 1);
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 0);
+  assert.equal(getVeracity('beto@x.com', closeouts, meetings, attendances, AHORA), 1);
+});
+
+test('reincidencia: de la segunda en más empieza a costar', () => {
+  const { meetings, closeouts, attendances } = armar(
+    disputaSinRespaldo('m1', 'beto@x.com', 'ana@x.com'),
+    disputaSinRespaldo('m2', 'beto@x.com', 'caro@x.com')
+  );
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 1);
+  assert.equal(getVeracity('beto@x.com', closeouts, meetings, attendances, AHORA), 0.8);
+
+  const tres = armar(
+    disputaSinRespaldo('m1', 'beto@x.com', 'ana@x.com'),
+    disputaSinRespaldo('m2', 'beto@x.com', 'caro@x.com'),
+    disputaSinRespaldo('m3', 'beto@x.com', 'dani@x.com')
+  );
+  assert.equal(getPatternStrikes('beto@x.com', tres.closeouts, tres.meetings, tres.attendances, AHORA), 2);
+  assert.equal(getVeracity('beto@x.com', tres.closeouts, tres.meetings, tres.attendances, AHORA), 0.6);
+});
+
+test('reincidencia: pesa la mitad que una mentira comprobada', () => {
+  const patron = armar(
+    disputaSinRespaldo('m1', 'beto@x.com', 'ana@x.com'),
+    disputaSinRespaldo('m2', 'beto@x.com', 'caro@x.com')
+  );
+  const conPatron = getVeracity('beto@x.com', patron.closeouts, patron.meetings, patron.attendances, AHORA);
+
+  const meetings = [cerrada('m1')];
+  const comprobada = [
+    cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'completa' }),
+    cierre('m1', 'beto@x.com', 'ana@x.com', { happened: 'no_se_hizo' })
+  ];
+  const conMentira = getVeracity('beto@x.com', comprobada, meetings,
+    entraronLosDos('m1', 'ana@x.com', 'beto@x.com'), AHORA);
+
+  const descuento = (v) => Math.round((1 - v) * 100);
+  assert.equal(descuento(conPatron), descuento(conMentira) / 2,
+    'la evidencia circunstancial tiene que pesar la mitad que la dura');
+  assert.equal(PATTERN_PENALTY, LIE_PENALTY / 2);
+});
+
+test('reincidencia: NUNCA saca a nadie de la rotación', () => {
+  // Sacar a alguien del pool con evidencia circunstancial sería demasiado: el
+  // patrón mueve el puntaje, el bloqueo pide el registro en contra.
+  const { meetings, closeouts, attendances } = armar(
+    disputaSinRespaldo('m1', 'beto@x.com', 'ana@x.com'),
+    disputaSinRespaldo('m2', 'beto@x.com', 'caro@x.com'),
+    disputaSinRespaldo('m3', 'beto@x.com', 'dani@x.com'),
+    disputaSinRespaldo('m4', 'beto@x.com', 'eli@x.com')
+  );
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 3);
+  assert.equal(getMonthlyLies('beto@x.com', closeouts, meetings, attendances, AHORA), 0);
+  assert.equal(isBlockedForLying('beto@x.com', closeouts, meetings, attendances, AHORA), false);
+});
+
+test('reincidencia: al que se presentó y lo dejaron plantado no le cuesta nada', () => {
+  // Él entró al Meet, el otro no. "No se hizo" es exactamente lo que hay que
+  // contestar, y repetirlo no puede convertirlo en sospechoso: la víctima de
+  // varios plantones sería la más castigada.
+  const caso = (id, presente, ausente) => ({
+    meeting: cerrada(id),
+    closeouts: [
+      cierre(id, ausente, presente, { happened: 'completa', engagement: 'preparado' }),
+      cierre(id, presente, ausente, { happened: 'no_se_hizo', engagement: 'no_participo' })
+    ],
+    attendances: [
+      { meetingId: id, memberEmail: presente, status: 'asistio', joinedAt: hace(72) },
+      { meetingId: id, memberEmail: ausente, status: 'no_show', joinedAt: null }
+    ]
+  });
+  const { meetings, closeouts, attendances } = armar(
+    caso('m1', 'beto@x.com', 'ana@x.com'),
+    caso('m2', 'beto@x.com', 'caro@x.com'),
+    caso('m3', 'beto@x.com', 'dani@x.com')
+  );
+  assert.equal(getUnbackedDisputes('beto@x.com', closeouts, meetings, attendances, AHORA).length, 0);
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 0);
+  assert.equal(getVeracity('beto@x.com', closeouts, meetings, attendances, AHORA), 1);
+});
+
+test('reincidencia: sin filas de asistencia no se juzga a nadie', () => {
+  // Un llamador que no pasa las asistencias no puede fabricar sanciones.
+  const meetings = [cerrada('m1'), cerrada('m2'), cerrada('m3')];
+  const closeouts = ['m1', 'm2', 'm3'].flatMap(id => [
+    cierre(id, 'ana@x.com', 'beto@x.com', { happened: 'completa' }),
+    cierre(id, 'beto@x.com', 'ana@x.com', { happened: 'no_se_hizo' })
+  ]);
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, [], AHORA), 0);
+  assert.equal(getVeracity('beto@x.com', closeouts, meetings, [], AHORA), 1);
+});
+
+test('reincidencia: se suma a las mentiras comprobadas, con el mismo piso', () => {
+  const conMentira = {
+    meeting: cerrada('m0'),
+    closeouts: [
+      cierre('m0', 'ana@x.com', 'beto@x.com', { happened: 'completa' }),
+      cierre('m0', 'beto@x.com', 'ana@x.com', { happened: 'no_se_hizo' })
+    ],
+    attendances: entraronLosDos('m0', 'ana@x.com', 'beto@x.com')
+  };
+  const { meetings, closeouts, attendances } = armar(
+    conMentira,
+    disputaSinRespaldo('m1', 'beto@x.com', 'caro@x.com'),
+    disputaSinRespaldo('m2', 'beto@x.com', 'dani@x.com')
+  );
+  // 1 comprobada (-0.4) + 1 de patrón (-0.2) = 0.4
+  assert.equal(getProvenLies('beto@x.com', closeouts, meetings, attendances, AHORA).length, 1);
+  assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 1);
+  assert.equal(getVeracity('beto@x.com', closeouts, meetings, attendances, AHORA), 0.4);
 });
