@@ -3876,42 +3876,6 @@ export default function App() {
           {/* VIEW: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div>
-              {/* Tarjeta para compartir sala rápidamente */}
-              <div className="glass share-room-banner" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, rgba(var(--primary-rgb), 0.15), rgba(var(--primary-rgb), 0.15))',
-                    border: '1px solid rgba(var(--primary-rgb), 0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-primary)'
-                  }}>
-                    <Share2 size={20} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      Invitar a la Sala: <span className="room-badge-pill">{roomName}</span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                      Comparte este enlace con tu equipo. Al ingresar los llevará directamente al registro inicial de esta sala.
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-indigo"
-                  onClick={handleCopyRoomInvite}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontWeight: '600' }}
-                >
-                  <Share2 size={15} />
-                  Copiar Link de Invitación
-                </button>
-              </div>
-
               {/* Aviso de bloqueo por faltas del mes (3+) */}
               {currentUser && isBlocked(currentUser.email) && (
                 <div className="glass" style={{ padding: '14px 18px', marginBottom: '16px', border: '1px solid var(--color-danger)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -3925,39 +3889,18 @@ export default function App() {
                 </div>
               )}
 
-              {/* Tarjeta de Estado Semanal de Tomás */}
-              <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: currentUser.active ? 'var(--color-accent)' : 'var(--color-danger)',
-                    boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
-                  }}></div>
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      Mi Participación Semanal:
-                      <span className={currentUser.active ? 'member-badge-active' : 'member-badge-inactive'}>
-                        {currentUser.active ? 'ACTIVO' : 'INACTIVO'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
-                      {currentUser.active
-                        ? 'Estás participando de los emparejamientos semanales. Tus compañeros pueden coincidir contigo.'
-                        : 'Estás excluido de esta semana. Tus horarios no serán cruzados con los del equipo.'}
-                    </div>
+              {/* REQUIERE TU ACCIÓN.
+                  Los cierres y los reportes de asistencia vencen; el resto del
+                  panel no. Antes convivían con todo lo demás al mismo peso
+                  visual y quedaban terceros y cuartos en una pila de ocho
+                  tarjetas iguales. La franja solo existe si hay algo adentro. */}
+              {(openCloseouts.length > 0 || pendingReports.filter(({ meeting }) =>
+                !openCloseouts.some(c => c.meetingId === meeting.id)).length > 0) && (
+                <div className="dash-urgent">
+                  <div className="dash-urgent-label">
+                    <span className="dash-urgent-dot" aria-hidden="true"></span>
+                    Requiere tu acción
                   </div>
-                </div>
-                <button
-                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
-                  style={{ fontSize: '12px', padding: '6px 14px' }}
-                  onClick={toggleCurrentUserActive}
-                >
-                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
-                </button>
-              </div>
-
               {/* CIERRES DE SESIÓN PENDIENTES.
                   Es lo que reemplaza al viejo "¿se conectó?": pregunta por la
                   sesión entera, no solo por la presencia, y lo responden los
@@ -4045,126 +3988,12 @@ export default function App() {
                 </div>
               )}
 
-              {/* MI CREDIBILIDAD.
-                  Cada quien ve la suya y nada más: nunca la de otro, y nunca
-                  quién dijo qué. El compromiso llega ya promediado desde el
-                  servidor y los elogios vienen sin autor. */}
-              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
-                || (closeoutStanding.veracity ?? 1) < 1) && (
-                <div className="section-card glass credibility-card">
-                  <h4 className="section-title">
-                    <Gauge size={15} className="section-title-icon" /> Tu credibilidad
-                  </h4>
-                  <div className="credibility-grid">
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {myCredibility ?? '—'}
-                        {myCredibility !== null && '%'}
-                      </span>
-                      <span className="credibility-label">General</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {getReliability(currentUser.email) ?? '—'}
-                        {getReliability(currentUser.email) !== null && '%'}
-                      </span>
-                      <span className="credibility-label">Asistencia</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {closeoutStanding.engagement ?? '—'}
-                        {closeoutStanding.engagement !== null && '%'}
-                      </span>
-                      <span className="credibility-label">Compromiso</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {closeoutStanding.reciprocity === null ? '—' : `${Math.round(closeoutStanding.reciprocity * 100)}%`}
-                      </span>
-                      <span className="credibility-label">Cierres respondidos</span>
-                    </div>
-                  </div>
-                  <p className="credibility-note">
-                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
-                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
-                    hayan contestado los dos o uno solo.
-                  </p>
-
-                  {/* Se avisa con el motivo y el número: una sanción que no se
-                      explica se lee como un error de la app. */}
-                  {(closeoutStanding.veracity ?? 1) < 1 && (
-                    <p className="credibility-warning">
-                      <AlertTriangle size={13} />
-                      <span>
-                        {closeoutStanding.provenLies > 0 && (
-                          closeoutStanding.provenLies === 1
-                            ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
-                            : `Dijiste que ${closeoutStanding.provenLies} sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. `
-                        )}
-                        {closeoutStanding.patternStrikes > 0 && (
-                          'Además venís negando sesiones que tus compañeros dan por hechas, sin haber entrado al Meet desde la app en ninguna. '
-                        )}
-                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
-                        {closeoutStanding.blockedForLying
-                          ? ` Con ${MONTHLY_LIES_LIMIT} comprobadas en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
-                          : ''}
-                        {closeoutStanding.patternStrikes > 0 && !closeoutStanding.provenLies
-                          ? ' Entrá al Meet desde la app y no desde el botón de Calendar: así queda registrado que estuviste y tu palabra pesa.'
-                          : ''}
-                      </span>
-                    </p>
-                  )}
-                  {closeoutPraise.length > 0 && (
-                    <div className="credibility-praise">
-                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
-                      {closeoutPraise.map((p, i) => (
-                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* KPIs */}
-              <div className="metrics-grid">
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
-                    <Users size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{activeMembersCount}</span>
-                    <span className="kpi-label">{activeMembersCount === 1 ? 'Miembro Activo' : 'Miembros Activos'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
-                    <Clock size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{availabilities.length}</span>
-                    <span className="kpi-label">{availabilities.length === 1 ? 'Bloque Semanal' : 'Bloques Semanales'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
-                    <Sparkles size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{myLiveProposals.length}</span>
-                    <span className="kpi-label">{myLiveProposals.length === 1 ? 'Mi Propuesta Activa' : 'Mis Propuestas Activas'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--warning-rgb), 0.12)', color: 'var(--color-warning)' }}>
-                    <Video size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{upcomingMeetings.length}</span>
-                    <span className="kpi-label">{upcomingMeetings.length === 1 ? 'Meet Próximo' : 'Meets Próximos'}</span>
-                  </div>
-                </div>
-              </div>
-
+              {/* LA RESPUESTA. Es la pregunta con la que se entra al panel:
+                  ¿con quién practico esta semana? Antes quedaba séptima,
+                  debajo de cuatro KPIs que nadie vino a mirar. */}
               {/* 2-Columns */}
               <div className="dashboard-sections">
                 
@@ -4508,6 +4337,174 @@ export default function App() {
                 </div>
 
               </div>
+              {/* CONTEXTO. Todo lo que sigue es referencia, no titular: se
+                  consulta, no se actúa sobre ello al entrar. */}
+              {/* Tarjeta de Estado Semanal de Tomás */}
+              <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: currentUser.active ? 'var(--color-accent)' : 'var(--color-danger)',
+                    boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
+                  }}></div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      Mi Participación Semanal:
+                      <span className={currentUser.active ? 'member-badge-active' : 'member-badge-inactive'}>
+                        {currentUser.active ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
+                      {currentUser.active
+                        ? 'Estás participando de los emparejamientos semanales. Tus compañeros pueden coincidir contigo.'
+                        : 'Estás excluido de esta semana. Tus horarios no serán cruzados con los del equipo.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                  onClick={toggleCurrentUserActive}
+                >
+                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
+                </button>
+              </div>
+
+              {/* MI CREDIBILIDAD.
+                  Cada quien ve la suya y nada más: nunca la de otro, y nunca
+                  quién dijo qué. El compromiso llega ya promediado desde el
+                  servidor y los elogios vienen sin autor. */}
+              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
+                || (closeoutStanding.veracity ?? 1) < 1) && (
+                <div className="section-card glass credibility-card">
+                  <h4 className="section-title">
+                    <Gauge size={15} className="section-title-icon" /> Tu credibilidad
+                  </h4>
+                  <div className="credibility-grid">
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {myCredibility ?? '—'}
+                        {myCredibility !== null && '%'}
+                      </span>
+                      <span className="credibility-label">General</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {getReliability(currentUser.email) ?? '—'}
+                        {getReliability(currentUser.email) !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Asistencia</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.engagement ?? '—'}
+                        {closeoutStanding.engagement !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Compromiso</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.reciprocity === null ? '—' : `${Math.round(closeoutStanding.reciprocity * 100)}%`}
+                      </span>
+                      <span className="credibility-label">Cierres respondidos</span>
+                    </div>
+                  </div>
+                  <p className="credibility-note">
+                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
+                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
+                    hayan contestado los dos o uno solo.
+                  </p>
+
+                  {/* Se avisa con el motivo y el número: una sanción que no se
+                      explica se lee como un error de la app. */}
+                  {(closeoutStanding.veracity ?? 1) < 1 && (
+                    <p className="credibility-warning">
+                      <AlertTriangle size={13} />
+                      <span>
+                        {closeoutStanding.provenLies > 0 && (
+                          closeoutStanding.provenLies === 1
+                            ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
+                            : `Dijiste que ${closeoutStanding.provenLies} sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. `
+                        )}
+                        {closeoutStanding.patternStrikes > 0 && (
+                          'Además venís negando sesiones que tus compañeros dan por hechas, sin haber entrado al Meet desde la app en ninguna. '
+                        )}
+                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
+                        {closeoutStanding.blockedForLying
+                          ? ` Con ${MONTHLY_LIES_LIMIT} comprobadas en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
+                          : ''}
+                        {closeoutStanding.patternStrikes > 0 && !closeoutStanding.provenLies
+                          ? ' Entrá al Meet desde la app y no desde el botón de Calendar: así queda registrado que estuviste y tu palabra pesa.'
+                          : ''}
+                      </span>
+                    </p>
+                  )}
+                  {closeoutPraise.length > 0 && (
+                    <div className="credibility-praise">
+                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
+                      {closeoutPraise.map((p, i) => (
+                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* KPIs */}
+              <div className="metrics-grid">
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
+                    <Users size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{activeMembersCount}</span>
+                    <span className="kpi-label">{activeMembersCount === 1 ? 'Miembro Activo' : 'Miembros Activos'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
+                    <Clock size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{availabilities.length}</span>
+                    <span className="kpi-label">{availabilities.length === 1 ? 'Bloque Semanal' : 'Bloques Semanales'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{myLiveProposals.length}</span>
+                    <span className="kpi-label">{myLiveProposals.length === 1 ? 'Mi Propuesta Activa' : 'Mis Propuestas Activas'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--warning-rgb), 0.12)', color: 'var(--color-warning)' }}>
+                    <Video size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{upcomingMeetings.length}</span>
+                    <span className="kpi-label">{upcomingMeetings.length === 1 ? 'Meet Próximo' : 'Meets Próximos'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invitar a la sala. Era una tarjeta con ícono de 40px arriba de
+                  todo, con el mismo peso que un cierre que vence — y es algo que
+                  se usa una vez en la vida de la sala. Baja a una línea. */}
+              <div className="dash-invite">
+                <span className="dash-invite-text">
+                  <Share2 size={14} aria-hidden="true" />
+                  Sumá gente a <strong>{roomName}</strong> con el enlace de la sala.
+                </span>
+                <button type="button" className="btn-small" onClick={handleCopyRoomInvite}>
+                  <Copy size={13} aria-hidden="true" /> Copiar enlace
+                </button>
+              </div>
+
             </div>
           )}
 
