@@ -572,6 +572,79 @@
   background-color: rgba(var(--primary-rgb), 0.1);
 }
 
+/* Contador de horas por día en la cabecera. Va acá y no en un aviso aparte
+   porque el tope tiene que entenderse MIENTRAS se marca, no después de
+   chocarlo: quien ve "3/4" antes de clickear ya sabe qué le queda. */
+.editor-day-count {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--t-label);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.editor-day-count.full {
+  color: var(--color-primary);
+  opacity: 1;
+}
+
+/* Excedido es un estado heredado, no un error: se señala en ámbar, que en esta
+   app significa "mirá esto", y no en rojo, que significa "te falta algo". */
+.editor-day-count.over {
+  color: var(--color-warning);
+  opacity: 1;
+}
+
+/* Sacudida corta al chocar el tope. Es la diferencia entre "la app no
+   respondió" y "la app dijo que no". */
+.editor-head-btn.cap-hit {
+  animation: cap-nudge 320ms ease;
+}
+
+@keyframes cap-nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-head-btn.cap-hit { animation: none; }
+}
+
+.editor-cap-legacy,
+.editor-cap-toast {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: var(--r-button);
+  font-size: var(--t-small);
+  line-height: 1.45;
+}
+
+.editor-cap-legacy {
+  margin-bottom: 10px;
+  padding: 11px 13px;
+  color: var(--text-main);
+  background-color: rgba(var(--warning-rgb), 0.09);
+  border: 1px solid rgba(var(--warning-rgb), 0.25);
+}
+
+.editor-cap-legacy svg { color: var(--color-warning); flex-shrink: 0; }
+
+.editor-cap-toast {
+  margin-bottom: 10px;
+  padding: 9px 13px;
+  color: var(--text-main);
+  background-color: rgba(var(--primary-rgb), 0.1);
+  border: 1px solid rgba(var(--primary-rgb), 0.24);
+}
+
+.editor-cap-toast svg { color: var(--color-primary); flex-shrink: 0; }
+
 .editor-hour-label .editor-head-btn {
   padding: 0 4px;
 }

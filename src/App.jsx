@@ -87,7 +87,12 @@ import {
   toggleHourRow as toggleHourCells,
   describeDrag,
   runAt,
-  goalState
+  goalState,
+  MAX_HOURS_PER_DAY,
+  hoursOnDay,
+  daysOverCap,
+  addCell,
+  allMarkedDaysFull
 } from './domain/availabilityGrid';
 import {
   getEngagement,
@@ -433,6 +438,10 @@ export default function App() {
 
   // Estados de carga del Wizard. Ya no hay pasos: la grilla es la pantalla.
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  // Día cuyo tope diario se acaba de tocar. Sirve para explicar por qué la
+  // celda no se pintó; se limpia solo porque es un aviso del gesto, no un error
+  // que la persona tenga que ir a despachar.
+  const [capAviso, setCapAviso] = useState(null);
   // Si la grilla ya se sembró con lo que la persona tenía guardado, en esta
   // visita a la pestaña. Antes esa siembra la hacía el botón "Sí, participaré"
   // del paso 1; sin pasos hay que hacerla al entrar, una sola vez, para no
@@ -675,6 +684,27 @@ export default function App() {
     const date = getNextMatchDateUtc({ startSlot: slot });
     const parts = new Intl.DateTimeFormat('es-AR', {
       timeZone: tz, weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(date);
+    const get = (type) => parts.find(p => p.type === type)?.value || '';
+    const weekday = get('weekday');
+    return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${get('day')}/${get('month')}/${get('year')} · ${get('hour')}:${get('minute')}`;
+  };
+
+  // La Agenda de la Sala mostraba el horario en UTC mientras el resto del panel
+  // lo muestra en la zona de cada uno: quien está en México leía "14:00 UTC" y
+  // tenía que hacer la cuenta a mano para saber si llegaba. Peor cerca de
+  // medianoche, donde la conversión además corre el DÍA y la reunión parecía
+  // ser otra fecha.
+  //
+  // startsAt es un timestamp real, así que se fecha en local igual que la
+  // propuesta. Se conserva dateUtc como respaldo para las filas viejas que
+  // pudieran no tenerlo, y como referencia en el tooltip.
+  const meetingLocalLabel = (meet, tz) => {
+    const date = meet?.startsAt ? new Date(meet.startsAt) : null;
+    if (!date || Number.isNaN(date.getTime())) return meet?.dateUtc || '';
+    const parts = new Intl.DateTimeFormat('es-AR', {
+      timeZone: tz || 'UTC', weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit', hour12: false
     }).formatToParts(date);
     const get = (type) => parts.find(p => p.type === type)?.value || '';
@@ -3339,6 +3369,14 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
+  // El aviso del tope se borra solo. Con la dependencia en capAviso, volver a
+  // chocar el mismo día reinicia la cuenta en vez de heredar el reloj anterior.
+  useEffect(() => {
+    if (capAviso === null) return undefined;
+    const t = setTimeout(() => setCapAviso(null), 2600);
+    return () => clearTimeout(t);
+  }, [capAviso]);
+
   const handleCellMouseDown = (dayIdx, hour, e) => {
     setIsMouseDown(true);
     const exists = wizardGrid.some(s => s.dayIdx === dayIdx && s.hour === hour);
@@ -3384,8 +3422,14 @@ export default function App() {
   const toggleCell = (dayIdx, hour, active) => {
     if (active) {
       setWizardGrid(prev => {
-        if (prev.some(s => s.dayIdx === dayIdx && s.hour === hour)) return prev;
-        return [...prev, { dayIdx, hour }];
+        const siguiente = addCell(prev, dayIdx, hour);
+        // addCell devuelve la misma grilla cuando el día ya llegó al tope. Se
+        // avisa en vez de no hacer nada: durante un arrastre, media docena de
+        // celdas que no se pintan sin explicación se lee como que la app falla.
+        if (siguiente === prev && !prev.some(s => s.dayIdx === dayIdx && s.hour === hour)) {
+          setCapAviso(dayIdx);
+        }
+        return siguiente;
       });
     } else {
       setWizardGrid(prev => prev.filter(s => !(s.dayIdx === dayIdx && s.hour === hour)));
@@ -3397,12 +3441,30 @@ export default function App() {
     setWizardGrid([]);
   };
 
-  // Atajos de cabecera: un clic marca un día entero o una franja horaria en los
-  // siete días. Cargar "todas las mañanas" pasaba por 21 clics uno por uno.
+  // Atajos de cabecera: un clic llena un día hasta el tope o marca una franja
+  // horaria en los siete días. Cargar "todas las mañanas" pasaba por 21 clics
+  // uno por uno.
+  //
+  // El mapa de calor decide QUÉ horas toma el atajo: marcar cuatro horas donde
+  // no hay nadie más libre es disponibilidad que nunca se va a cruzar con nadie.
+  const rankPorPopularidad = (dayIdx, hour) => heatmap?.[dayIdx]?.[hour]?.count ?? 0;
+
   const handleDayHeaderClick = (dayIdx) => {
     pushGridHistory();
-    setWizardGrid(prev => toggleDayCells(prev, dayIdx, visibleHours(showAllHours)));
+    setWizardGrid(prev => {
+      const siguiente = toggleDayCells(prev, dayIdx, visibleHours(showAllHours), {
+        rank: rankPorPopularidad
+      });
+      if (siguiente.length > prev.length && !dayHasRoomAfter(siguiente, dayIdx)) {
+        setCapAviso(dayIdx);
+      }
+      return siguiente;
+    });
   };
+
+  // Se avisa cuando el atajo dejó el día justo en el tope, para que quede claro
+  // por qué se marcaron cuatro horas y no la columna entera como antes.
+  const dayHasRoomAfter = (grid, dayIdx) => hoursOnDay(grid, dayIdx) < MAX_HOURS_PER_DAY;
 
   const handleHourHeaderClick = (hour) => {
     pushGridHistory();
@@ -3979,7 +4041,7 @@ export default function App() {
                             ¿Se conectó <strong>{attendance.memberName}</strong> y llegó a tiempo? <span style={{ fontWeight: 400, opacity: 0.7 }}>(tolerancia 10 min)</span>
                           </div>
                           <div className="attendance-prompt-meta">
-                            {meeting.title} · {meeting.dateUtc}
+                            {meeting.title} · {meetingLocalLabel(meeting, currentUser?.tz)}
                           </div>
                         </div>
                       </div>
@@ -4274,7 +4336,7 @@ export default function App() {
                             <div className="meeting-item" key={meet.id ?? idx} style={{ flexWrap: 'wrap' }}>
                               <div className="meeting-info">
                                 <span className="meeting-title" style={{ fontSize: '13px' }}>{meet.title}</span>
-                                <span className="meeting-meta" style={{ fontSize: '12px' }}>{meet.dateUtc}</span>
+                                <span className="meeting-meta" style={{ fontSize: '12px' }} title={`En UTC: ${meet.dateUtc}`}>{meetingLocalLabel(meet, currentUser?.tz)}</span>
                                 <span className="meeting-meta" style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                   <Users size={10} /> {meet.participants}
                                 </span>
@@ -4311,7 +4373,7 @@ export default function App() {
                                   rel="noopener noreferrer"
                                   className="btn btn-indigo"
                                   style={{ padding: '6px 10px', fontSize: '12px', textDecoration: 'none' }}
-                                  aria-label={`Unirse al Meet de ${meet.participants} (${meet.dateUtc})`}
+                                  aria-label={`Unirse al Meet de ${meet.participants} (${meetingLocalLabel(meet, currentUser?.tz)})`}
                                   onClick={() => markJoined(meet)}
                                 >
                                   <Video size={12} /> Meet
@@ -4631,7 +4693,7 @@ export default function App() {
                     </div>
                   </div>
                   {(() => {
-                    const g = goalState(wizardGrid.length, wizardWeeklyTarget);
+                    const g = goalState(wizardGrid.length, wizardWeeklyTarget, allMarkedDaysFull(wizardGrid));
                     const horas = `${wizardGrid.length} ${wizardGrid.length === 1 ? 'hora' : 'horas'}`;
                     const sesiones = `${wizardWeeklyTarget} ${wizardWeeklyTarget === 1 ? 'sesión' : 'sesiones'}`;
                     const comodo = wizardWeeklyTarget * 3;
@@ -4708,23 +4770,56 @@ export default function App() {
                   </button>
                 </div>
 
+                  {/* Días que ya venían por encima del tope de antes de que el
+                      tope existiera. No se recortan solos: borrarle a alguien
+                      disponibilidad que guardó, sin avisar, sería peor que el
+                      problema. Se señalan y la persona decide qué sacar. */}
+                  {daysOverCap(wizardGrid).length > 0 && (
+                    <div className="editor-cap-legacy" role="status">
+                      <AlertCircle size={14} aria-hidden="true" />
+                      <span>
+                        {daysOverCap(wizardGrid).map(d => DIAS[d]).join(', ')}
+                        {daysOverCap(wizardGrid).length === 1 ? ' tiene' : ' tienen'} más de {MAX_HOURS_PER_DAY} horas,
+                        de antes del tope diario. Podés dejarlas como están; si sacás alguna, ya no vas a poder volver a pasarte.
+                      </span>
+                    </div>
+                  )}
+
+                  {capAviso !== null && (
+                    <div className="editor-cap-toast" role="status" aria-live="polite">
+                      <AlertCircle size={13} aria-hidden="true" />
+                      {DIAS[capAviso]} llegó al tope de {MAX_HOURS_PER_DAY} horas. Para más margen, sumá otro día.
+                    </div>
+                  )}
+
                   <div className="editor-grid-scroll" onMouseLeave={endCellDrag} onMouseUp={endCellDrag}>
                     <table className="editor-table">
                       <thead>
                         <tr>
                           <th className="editor-th editor-th-hour">Hora</th>
-                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d, i) => (
-                            <th key={d} className={`editor-th ${i >= 5 ? 'weekend' : ''}`}>
-                              <button
-                                type="button"
-                                className="editor-head-btn"
-                                onClick={() => handleDayHeaderClick(i)}
-                                aria-label={`Marcar o borrar todas las horas visibles del ${DIAS[i]}`}
-                              >
-                                {d}
-                              </button>
-                            </th>
-                          ))}
+                          {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d, i) => {
+                            // El contador va en la cabecera y no en un aviso aparte: el
+                            // tope se entiende mientras se marca, no después de chocarlo.
+                            const usadas = hoursOnDay(wizardGrid, i);
+                            const estado = usadas > MAX_HOURS_PER_DAY
+                              ? 'over'
+                              : usadas === MAX_HOURS_PER_DAY ? 'full' : '';
+                            return (
+                              <th key={d} className={`editor-th ${i >= 5 ? 'weekend' : ''}`}>
+                                <button
+                                  type="button"
+                                  className={`editor-head-btn ${capAviso === i ? 'cap-hit' : ''}`}
+                                  onClick={() => handleDayHeaderClick(i)}
+                                  aria-label={`${DIAS[i]}: ${usadas} de ${MAX_HOURS_PER_DAY} horas. Llenar hasta el tope o borrar el día`}
+                                >
+                                  {d}
+                                  <span className={`editor-day-count ${estado}`} aria-hidden="true">
+                                    {usadas}/{MAX_HOURS_PER_DAY}
+                                  </span>
+                                </button>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>

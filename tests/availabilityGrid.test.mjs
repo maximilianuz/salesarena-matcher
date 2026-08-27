@@ -9,7 +9,13 @@ import {
   toggleHourRow,
   describeDrag,
   runAt,
-  goalState
+  goalState,
+  MAX_HOURS_PER_DAY,
+  hoursOnDay,
+  dayHasRoom,
+  daysOverCap,
+  addCell,
+  allMarkedDaysFull
 } from '../src/domain/availabilityGrid.js';
 
 const cell = (dayIdx, hour) => ({ dayIdx, hour });
@@ -31,11 +37,28 @@ test('horas visibles: colapsada arranca a las 06:00, desplegada muestra las 24',
 
 // --- CABECERA DE DÍA ---
 
-test('cabecera de día: marca la columna entera cuando está vacía', () => {
+test('cabecera de día: llena hasta el tope, no la columna entera', () => {
   const grid = toggleDay([], 3, visibleHours(false));
-  assert.equal(grid.length, 18, 'quedan marcadas las 18 horas visibles');
+  assert.equal(grid.length, MAX_HOURS_PER_DAY, 'marca 4 horas, no las 18 visibles');
   assert.ok(grid.every(s => s.dayIdx === 3), 'todas son del jueves');
-  assert.ok(tiene(grid, 3, 6) && tiene(grid, 3, 23), 'cubre de punta a punta');
+});
+
+// El atajo tiene que elegir horas que sirvan para algo: marcar cuatro horas
+// donde no hay nadie más libre es disponibilidad que nunca va a cruzarse.
+test('cabecera de día: elige las horas más elegidas por la sala', () => {
+  const popularidad = { 20: 9, 21: 8, 9: 7, 10: 6 };
+  const rank = (_d, h) => popularidad[h] ?? 0;
+  const grid = toggleDay([], 3, visibleHours(false), { rank });
+  assert.deepEqual(
+    grid.map(s => s.hour).sort((a, b) => a - b),
+    [9, 10, 20, 21],
+    'toma las cuatro más votadas'
+  );
+});
+
+test('cabecera de día: a igual popularidad gana la más temprana', () => {
+  const grid = toggleDay([], 3, visibleHours(false));
+  assert.deepEqual(grid.map(s => s.hour).sort((a, b) => a - b), [6, 7, 8, 9]);
 });
 
 test('cabecera de día: la borra cuando ya estaba completa', () => {
@@ -43,10 +66,11 @@ test('cabecera de día: la borra cuando ya estaba completa', () => {
   assert.deepEqual(toggleDay(llena, 3, visibleHours(false)), [], 'segundo clic limpia');
 });
 
-test('cabecera de día: completa la columna si estaba a medias, no la borra', () => {
+test('cabecera de día: completa hasta el tope si estaba a medias, no la borra', () => {
   const parcial = [cell(3, 9), cell(3, 10)];
   const grid = toggleDay(parcial, 3, visibleHours(false));
-  assert.equal(grid.length, 18, 'la completa en vez de borrar lo que había');
+  assert.equal(grid.length, MAX_HOURS_PER_DAY, 'suma las dos que faltaban para llegar al tope');
+  assert.ok(tiene(grid, 3, 9) && tiene(grid, 3, 10), 'conserva lo que ya estaba');
   assert.equal(
     grid.filter(s => s.dayIdx === 3 && s.hour === 9).length,
     1,
@@ -99,6 +123,69 @@ test('cabecera de hora: no toca las otras franjas', () => {
   const grid = toggleHourRow([cell(0, 14)], 9);
   assert.ok(tiene(grid, 0, 14), 'las 14:00 del lunes siguen ahí');
   assert.equal(grid.length, 8, '7 nuevas + la que ya estaba');
+});
+
+// --- TOPE DIARIO ---
+//
+// Cuatro horas por día. Es un límite sobre lo que se DECLARA disponible, no
+// sobre cuántos role-plays se aceptan: eso ya lo decide weekly_target. El tope
+// existe porque marcar el día entero es gratis, se olvida, y termina en una
+// propuesta a un horario que la persona ya no quería.
+
+test('tope: una celda de más en un día lleno se rechaza', () => {
+  const lleno = [cell(1, 9), cell(1, 10), cell(1, 11), cell(1, 12)];
+  assert.equal(hoursOnDay(lleno, 1), 4);
+  assert.equal(dayHasRoom(lleno, 1), false, 'el martes no tiene lugar');
+  assert.equal(addCell(lleno, 1, 15), lleno, 'devuelve la MISMA grilla, para poder avisar');
+});
+
+test('tope: el rechazo es por día, no global', () => {
+  const lleno = [cell(1, 9), cell(1, 10), cell(1, 11), cell(1, 12)];
+  const conMiercoles = addCell(lleno, 2, 15);
+  assert.equal(conMiercoles.length, 5, 'el miércoles sigue teniendo lugar');
+  assert.ok(tiene(conMiercoles, 2, 15));
+});
+
+test('tope: volver a marcar una celda que ya estaba no consume cupo', () => {
+  const tres = [cell(1, 9), cell(1, 10), cell(1, 11)];
+  assert.equal(addCell(tres, 1, 9), tres, 'no duplica ni gasta lugar');
+  assert.equal(addCell(tres, 1, 14).length, 4, 'y todavía entra una nueva');
+});
+
+// La madrugada se colapsa en pantalla, pero sigue siendo el mismo día: si no
+// contara para el tope, marcar cuatro horas visibles más cuatro ocultas daría
+// ocho, que es justo lo que el tope viene a evitar.
+test('tope: las horas ocultas de la madrugada también ocupan cupo', () => {
+  const conMadrugada = [cell(1, 2), cell(1, 3), cell(1, 4)];
+  assert.equal(hoursOnDay(conMadrugada, 1), 3);
+  const grid = toggleDay(conMadrugada, 1, visibleHours(false));
+  assert.equal(grid.length, 4, 'solo entra una hora visible más');
+});
+
+test('tope: sin cupo libre, la cabecera de día limpia lo visible', () => {
+  const lleno = toggleDay([], 3, visibleHours(false));
+  const vacio = toggleDay(lleno, 3, visibleHours(false));
+  assert.deepEqual(vacio, [], 'el segundo clic sigue borrando');
+});
+
+test('tope: la cabecera de hora saltea los días que ya llegaron al límite', () => {
+  const lunesLleno = [cell(0, 6), cell(0, 7), cell(0, 8), cell(0, 9)];
+  const grid = toggleHourRow(lunesLleno, 15);
+  assert.equal(tiene(grid, 0, 15), false, 'el lunes no recibe la hora nueva');
+  assert.equal(grid.filter(s => s.hour === 15).length, 6, 'los otros seis días sí');
+  assert.equal(hoursOnDay(grid, 0), 4, 'y el lunes queda intacto en su tope');
+});
+
+// Los días que ya estaban por encima del tope antes de que existiera no se
+// tocan solos: se marcan y la persona decide.
+test('tope: los días que ya excedían el límite se señalan, no se recortan', () => {
+  const viejo = [cell(4, 9), cell(4, 10), cell(4, 11), cell(4, 12), cell(4, 13), cell(0, 9)];
+  assert.deepEqual(daysOverCap(viejo), [4], 'solo el viernes está excedido');
+  assert.equal(hoursOnDay(viejo, 4), 5, 'y conserva sus cinco horas');
+});
+
+test('tope: sin días excedidos la lista viene vacía', () => {
+  assert.deepEqual(daysOverCap([cell(0, 9), cell(1, 9)]), []);
 });
 
 // --- TRAMOS CONTIGUOS ---
@@ -212,6 +299,38 @@ test('medidor: el porcentaje avanza y se corta en 100', () => {
   assert.equal(goalState(0, 3).pct, 0, 'vacío arranca en cero');
   assert.equal(goalState(9, 3).pct, 100, 'el margen cómodo llena la barra');
   assert.equal(goalState(40, 3).pct, 100, 'marcar de más no la desborda');
+});
+
+// El medidor no puede pedir horas que el tope prohíbe cargar. Quien solo tiene
+// libres sábado y domingo llega a 8 horas y ahí se termina: si el mensaje
+// siguiera siendo "faltan horas", le estaría pidiendo algo imposible para
+// siempre. Lo que le falta es otro día, y eso es lo que tiene que decir.
+test('medidor: en el techo de cada día marcado, pide otro día y no más horas', () => {
+  assert.equal(goalState(8, 3, true).label, 'Alcanza; sumá otro día para más margen');
+  assert.equal(goalState(8, 3, false).label, 'Alcanza, con poco margen');
+  assert.equal(goalState(2, 3, true).label, 'Sumá otro día', 'también cuando está por debajo del piso');
+});
+
+test('medidor: el tono no cambia por estar en el techo, solo el mensaje', () => {
+  assert.equal(goalState(8, 3, true).tone, goalState(8, 3, false).tone);
+  assert.equal(goalState(8, 3, true).pct, goalState(8, 3, false).pct);
+});
+
+test('medidor: con margen holgado el tope ya no es lo que limita', () => {
+  assert.equal(goalState(12, 3, true).label, 'Margen holgado', 'nadie tiene que sumar nada');
+});
+
+test('techo: dos días llenos están en el techo; uno a medias no', () => {
+  const dosLlenos = [
+    cell(5, 9), cell(5, 10), cell(5, 11), cell(5, 12),
+    cell(6, 9), cell(6, 10), cell(6, 11), cell(6, 12)
+  ];
+  assert.equal(allMarkedDaysFull(dosLlenos), true);
+  assert.equal(allMarkedDaysFull([...dosLlenos, cell(0, 9)]), false, 'el lunes todavía tiene lugar');
+});
+
+test('techo: una grilla vacía no está en el techo', () => {
+  assert.equal(allMarkedDaysFull([]), false, 'sin nada marcado lo que falta son horas, no días');
 });
 
 // wizardWeeklyTarget se edita a mano en un input numérico: si queda vacío o en
