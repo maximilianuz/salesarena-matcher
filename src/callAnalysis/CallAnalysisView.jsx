@@ -57,6 +57,22 @@ const PIP_PAUSE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="non
 
 export default function CallAnalysisView({ supabase, useMockDb, roomId, currentUser }) {
   const [subTab, setSubTab] = useState('notas');
+
+  // Si la barra de subpestañas llegó al final de su scroll: apaga el degradado
+  // que avisa que hay más. Arranca en true para que en pantalla ancha —donde
+  // las nueve entran— no aparezca un degradado sobre nada.
+  const subnavRef = useRef(null);
+  const [subnavAlFinal, setSubnavAlFinal] = useState(true);
+  const medirSubnav = useCallback(() => {
+    const el = subnavRef.current;
+    if (!el) return;
+    setSubnavAlFinal(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
+  }, []);
+  useEffect(() => {
+    medirSubnav();
+    window.addEventListener('resize', medirSubnav);
+    return () => window.removeEventListener('resize', medirSubnav);
+  }, [medirSubnav]);
   const [analyses, setAnalyses] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [active, setActive] = useState(null);
@@ -496,18 +512,23 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
           </div>
         )}
 
-        <div className="ca-subnav">
-          {SUBTABS.map(s => {
-            const Icon = s.icon;
-            return (
-              <button key={s.id} type="button" className={`ca-subnav-btn ${subTab === s.id ? 'active' : ''}`} onClick={() => setSubTab(s.id)}>
-                <Icon size={13} />
-                {s.label}
-                {s.id === 'notas' && notes.length > 0 && <span className="ca-subnav-badge">{notes.length}</span>}
-                {s.id === 'objeciones' && objections.length > 0 && <span className="ca-subnav-badge">{objections.length}</span>}
-              </button>
-            );
-          })}
+        {/* Nueve subpestañas en una barra que scrollea: en pantalla angosta se
+            ven cuatro y el corte caía limpio, así que parecía que ahí terminaba.
+            El degradado del wrapper avisa que hay más y se apaga al final. */}
+        <div className="ca-subnav-wrap" data-fin={subnavAlFinal ? '1' : '0'}>
+          <div className="ca-subnav" ref={subnavRef} onScroll={medirSubnav}>
+            {SUBTABS.map(s => {
+              const Icon = s.icon;
+              return (
+                <button key={s.id} type="button" className={`ca-subnav-btn ${subTab === s.id ? 'active' : ''}`} onClick={() => setSubTab(s.id)}>
+                  <Icon size={13} />
+                  {s.label}
+                  {s.id === 'notas' && notes.length > 0 && <span className="ca-subnav-badge">{notes.length}</span>}
+                  {s.id === 'objeciones' && objections.length > 0 && <span className="ca-subnav-badge">{objections.length}</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 

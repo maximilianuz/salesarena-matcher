@@ -22,7 +22,6 @@ import {
   Video,
   Clock,
   Sparkles,
-  MapPin,
   Check,
   Trash2,
   AlertCircle,
@@ -5134,14 +5133,18 @@ export default function App() {
                         <AvatarPhoto avatarUrl={m.avatarUrl}>{getInitials(m.name)}</AvatarPhoto>
                       </div>
                       <div className="member-row-info">
+                        {/* Antes esta linea llevaba hasta cinco distintivos a la
+                            vez —bandera, "Tu", participa/excluido, confiabilidad
+                            y un candado— compitiendo entre si. Cuando todo esta
+                            destacado, nada lo esta. Queda el nombre y un estado;
+                            la bandera baja junto al pais que ya figura abajo y
+                            la confiabilidad pasa al margen derecho. */}
                         <span className="member-row-name">
                           {m.name}
-                          <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
                           {isSelf && <span className="member-badge-self">Tú</span>}
                           <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
                             {m.active ? 'Participa' : 'Excluido'}
                           </span>
-                          <ReliabilityBadge pct={getReliability(m.email)} />
                         </span>
                         {/* El email es un dato de contacto personal y en el
                             padrón no cumple ninguna función: para practicar con
@@ -5151,13 +5154,17 @@ export default function App() {
                         {(isSelf || isRoomAdmin) && (
                           <span className="member-row-details"><Mail size={11} /> {m.email}</span>
                         )}
-                        <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
+                        <span className="member-row-details">
+                          <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
+                          {m.country} · {tzCity(m.tz)}
+                        </span>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        {isSelf ? (
+                        <ReliabilityBadge pct={getReliability(m.email)} />
+                        {isSelf && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Participa:</span>
+                            <span style={{ fontSize: 'var(--t-small)', color: 'var(--text-muted)' }}>Participa:</span>
                             <label className="switch-control" title="Activa o desactiva tu participación">
                               <input
                                 type="checkbox"
@@ -5168,10 +5175,6 @@ export default function App() {
                               <span className="switch-slider" aria-hidden="true"></span>
                             </label>
                           </div>
-                        ) : (
-                          <span className="member-lock-chip" title="Solo este miembro puede cambiar su propia participación">
-                            <Lock size={11} /> Solo {m.name.split(' ')[0]}
-                          </span>
                         )}
                         {/* El botón solo se muestra a quien administra: al resto
                             no le sirve de nada verlo, porque la acción se
