@@ -22,7 +22,6 @@ import {
   Video,
   Clock,
   Sparkles,
-  MapPin,
   Check,
   Trash2,
   AlertCircle,
@@ -106,7 +105,7 @@ import {
 } from './closeouts';
 import {
   getInitials,
-  getAvatarColor,
+  avatarStyle,
   escapeLikeLiteral,
   nameFromEmail,
   sleep,
@@ -3559,7 +3558,7 @@ export default function App() {
           <div style={{
             width: '52px', height: '52px', borderRadius: '50%', margin: '0 auto 18px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backgroundColor: 'rgba(255,59,48,0.1)', color: 'var(--color-danger)'
+            backgroundColor: 'rgba(var(--danger-rgb), 0.1)', color: 'var(--color-danger)'
           }}>
             <Lock size={24} />
           </div>
@@ -3764,7 +3763,7 @@ export default function App() {
 
         <div className="profile-card">
           <div className="profile-card-top">
-            <div className="profile-avatar" style={{ backgroundColor: getAvatarColor(currentUser.name) }}>
+            <div className="profile-avatar" style={avatarStyle(currentUser.name)}>
               <AvatarPhoto avatarUrl={currentUser.avatarUrl}>{getInitials(currentUser.name)}</AvatarPhoto>
               <span className={`profile-status-dot ${currentUser.active ? 'on' : 'off'}`} title={currentUser.active ? 'Participando esta semana' : 'Inactivo esta semana'}></span>
             </div>
@@ -3841,7 +3840,7 @@ export default function App() {
               {activeTab === 'dashboard' && 'Panel de Control Principal'}
               {activeTab === 'wizard' && 'Cargar Disponibilidad'}
               {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
-              {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
+              {activeTab === 'affinity' && 'Afinidad Horaria'}
               {activeTab === 'members' && 'Gestionar Equipo'}
               {activeTab === 'reportes' && 'Reportes y Análisis'}
               {activeTab === 'analisis' && 'Análisis de Llamada'}
@@ -3850,7 +3849,7 @@ export default function App() {
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
               {activeTab === 'wizard' && 'Configura tu participación en los role-plays de esta semana en pocos clics.'}
               {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
-              {activeTab === 'affinity' && '% de coincidencia relativa entre parejas de role-players.'}
+              {activeTab === 'affinity' && 'Con quiénes del equipo compartís más horas libres, de mayor a menor.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
               {activeTab === 'reportes' && 'Métricas de asistencia y coordinación de la sala, en base a lo que cada participante reporta después de cada sesión.'}
               {activeTab === 'analisis' && 'Tomá notas cronometradas de una llamada de ejemplo, clasificalas por fase y compará con lo que anotó el resto de la sala.'}
@@ -3876,42 +3875,6 @@ export default function App() {
           {/* VIEW: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div>
-              {/* Tarjeta para compartir sala rápidamente */}
-              <div className="glass share-room-banner" style={{ padding: '16px 20px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '12px',
-                    background: 'linear-gradient(135deg, rgba(10,132,255,0.15), rgba(94,92,230,0.15))',
-                    border: '1px solid rgba(10,132,255,0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-primary)'
-                  }}>
-                    <Share2 size={20} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      Invitar a la Sala: <span className="room-badge-pill">{roomName}</span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '3px' }}>
-                      Comparte este enlace con tu equipo. Al ingresar los llevará directamente al registro inicial de esta sala.
-                    </div>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-indigo"
-                  onClick={handleCopyRoomInvite}
-                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', fontWeight: '600' }}
-                >
-                  <Share2 size={15} />
-                  Copiar Link de Invitación
-                </button>
-              </div>
-
               {/* Aviso de bloqueo por faltas del mes (3+) */}
               {currentUser && isBlocked(currentUser.email) && (
                 <div className="glass" style={{ padding: '14px 18px', marginBottom: '16px', border: '1px solid var(--color-danger)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -3925,39 +3888,18 @@ export default function App() {
                 </div>
               )}
 
-              {/* Tarjeta de Estado Semanal de Tomás */}
-              <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: currentUser.active ? 'var(--color-accent)' : 'var(--color-danger)',
-                    boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
-                  }}></div>
-                  <div>
-                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      Mi Participación Semanal:
-                      <span className={currentUser.active ? 'member-badge-active' : 'member-badge-inactive'}>
-                        {currentUser.active ? 'ACTIVO' : 'INACTIVO'}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
-                      {currentUser.active
-                        ? 'Estás participando de los emparejamientos semanales. Tus compañeros pueden coincidir contigo.'
-                        : 'Estás excluido de esta semana. Tus horarios no serán cruzados con los del equipo.'}
-                    </div>
+              {/* REQUIERE TU ACCIÓN.
+                  Los cierres y los reportes de asistencia vencen; el resto del
+                  panel no. Antes convivían con todo lo demás al mismo peso
+                  visual y quedaban terceros y cuartos en una pila de ocho
+                  tarjetas iguales. La franja solo existe si hay algo adentro. */}
+              {(openCloseouts.length > 0 || pendingReports.filter(({ meeting }) =>
+                !openCloseouts.some(c => c.meetingId === meeting.id)).length > 0) && (
+                <div className="dash-urgent">
+                  <div className="dash-urgent-label">
+                    <span className="dash-urgent-dot" aria-hidden="true"></span>
+                    Requiere tu acción
                   </div>
-                </div>
-                <button
-                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
-                  style={{ fontSize: '12px', padding: '6px 14px' }}
-                  onClick={toggleCurrentUserActive}
-                >
-                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
-                </button>
-              </div>
-
               {/* CIERRES DE SESIÓN PENDIENTES.
                   Es lo que reemplaza al viejo "¿se conectó?": pregunta por la
                   sesión entera, no solo por la presencia, y lo responden los
@@ -3967,7 +3909,7 @@ export default function App() {
                   {openCloseouts.map(p => (
                     <div className="closeout-prompt-card glass" key={p.meetingId}>
                       <div className="attendance-prompt-info">
-                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(p.partnerName) }}>
+                        <div className="attendance-prompt-avatar" style={avatarStyle(p.partnerName)}>
                           <AvatarPhoto avatarUrl={p.partnerAvatarUrl}>{getInitials(p.partnerName)}</AvatarPhoto>
                         </div>
                         <div>
@@ -4004,7 +3946,7 @@ export default function App() {
                     return (
                     <div className="attendance-prompt-card glass" key={attendance.id}>
                       <div className="attendance-prompt-info">
-                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(attendance.memberName) }}>
+                        <div className="attendance-prompt-avatar" style={avatarStyle(attendance.memberName)}>
                           <AvatarPhoto avatarUrl={reportedMember?.avatarUrl}>{getInitials(attendance.memberName)}</AvatarPhoto>
                         </div>
                         <div>
@@ -4045,126 +3987,12 @@ export default function App() {
                 </div>
               )}
 
-              {/* MI CREDIBILIDAD.
-                  Cada quien ve la suya y nada más: nunca la de otro, y nunca
-                  quién dijo qué. El compromiso llega ya promediado desde el
-                  servidor y los elogios vienen sin autor. */}
-              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
-                || (closeoutStanding.veracity ?? 1) < 1) && (
-                <div className="section-card glass credibility-card">
-                  <h4 className="section-title">
-                    <Gauge size={15} className="section-title-icon" /> Tu credibilidad
-                  </h4>
-                  <div className="credibility-grid">
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {myCredibility ?? '—'}
-                        {myCredibility !== null && '%'}
-                      </span>
-                      <span className="credibility-label">General</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {getReliability(currentUser.email) ?? '—'}
-                        {getReliability(currentUser.email) !== null && '%'}
-                      </span>
-                      <span className="credibility-label">Asistencia</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {closeoutStanding.engagement ?? '—'}
-                        {closeoutStanding.engagement !== null && '%'}
-                      </span>
-                      <span className="credibility-label">Compromiso</span>
-                    </div>
-                    <div className="credibility-metric">
-                      <span className="credibility-value">
-                        {closeoutStanding.reciprocity === null ? '—' : `${Math.round(closeoutStanding.reciprocity * 100)}%`}
-                      </span>
-                      <span className="credibility-label">Cierres respondidos</span>
-                    </div>
-                  </div>
-                  <p className="credibility-note">
-                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
-                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
-                    hayan contestado los dos o uno solo.
-                  </p>
-
-                  {/* Se avisa con el motivo y el número: una sanción que no se
-                      explica se lee como un error de la app. */}
-                  {(closeoutStanding.veracity ?? 1) < 1 && (
-                    <p className="credibility-warning">
-                      <AlertTriangle size={13} />
-                      <span>
-                        {closeoutStanding.provenLies > 0 && (
-                          closeoutStanding.provenLies === 1
-                            ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
-                            : `Dijiste que ${closeoutStanding.provenLies} sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. `
-                        )}
-                        {closeoutStanding.patternStrikes > 0 && (
-                          'Además venís negando sesiones que tus compañeros dan por hechas, sin haber entrado al Meet desde la app en ninguna. '
-                        )}
-                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
-                        {closeoutStanding.blockedForLying
-                          ? ` Con ${MONTHLY_LIES_LIMIT} comprobadas en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
-                          : ''}
-                        {closeoutStanding.patternStrikes > 0 && !closeoutStanding.provenLies
-                          ? ' Entrá al Meet desde la app y no desde el botón de Calendar: así queda registrado que estuviste y tu palabra pesa.'
-                          : ''}
-                      </span>
-                    </p>
-                  )}
-                  {closeoutPraise.length > 0 && (
-                    <div className="credibility-praise">
-                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
-                      {closeoutPraise.map((p, i) => (
-                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
 
-              {/* KPIs */}
-              <div className="metrics-grid">
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
-                    <Users size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{activeMembersCount}</span>
-                    <span className="kpi-label">{activeMembersCount === 1 ? 'Miembro Activo' : 'Miembros Activos'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
-                    <Clock size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{availabilities.length}</span>
-                    <span className="kpi-label">{availabilities.length === 1 ? 'Bloque Semanal' : 'Bloques Semanales'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
-                    <Sparkles size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{myLiveProposals.length}</span>
-                    <span className="kpi-label">{myLiveProposals.length === 1 ? 'Mi Propuesta Activa' : 'Mis Propuestas Activas'}</span>
-                  </div>
-                </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(255,149,0,0.12)', color: '#ff9500' }}>
-                    <Video size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{upcomingMeetings.length}</span>
-                    <span className="kpi-label">{upcomingMeetings.length === 1 ? 'Meet Próximo' : 'Meets Próximos'}</span>
-                  </div>
-                </div>
-              </div>
-
+              {/* LA RESPUESTA. Es la pregunta con la que se entra al panel:
+                  ¿con quién practico esta semana? Antes quedaba séptima,
+                  debajo de cuatro KPIs que nadie vino a mirar. */}
               {/* 2-Columns */}
               <div className="dashboard-sections">
                 
@@ -4264,7 +4092,7 @@ export default function App() {
                       <div key={proposal.id} className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
                           <div className="match-card-identity" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                            <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
+                            <span className="participant-avatar-mini match-avatar-lg" style={avatarStyle(partnerName)}>
                               <AvatarPhoto avatarUrl={partnerMember?.avatarUrl}>{getInitials(partnerName)}</AvatarPhoto>
                             </span>
                             <div style={{ minWidth: 0 }}>
@@ -4508,6 +4336,174 @@ export default function App() {
                 </div>
 
               </div>
+              {/* CONTEXTO. Todo lo que sigue es referencia, no titular: se
+                  consulta, no se actúa sobre ello al entrar. */}
+              {/* Tarjeta de Estado Semanal de Tomás */}
+              <div className="glass" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    backgroundColor: currentUser.active ? 'var(--color-accent)' : 'var(--color-danger)',
+                    boxShadow: currentUser.active ? '0 0 10px var(--color-accent)' : '0 0 10px var(--color-danger)'
+                  }}></div>
+                  <div>
+                    <div style={{ fontWeight: '700', fontSize: '13.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      Mi Participación Semanal:
+                      <span className={currentUser.active ? 'member-badge-active' : 'member-badge-inactive'}>
+                        {currentUser.active ? 'ACTIVO' : 'INACTIVO'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2.5px' }}>
+                      {currentUser.active
+                        ? 'Estás participando de los emparejamientos semanales. Tus compañeros pueden coincidir contigo.'
+                        : 'Estás excluido de esta semana. Tus horarios no serán cruzados con los del equipo.'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
+                  style={{ fontSize: '12px', padding: '6px 14px' }}
+                  onClick={toggleCurrentUserActive}
+                >
+                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
+                </button>
+              </div>
+
+              {/* MI CREDIBILIDAD.
+                  Cada quien ve la suya y nada más: nunca la de otro, y nunca
+                  quién dijo qué. El compromiso llega ya promediado desde el
+                  servidor y los elogios vienen sin autor. */}
+              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
+                || (closeoutStanding.veracity ?? 1) < 1) && (
+                <div className="section-card glass credibility-card">
+                  <h4 className="section-title">
+                    <Gauge size={15} className="section-title-icon" /> Tu credibilidad
+                  </h4>
+                  <div className="credibility-grid">
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {myCredibility ?? '—'}
+                        {myCredibility !== null && '%'}
+                      </span>
+                      <span className="credibility-label">General</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {getReliability(currentUser.email) ?? '—'}
+                        {getReliability(currentUser.email) !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Asistencia</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.engagement ?? '—'}
+                        {closeoutStanding.engagement !== null && '%'}
+                      </span>
+                      <span className="credibility-label">Compromiso</span>
+                    </div>
+                    <div className="credibility-metric">
+                      <span className="credibility-value">
+                        {closeoutStanding.reciprocity === null ? '—' : `${Math.round(closeoutStanding.reciprocity * 100)}%`}
+                      </span>
+                      <span className="credibility-label">Cierres respondidos</span>
+                    </div>
+                  </div>
+                  <p className="credibility-note">
+                    El compromiso lo arman tus compañeros al cerrar cada sesión. Nunca vas a ver qué respondieron,
+                    ni ellos lo que respondiste vos. Los cierres empiezan a contar 48hs después de cada reunión,
+                    hayan contestado los dos o uno solo.
+                  </p>
+
+                  {/* Se avisa con el motivo y el número: una sanción que no se
+                      explica se lee como un error de la app. */}
+                  {(closeoutStanding.veracity ?? 1) < 1 && (
+                    <p className="credibility-warning">
+                      <AlertTriangle size={13} />
+                      <span>
+                        {closeoutStanding.provenLies > 0 && (
+                          closeoutStanding.provenLies === 1
+                            ? 'Dijiste que una sesión no se hizo, pero el registro muestra que los dos entraron al Meet y tu compañero la dio por hecha. '
+                            : `Dijiste que ${closeoutStanding.provenLies} sesiones no se hicieron, pero el registro muestra que los dos entraron al Meet y tu compañero las dio por hechas. `
+                        )}
+                        {closeoutStanding.patternStrikes > 0 && (
+                          'Además venís negando sesiones que tus compañeros dan por hechas, sin haber entrado al Meet desde la app en ninguna. '
+                        )}
+                        Tu credibilidad queda multiplicada por {Math.round((closeoutStanding.veracity ?? 1) * 100)}% mientras esos cierres sigan en la ventana de 60 días.
+                        {closeoutStanding.blockedForLying
+                          ? ` Con ${MONTHLY_LIES_LIMIT} comprobadas en el mismo mes quedás fuera de la rotación hasta el 1° del mes que viene.`
+                          : ''}
+                        {closeoutStanding.patternStrikes > 0 && !closeoutStanding.provenLies
+                          ? ' Entrá al Meet desde la app y no desde el botón de Calendar: así queda registrado que estuviste y tu palabra pesa.'
+                          : ''}
+                      </span>
+                    </p>
+                  )}
+                  {closeoutPraise.length > 0 && (
+                    <div className="credibility-praise">
+                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
+                      {closeoutPraise.map((p, i) => (
+                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* KPIs */}
+              <div className="metrics-grid">
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
+                    <Users size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{activeMembersCount}</span>
+                    <span className="kpi-label">{activeMembersCount === 1 ? 'Miembro Activo' : 'Miembros Activos'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
+                    <Clock size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{availabilities.length}</span>
+                    <span className="kpi-label">{availabilities.length === 1 ? 'Bloque Semanal' : 'Bloques Semanales'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
+                    <Sparkles size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{myLiveProposals.length}</span>
+                    <span className="kpi-label">{myLiveProposals.length === 1 ? 'Mi Propuesta Activa' : 'Mis Propuestas Activas'}</span>
+                  </div>
+                </div>
+                <div className="kpi-card glass glass-hover">
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--warning-rgb), 0.12)', color: 'var(--color-warning)' }}>
+                    <Video size={18} />
+                  </div>
+                  <div className="kpi-info">
+                    <span className="kpi-val">{upcomingMeetings.length}</span>
+                    <span className="kpi-label">{upcomingMeetings.length === 1 ? 'Meet Próximo' : 'Meets Próximos'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invitar a la sala. Era una tarjeta con ícono de 40px arriba de
+                  todo, con el mismo peso que un cierre que vence — y es algo que
+                  se usa una vez en la vida de la sala. Baja a una línea. */}
+              <div className="dash-invite">
+                <span className="dash-invite-text">
+                  <Share2 size={14} aria-hidden="true" />
+                  Sumá gente a <strong>{roomName}</strong> con el enlace de la sala.
+                </span>
+                <button type="button" className="btn-small" onClick={handleCopyRoomInvite}>
+                  <Copy size={13} aria-hidden="true" /> Copiar enlace
+                </button>
+              </div>
+
             </div>
           )}
 
@@ -4870,19 +4866,30 @@ export default function App() {
             // Los escalones garantizan contraste perceptible sin importar el tamaño del equipo.
             const HEATMAP_LEVELS = [
               { max: 0,    bg: 'transparent',                 ink: 'var(--text-muted)', label: 'Nadie' },
-              { max: 0.25, bg: 'rgba(52, 199, 89, 0.18)',      ink: 'var(--text-main)',  label: 'Hasta 25%' },
-              { max: 0.5,  bg: 'rgba(52, 199, 89, 0.38)',      ink: 'var(--text-main)',  label: '26–50%' },
+              { max: 0.25, bg: 'rgba(var(--accent-rgb), 0.18)',      ink: 'var(--text-main)',  label: 'Hasta 25%' },
+              { max: 0.5,  bg: 'rgba(var(--accent-rgb), 0.38)',      ink: 'var(--text-main)',  label: '26–50%' },
               // Niveles 3 y 4: el verde ya es lo bastante saturado en claro y oscuro
               // como para que el texto oscuro pierda contraste sobre fondo oscuro (bg-main).
               // Blanco funciona en ambos temas para estos dos escalones.
-              { max: 0.75, bg: 'rgba(52, 199, 89, 0.62)',      ink: '#ffffff',           label: '51–75%' },
-              { max: 1,    bg: 'rgba(52, 199, 89, 0.9)',       ink: '#ffffff',           label: 'Más de 75%' },
+              { max: 0.75, bg: 'rgba(var(--accent-rgb), 0.62)',      ink: '#ffffff',           label: '51–75%' },
+              { max: 1,    bg: 'rgba(var(--accent-rgb), 0.9)',       ink: '#ffffff',           label: 'Más de 75%' },
             ];
             const levelFor = (count) => {
               const ratio = totalActive ? count / totalActive : 0;
               if (ratio === 0) return HEATMAP_LEVELS[0];
               return HEATMAP_LEVELS.find(l => ratio <= l.max) || HEATMAP_LEVELS[HEATMAP_LEVELS.length - 1];
             };
+
+            // La franja más concurrida. La app ya tenía el dato y hacía que se
+            // dedujera mirando 168 celdas: ahora lo dice. Ante empate gana la
+            // más temprana de la semana, que es el orden en que se recorre.
+            let pico = null;
+            for (let d = 0; d < 7; d++) {
+              for (let h = 0; h < 24; h++) {
+                const celda = heatmap[d]?.[h];
+                if (celda && celda.count > (pico?.count ?? 0)) pico = { day: d, hour: h, count: celda.count };
+              }
+            }
 
             return (
               <div className="section-card glass" style={{ maxWidth: '100%' }}>
@@ -4898,6 +4905,23 @@ export default function App() {
                   <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
                     Cada celda muestra cuántas personas están disponibles. Hacé click (o Enter con teclado) en un bloque para ver quiénes son.
                   </p>
+
+                  {/* La conclusión, antes de la tabla. Era el dato que uno viene
+                      a buscar y había que deducirlo de 168 celdas. */}
+                  {pico && (
+                    <button
+                      type="button"
+                      className="heatmap-lead"
+                      onClick={() => setSelectedHeatmapCell({ day: pico.day, hour: pico.hour })}
+                    >
+                      <Flame size={16} aria-hidden="true" />
+                      <span>
+                        La franja con más gente libre es el <strong>{DIAS[pico.day].toLowerCase()} a las {String(pico.hour).padStart(2, '0')}:00</strong>
+                        {' · '}{pico.count} de {totalActive} {totalActive === 1 ? 'persona' : 'personas'}
+                      </span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                  )}
 
                   {/* SCALE LEGEND: la única forma antes era el tooltip, ahora la escala es siempre visible */}
                   <div className="heatmap-legend" role="img" aria-label="Escala de disponibilidad: de nadie a más del 75% del equipo">
@@ -4993,123 +5017,99 @@ export default function App() {
 
           {/* VIEW: AFFINITY */}
           {activeTab === 'affinity' && (() => {
-            const AFFINITY_LEVELS = [
-              { label: 'Baja o sin coincidencia aún', min: 0, max: 39, bg: 'rgba(120, 120, 120, 0.1)', text: 'var(--text-muted)' },
-              { label: 'Moderada (40-69%)', min: 40, max: 69, bg: 'rgba(255, 159, 10, 0.12)', text: 'var(--color-warning)' },
-              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(52, 199, 89, 0.15)', text: '#34c759' }
-            ];
-            const levelForAffinity = (pct) => AFFINITY_LEVELS.find(l => pct >= l.min && pct <= l.max) || AFFINITY_LEVELS[0];
+            // Una sola rampa de intensidad para toda la app (--ramp-*): antes
+            // esta pantalla tenía su propia escala gris→naranja→verde, que no
+            // se parecía a la del Mapa de Calor ni a la del medidor.
+            const nivelAfinidad = (pct) => {
+              if (pct >= 70) return { bg: 'var(--ramp-4)', ink: '#09090b' };
+              if (pct >= 45) return { bg: 'var(--ramp-3)', ink: '#09090b' };
+              if (pct >= 20) return { bg: 'var(--ramp-2)', ink: 'var(--text-main)' };
+              return { bg: 'var(--ramp-1)', ink: 'var(--text-main)' };
+            };
+
+            const miFila = affinity.find(row => row.email?.toLowerCase() === currentUser.email.toLowerCase());
+            // Ordenada de mayor a menor y COMPLETA. Antes se mostraba una
+            // tabla-matriz de N columnas para una sola fila —una lista
+            // disfrazada de matriz— y debajo la misma información otra vez
+            // recortada al top 2.
+            //
+            // pct null es la celda de uno consigo mismo (i === j en el cálculo),
+            // no "sin horas": se descarta. Un 0 sí es un dato real — no hay
+            // ninguna hora en común, sea porque no se cruzan o porque alguno de
+            // los dos todavía no cargó nada.
+            const companeros = (miFila?.stats || [])
+              .filter(s => s.pct !== null)
+              .sort((a, b) => b.pct - a.pct);
+            const sinCruce = companeros.filter(s => s.pct === 0).length;
+            const mejor = companeros.find(s => s.pct > 0) || null;
 
             return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div className="section-card glass">
-                <h4 className="section-title">
-                  <Handshake size={15} className="section-title-icon" />
-                  Tu Solapamiento Horario con el Equipo
-                </h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila; el detalle hora por hora de todo el equipo está en el Mapa de Calor.
-                </p>
+            <div className="section-card glass">
+              <h4 className="section-title">
+                <Handshake size={15} className="section-title-icon" />
+                Tu Solapamiento Horario con el Equipo
+              </h4>
+              <p className="section-subtitle" style={{ margin: 0 }}>
+                Cuánto se solapan tus horas con las de cada compañero. El detalle hora por hora de todo el equipo está en el Mapa de Calor.
+              </p>
 
-                <div className="heatmap-legend" role="img" aria-label="Escala de afinidad horaria: de baja o sin coincidencia a alta">
-                  {AFFINITY_LEVELS.map(l => (
-                    <div className="heatmap-legend-item" key={l.label}>
-                      <span className="heatmap-legend-swatch" style={{ backgroundColor: l.bg }}></span>
-                      <span className="heatmap-legend-text">{l.label}</span>
-                    </div>
-                  ))}
+              {/* La conclusión primero: la app ya la tenía calculada y hacía
+                  que la dedujeras de la tabla. */}
+              {mejor && (
+                <div className="affinity-lead">
+                  <Trophy size={16} aria-hidden="true" />
+                  <span>
+                    Con quien más coincidís es <strong>{mejor.name}</strong>, en un <strong>{mejor.pct}%</strong> de tus horas.
+                  </span>
                 </div>
-                <div className="table-responsive-wrapper">
-                  <table className="affinity-table">
-                    <thead>
-                      <tr>
-                        <th className="affinity-th" style={{ backgroundColor: 'var(--bg-card-hover)' }}>Jugador</th>
-                        {members.filter(m => m.active).map(m => (
-                          <th className="affinity-th" key={m.email}>{m.name.split(' ')[0]}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => (
-                        <tr key={i}>
-                          <td className="affinity-td-label">{row.name}</td>
-                          {row.stats.map((col, j) => {
-                            const pct = col.pct;
-                            const level = pct !== null ? levelForAffinity(pct) : null;
-                            return (
-                              <td
-                                key={j}
-                                className="affinity-cell"
-                                style={{ backgroundColor: level ? level.bg : 'transparent', color: level ? level.text : 'var(--text-muted)' }}
-                              >
-                                {pct !== null ? `${pct}%` : '—'}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              )}
+
+              {companeros.length === 0 && (
+                <div className="empty-state">
+                  <Users size={30} />
+                  <span className="empty-state-title">Todavía no hay compañeros activos</span>
+                  <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
                 </div>
-              </div>
+              )}
 
-              {/* Best Partners List */}
-              <div className="section-card glass">
-                <h4 className="section-title">
-                  <Trophy size={15} className="section-title-icon" />
-                  Tus Compañeros con Mayor Afinidad
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => {
-                    const sortedStats = [...row.stats]
-                      .filter(s => s.pct !== null)
-                      .sort((a, b) => b.pct - a.pct);
-                    const topStats = sortedStats.filter(s => s.pct > 0).slice(0, 2);
+              {companeros.length > 0 && !mejor && (
+                <div className="empty-state">
+                  <AlertCircle size={30} />
+                  <span className="empty-state-title">Aún sin coincidencias horarias</span>
+                  <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
+                </div>
+              )}
 
-                    if (sortedStats.length === 0) {
-                      return (
-                        <div className="empty-state" key={i}>
-                          <Users size={30} />
-                          <span className="empty-state-title">Todavía no hay compañeros activos</span>
-                          <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
-                        </div>
-                      );
-                    }
-
-                    if (topStats.length === 0) {
-                      return (
-                        <div className="empty-state" key={i}>
-                          <AlertCircle size={30} />
-                          <span className="empty-state-title">Aún sin coincidencias horarias</span>
-                          <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
-                        </div>
-                      );
-                    }
-
+              {mejor && (
+                <ul className="affinity-list">
+                  {companeros.map(s => {
+                    const nivel = nivelAfinidad(s.pct);
+                    const compa = members.find(m => m.email.toLowerCase() === s.email.toLowerCase());
                     return (
-                      <React.Fragment key={i}>
-                        {topStats.map(s => {
-                          const level = levelForAffinity(s.pct);
-                          const statMember = members.find(m => m.email.toLowerCase() === s.email.toLowerCase());
-                          return (
-                            <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(s.name) }}>
-                                  <AvatarPhoto avatarUrl={statMember?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
-                                </span>
-                                {s.name}
-                              </span>
-                              <span className="affinity-pct-badge" style={{ backgroundColor: level.bg, color: level.text }}>
-                                {s.pct}%
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </React.Fragment>
+                      <li className={`affinity-row ${s.pct === 0 ? 'affinity-row-empty' : ''}`} key={s.email || s.name}>
+                        <span className="participant-avatar-mini" style={avatarStyle(s.name)}>
+                          <AvatarPhoto avatarUrl={compa?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
+                        </span>
+                        <span className="affinity-row-name">{s.name}</span>
+                        <span className="affinity-bar">
+                          {s.pct > 0 && (
+                            <span className="affinity-bar-fill" style={{ width: `${s.pct}%`, backgroundColor: nivel.bg }}></span>
+                          )}
+                        </span>
+                        <span className="affinity-row-pct">{s.pct}%</span>
+                      </li>
                     );
                   })}
-                </div>
-              </div>
+                </ul>
+              )}
+
+              {mejor && sinCruce > 0 && (
+                <p className="section-subtitle" style={{ margin: 0 }}>
+                  {sinCruce === 1
+                    ? 'Con un compañero no compartís ninguna hora todavía: puede ser que sus franjas no se crucen con las tuyas, o que aún no haya cargado ninguna.'
+                    : `Con ${sinCruce} compañeros no compartís ninguna hora todavía: puede ser que sus franjas no se crucen con las tuyas, o que aún no hayan cargado ninguna.`}
+                </p>
+              )}
             </div>
             );
           })()}
@@ -5129,18 +5129,22 @@ export default function App() {
                     const isSelf = m.email.toLowerCase() === currentUser.email.toLowerCase();
                     return (
                     <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={idx}>
-                      <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
+                      <div className="member-row-avatar" style={avatarStyle(m.name)}>
                         <AvatarPhoto avatarUrl={m.avatarUrl}>{getInitials(m.name)}</AvatarPhoto>
                       </div>
                       <div className="member-row-info">
+                        {/* Antes esta linea llevaba hasta cinco distintivos a la
+                            vez —bandera, "Tu", participa/excluido, confiabilidad
+                            y un candado— compitiendo entre si. Cuando todo esta
+                            destacado, nada lo esta. Queda el nombre y un estado;
+                            la bandera baja junto al pais que ya figura abajo y
+                            la confiabilidad pasa al margen derecho. */}
                         <span className="member-row-name">
                           {m.name}
-                          <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
                           {isSelf && <span className="member-badge-self">Tú</span>}
                           <span className={m.active ? 'member-badge-active' : 'member-badge-inactive'}>
                             {m.active ? 'Participa' : 'Excluido'}
                           </span>
-                          <ReliabilityBadge pct={getReliability(m.email)} />
                         </span>
                         {/* El email es un dato de contacto personal y en el
                             padrón no cumple ninguna función: para practicar con
@@ -5150,13 +5154,17 @@ export default function App() {
                         {(isSelf || isRoomAdmin) && (
                           <span className="member-row-details"><Mail size={11} /> {m.email}</span>
                         )}
-                        <span className="member-row-details"><MapPin size={11} /> {m.country} · {tzCity(m.tz)}</span>
+                        <span className="member-row-details">
+                          <span className="participant-flag" title={m.country}>{getCountryFlag(m.country)}</span>
+                          {m.country} · {tzCity(m.tz)}
+                        </span>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                        {isSelf ? (
+                        <ReliabilityBadge pct={getReliability(m.email)} />
+                        {isSelf && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Participa:</span>
+                            <span style={{ fontSize: 'var(--t-small)', color: 'var(--text-muted)' }}>Participa:</span>
                             <label className="switch-control" title="Activa o desactiva tu participación">
                               <input
                                 type="checkbox"
@@ -5167,10 +5175,6 @@ export default function App() {
                               <span className="switch-slider" aria-hidden="true"></span>
                             </label>
                           </div>
-                        ) : (
-                          <span className="member-lock-chip" title="Solo este miembro puede cambiar su propia participación">
-                            <Lock size={11} /> Solo {m.name.split(' ')[0]}
-                          </span>
                         )}
                         {/* El botón solo se muestra a quien administra: al resto
                             no le sirve de nada verlo, porque la acción se
@@ -5268,12 +5272,18 @@ export default function App() {
 
           {activeTab === 'reportes' && (
             <div>
-              <div className="glass" style={{ padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <BarChart3 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
-                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                  Estas métricas se calculan a partir de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos automáticamente, no analizarlos. Un mes puntual con problemas de conexión no te perjudica frente al resto de la sala: estos números son para tu propia referencia, no un ranking público.
-                </div>
-              </div>
+              {/* El descargo abria la pantalla con cinco lineas antes de mostrar
+                  un solo dato. Es necesario, pero no es el titular: pasa a un
+                  desplegable que sigue estando a un clic. */}
+              <details className="reportes-nota">
+                <summary>
+                  <BarChart3 size={14} aria-hidden="true" />
+                  Cómo se calculan estos números
+                </summary>
+                <p>
+                  Salen de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos, no analizarlos. Un mes puntual con problemas de conexión no te perjudica frente al resto de la sala: estos números son para tu propia referencia, no un ranking público.
+                </p>
+              </details>
 
               {/* KPIs personales */}
               <h4 className="section-title" style={{ marginBottom: '12px' }}>
@@ -5282,7 +5292,7 @@ export default function App() {
               </h4>
               <div className="metrics-grid" style={{ marginBottom: '28px' }}>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
                     <ShieldCheck size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5291,7 +5301,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
                     <Handshake size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5300,7 +5310,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: getMonthlyFaltas(currentUser.email) > 0 ? 'rgba(255,59,48,0.1)' : 'rgba(120,120,120,0.08)', color: getMonthlyFaltas(currentUser.email) > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: getMonthlyFaltas(currentUser.email) > 0 ? 'rgba(var(--danger-rgb), 0.1)' : 'rgba(var(--neutral-rgb), 0.08)', color: getMonthlyFaltas(currentUser.email) > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
                     <X size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5315,42 +5325,26 @@ export default function App() {
                 <TrendingUp size={15} className="section-title-icon" />
                 Resumen de la Sala
               </h4>
-              <div className="metrics-grid" style={{ marginBottom: '8px' }}>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
-                    <Video size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{meetingsThisMonth.length}</span>
-                    <span className="kpi-label">Sesiones Este Mes</span>
-                  </div>
+              {/* Los cuatro numeros de la sala son contexto, no titular: entre
+                  "Tu confiabilidad" y "Role-players en la sala" no habia ninguna
+                  diferencia visual aunque uno es sobre vos y el otro no. Bajan a
+                  una fila secundaria. */}
+              <div className="room-stats">
+                <div className="room-stat">
+                  <span className="room-stat-val">{meetingsThisMonth.length}</span>
+                  <span className="room-stat-label">sesiones este mes</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
-                    <ShieldCheck size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{roomReliability !== null ? `${roomReliability}%` : '—'}</span>
-                    <span className="kpi-label">Confiabilidad de la Sala</span>
-                  </div>
+                <div className="room-stat">
+                  <span className="room-stat-val">{roomReliability !== null ? `${roomReliability}%` : '—'}</span>
+                  <span className="room-stat-label">confiabilidad de la sala</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
-                    <Users size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{members.length}</span>
-                    <span className="kpi-label">Role-Players en la Sala</span>
-                  </div>
+                <div className="room-stat">
+                  <span className="room-stat-val">{members.length}</span>
+                  <span className="room-stat-label">{members.length === 1 ? 'role-player' : 'role-players'}</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(255,149,0,0.12)' : 'rgba(120,120,120,0.08)', color: blockedMembersCount > 0 ? '#ff9500' : 'var(--text-muted)' }}>
-                    <Clock size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{blockedMembersCount}</span>
-                    <span className="kpi-label">Sin Emparejamiento Este Mes</span>
-                  </div>
+                <div className="room-stat">
+                  <span className={`room-stat-val ${blockedMembersCount > 0 ? 'is-warn' : ''}`}>{blockedMembersCount}</span>
+                  <span className="room-stat-label">sin emparejamiento este mes</span>
                 </div>
               </div>
               <p className="section-subtitle" style={{ margin: '0 0 24px' }}>
@@ -5894,7 +5888,7 @@ export default function App() {
               ) : feedbackReviewList.map(f => (
                 <div key={f.id} className="feedback-review-row">
                   <div className="feedback-review-row-header">
-                    <span className="participant-avatar-mini" style={{ width: '32px', height: '32px', fontSize: '12px', backgroundColor: getAvatarColor(f.member_name) }}>
+                    <span className="participant-avatar-mini" style={{ width: '32px', height: '32px', fontSize: '12px', ...avatarStyle(f.member_name) }}>
                       <AvatarPhoto avatarUrl={f.avatar_url}>{getInitials(f.member_name)}</AvatarPhoto>
                     </span>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -6121,7 +6115,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <AlertTriangle size={22} style={{ color: '#ff9500' }} />
+                <AlertTriangle size={22} style={{ color: 'var(--color-warning)' }} />
                 <h3 className="join-title">No pudimos abrir la reunión</h3>
                 <p className="join-desc">{joinError}</p>
                 <button

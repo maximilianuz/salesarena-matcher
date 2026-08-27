@@ -4,7 +4,66 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getInitials, slugifyRoomName, nameFromEmail, escapeLikeLiteral, googleCalendarUrl } from '../src/utils/format.js';
+import {
+  getInitials,
+  slugifyRoomName,
+  nameFromEmail,
+  escapeLikeLiteral,
+  googleCalendarUrl,
+  getAvatarColor,
+  getAvatarInk,
+  AVATAR_COLORS,
+  AVATAR_INK_DARK,
+  AVATAR_INK_LIGHT
+} from '../src/utils/format.js';
+
+// --- LEGIBILIDAD DE LAS INICIALES DEL AVATAR ---
+//
+// La paleta fija tiene ocho colores y antes las iniciales iban siempre en
+// blanco: siete quedaban por debajo del mínimo de WCAG y sobre el amarillo el
+// texto era invisible (1.41:1). El test recorre la paleta entera para que
+// agregar un color nuevo no reintroduzca el problema en silencio.
+
+const contraste = (hex, tinta) => {
+  const lum = (h) => {
+    const canal = (i) => {
+      const c = parseInt(h.substr(i, 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * canal(1) + 0.7152 * canal(3) + 0.0722 * canal(5);
+  };
+  const a = lum(hex);
+  const b = lum(tinta);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+
+test('tinta del avatar: ningún color de la paleta queda por debajo del mínimo legible', () => {
+  for (const bg of AVATAR_COLORS) {
+    const ratio = contraste(bg, getAvatarInk(bg));
+    assert.ok(ratio >= 4.5, `${bg} da ${ratio.toFixed(2)}:1, necesita 4.5`);
+  }
+});
+
+test('tinta del avatar: oscura sobre los claros, blanca sobre el violeta de marca', () => {
+  assert.equal(getAvatarInk('#ffd60a'), AVATAR_INK_DARK, 'amarillo');
+  assert.equal(getAvatarInk('#64d2ff'), AVATAR_INK_DARK, 'celeste');
+  assert.equal(getAvatarInk('#30d158'), AVATAR_INK_DARK, 'verde');
+  assert.equal(getAvatarInk('#5e5ce6'), AVATAR_INK_LIGHT, 'violeta primary');
+});
+
+test('tinta del avatar: un valor inservible no rompe el render', () => {
+  for (const malo of [null, undefined, '', 'rojo', '#fff', 123, {}]) {
+    assert.equal(getAvatarInk(malo), AVATAR_INK_LIGHT, `falló con ${JSON.stringify(malo)}`);
+  }
+});
+
+test('tinta del avatar: cada color de la paleta tiene su tinta resuelta', () => {
+  // getAvatarColor siempre devuelve un color de la paleta, así que la tinta
+  // nunca cae en el caso de respaldo por un color inesperado.
+  for (const nombre of ['Ana Rivas', 'Diego Molina', 'Sofía Paz', '']) {
+    assert.ok(AVATAR_COLORS.includes(getAvatarColor(nombre)), nombre || '(vacío)');
+  }
+});
 
 test('getInitials: nombre y apellido, una sola palabra, y espacios de más', () => {
   assert.equal(getInitials('Ana Pérez'), 'AP');

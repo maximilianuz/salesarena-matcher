@@ -166,3 +166,28 @@
 .ca-pip-note { padding: 6px 0; border-bottom: 1px solid var(--border-color); font-size: 12px; }
 .ca-pip-note b { color: var(--color-primary); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .ca-pip-empty { color: var(--text-muted); font-size: 12px; }
+
+/* La barra de subpestañas scrollea de costado y son nueve: en pantalla angosta
+   se ven cuatro y el corte caía limpio, así que parecía que ahí terminaba.
+   El degradado avisa que hay más; se apaga al llegar al final. */
+.ca-subnav-wrap {
+  position: relative;
+}
+
+.ca-subnav-wrap::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  width: 40px;
+  border-radius: 0 8px 8px 0;
+  background: linear-gradient(90deg, transparent, var(--bg-main));
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.2s;
+}
+
+.ca-subnav-wrap[data-fin="1"]::after {
+  opacity: 0;
+}

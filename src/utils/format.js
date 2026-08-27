@@ -20,6 +20,39 @@ export const getAvatarColor = (name) => {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 };
 
+// Luminancia relativa de un color #rrggbb, según la fórmula de WCAG 2.
+const relativeLuminance = (hex) => {
+  const canal = (i) => {
+    const c = parseInt(hex.substr(i, 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * canal(1) + 0.7152 * canal(3) + 0.0722 * canal(5);
+};
+
+export const AVATAR_INK_LIGHT = '#ffffff';
+export const AVATAR_INK_DARK = '#09090b';
+
+// Tinta de las iniciales, elegida según el fondo. Antes las tres clases que
+// dibujan avatares fijaban `color: #fff`, y siete de los ocho colores de la
+// paleta quedaban por debajo del mínimo legible de WCAG (4.5:1 para texto
+// chico): sobre el amarillo #ffd60a el blanco da 1.41:1, o sea nada.
+// Se compara el contraste contra blanco y contra la tinta oscura y gana el
+// mayor, así la regla sigue valiendo si mañana se agregan colores nuevos.
+export const getAvatarInk = (bg) => {
+  if (typeof bg !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(bg)) return AVATAR_INK_LIGHT;
+  const l = relativeLuminance(bg);
+  const contraDelClaro = 1.05 / (l + 0.05);
+  const contraDelOscuro = (l + 0.05) / (relativeLuminance(AVATAR_INK_DARK) + 0.05);
+  return contraDelOscuro > contraDelClaro ? AVATAR_INK_DARK : AVATAR_INK_LIGHT;
+};
+
+// Fondo + tinta juntos: los avatares se dibujan en siete lugares distintos y
+// separar las dos mitades es lo que dejaba que una se olvidara.
+export const avatarStyle = (name) => {
+  const backgroundColor = getAvatarColor(name);
+  return { backgroundColor, color: getAvatarInk(backgroundColor) };
+};
+
 // Patrón LIKE/ILIKE seguro para un valor literal (escapa %, _ y \).
 // Se usa para borrar/actualizar filas por nombre de usuario sin distinguir
 // mayúsculas: la tabla availabilities guarda "user" como texto libre y un

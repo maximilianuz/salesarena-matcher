@@ -14,6 +14,46 @@
   --color-danger: #ff453a;
   --color-warning: #ff9f0a;
   --color-secondary: #ff375f;
+
+  /* El azul es un secundario real, no un descuido: existe casi siempre como
+     par del violeta en degradados (el halo del login, los badges de sala, los
+     avisos). Se le da nombre para que deje de ser un literal suelto. */
+  --color-info: #0a84ff;
+
+  /* Los mismos colores en triplete, para armar tintes con rgba() sin volver a
+     escribir el color a mano. Antes cada tinte repetía el valor literal y así
+     aparecieron los casi-duplicados: un verde #34c759 conviviendo con el token
+     #30d158, y fondos azules detrás de íconos violetas. */
+  --primary-rgb: 94, 92, 230;
+  --accent-rgb: 48, 209, 88;
+  --danger-rgb: 255, 69, 58;
+  --warning-rgb: 255, 159, 10;
+  --info-rgb: 10, 132, 255;
+  --neutral-rgb: 120, 120, 120;
+
+  /* Escala de intensidad: una sola para toda la app. La usan el Mapa de Calor,
+     la Afinidad y cualquier cosa que muestre "cuánto hay". El rojo queda
+     reservado para "te falta algo", que es un estado y no una cantidad. */
+  --ramp-1: rgba(var(--accent-rgb), 0.18);
+  --ramp-2: rgba(var(--accent-rgb), 0.38);
+  --ramp-3: rgba(var(--accent-rgb), 0.62);
+  --ramp-4: rgba(var(--accent-rgb), 0.90);
+
+  /* Radios. Cuatro, y solo cuatro: antes había catorce valores distintos y
+     tres píldoras que querían ser lo mismo (99px, 980px, 999px). */
+  --r-control: 6px;
+  --r-button: 10px;
+  --r-card: 14px;
+  --r-pill: 999px;
+
+  /* Tipografía. Seis tamaños: antes había doce escritos a mano. */
+  --t-label: 11px;
+  --t-small: 12.5px;
+  --t-body: 13.5px;
+  --t-data: 15px;
+  --t-head: 19px;
+  --t-title: 24px;
+
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   --sidebar-width: 260px;
   --header-bg: rgba(255, 255, 255, 0.75);
@@ -1258,9 +1298,9 @@ html.dark .view-header {
   gap: 7px;
   margin: 12px 0 0;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 149, 0, 0.35);
+  border: 1px solid rgba(var(--warning-rgb), 0.35);
   border-radius: 10px;
-  background: rgba(255, 149, 0, 0.09);
+  background: rgba(var(--warning-rgb), 0.09);
   font-size: 12px;
   line-height: 1.55;
   color: var(--text-main);
@@ -1269,7 +1309,7 @@ html.dark .view-header {
 .credibility-warning svg {
   flex-shrink: 0;
   margin-top: 2px;
-  color: #ff9500;
+  color: var(--color-warning);
 }
 
 .credibility-praise {
