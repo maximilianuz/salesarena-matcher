@@ -3841,7 +3841,7 @@ export default function App() {
               {activeTab === 'dashboard' && 'Panel de Control Principal'}
               {activeTab === 'wizard' && 'Cargar Disponibilidad'}
               {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
-              {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
+              {activeTab === 'affinity' && 'Afinidad Horaria'}
               {activeTab === 'members' && 'Gestionar Equipo'}
               {activeTab === 'reportes' && 'Reportes y Análisis'}
               {activeTab === 'analisis' && 'Análisis de Llamada'}
@@ -3850,7 +3850,7 @@ export default function App() {
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
               {activeTab === 'wizard' && 'Configura tu participación en los role-plays de esta semana en pocos clics.'}
               {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
-              {activeTab === 'affinity' && '% de coincidencia relativa entre parejas de role-players.'}
+              {activeTab === 'affinity' && 'Con quiénes del equipo compartís más horas libres, de mayor a menor.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
               {activeTab === 'reportes' && 'Métricas de asistencia y coordinación de la sala, en base a lo que cada participante reporta después de cada sesión.'}
               {activeTab === 'analisis' && 'Tomá notas cronometradas de una llamada de ejemplo, clasificalas por fase y compará con lo que anotó el resto de la sala.'}
@@ -4993,123 +4993,99 @@ export default function App() {
 
           {/* VIEW: AFFINITY */}
           {activeTab === 'affinity' && (() => {
-            const AFFINITY_LEVELS = [
-              { label: 'Baja o sin coincidencia aún', min: 0, max: 39, bg: 'rgba(120, 120, 120, 0.1)', text: 'var(--text-muted)' },
-              { label: 'Moderada (40-69%)', min: 40, max: 69, bg: 'rgba(255, 159, 10, 0.12)', text: 'var(--color-warning)' },
-              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(var(--accent-rgb), 0.15)', text: 'var(--color-accent)' }
-            ];
-            const levelForAffinity = (pct) => AFFINITY_LEVELS.find(l => pct >= l.min && pct <= l.max) || AFFINITY_LEVELS[0];
+            // Una sola rampa de intensidad para toda la app (--ramp-*): antes
+            // esta pantalla tenía su propia escala gris→naranja→verde, que no
+            // se parecía a la del Mapa de Calor ni a la del medidor.
+            const nivelAfinidad = (pct) => {
+              if (pct >= 70) return { bg: 'var(--ramp-4)', ink: '#09090b' };
+              if (pct >= 45) return { bg: 'var(--ramp-3)', ink: '#09090b' };
+              if (pct >= 20) return { bg: 'var(--ramp-2)', ink: 'var(--text-main)' };
+              return { bg: 'var(--ramp-1)', ink: 'var(--text-main)' };
+            };
+
+            const miFila = affinity.find(row => row.email?.toLowerCase() === currentUser.email.toLowerCase());
+            // Ordenada de mayor a menor y COMPLETA. Antes se mostraba una
+            // tabla-matriz de N columnas para una sola fila —una lista
+            // disfrazada de matriz— y debajo la misma información otra vez
+            // recortada al top 2.
+            //
+            // pct null es la celda de uno consigo mismo (i === j en el cálculo),
+            // no "sin horas": se descarta. Un 0 sí es un dato real — no hay
+            // ninguna hora en común, sea porque no se cruzan o porque alguno de
+            // los dos todavía no cargó nada.
+            const companeros = (miFila?.stats || [])
+              .filter(s => s.pct !== null)
+              .sort((a, b) => b.pct - a.pct);
+            const sinCruce = companeros.filter(s => s.pct === 0).length;
+            const mejor = companeros.find(s => s.pct > 0) || null;
 
             return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-              <div className="section-card glass">
-                <h4 className="section-title">
-                  <Handshake size={15} className="section-title-icon" />
-                  Tu Solapamiento Horario con el Equipo
-                </h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 10px 0' }}>
-                  Porcentaje de solapamiento relativo entre tus horas disponibles y las de cada compañero. Solo ves tu propia fila; el detalle hora por hora de todo el equipo está en el Mapa de Calor.
-                </p>
+            <div className="section-card glass">
+              <h4 className="section-title">
+                <Handshake size={15} className="section-title-icon" />
+                Tu Solapamiento Horario con el Equipo
+              </h4>
+              <p className="section-subtitle" style={{ margin: 0 }}>
+                Cuánto se solapan tus horas con las de cada compañero. El detalle hora por hora de todo el equipo está en el Mapa de Calor.
+              </p>
 
-                <div className="heatmap-legend" role="img" aria-label="Escala de afinidad horaria: de baja o sin coincidencia a alta">
-                  {AFFINITY_LEVELS.map(l => (
-                    <div className="heatmap-legend-item" key={l.label}>
-                      <span className="heatmap-legend-swatch" style={{ backgroundColor: l.bg }}></span>
-                      <span className="heatmap-legend-text">{l.label}</span>
-                    </div>
-                  ))}
+              {/* La conclusión primero: la app ya la tenía calculada y hacía
+                  que la dedujeras de la tabla. */}
+              {mejor && (
+                <div className="affinity-lead">
+                  <Trophy size={16} aria-hidden="true" />
+                  <span>
+                    Con quien más coincidís es <strong>{mejor.name}</strong>, en un <strong>{mejor.pct}%</strong> de tus horas.
+                  </span>
                 </div>
-                <div className="table-responsive-wrapper">
-                  <table className="affinity-table">
-                    <thead>
-                      <tr>
-                        <th className="affinity-th" style={{ backgroundColor: 'var(--bg-card-hover)' }}>Jugador</th>
-                        {members.filter(m => m.active).map(m => (
-                          <th className="affinity-th" key={m.email}>{m.name.split(' ')[0]}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => (
-                        <tr key={i}>
-                          <td className="affinity-td-label">{row.name}</td>
-                          {row.stats.map((col, j) => {
-                            const pct = col.pct;
-                            const level = pct !== null ? levelForAffinity(pct) : null;
-                            return (
-                              <td
-                                key={j}
-                                className="affinity-cell"
-                                style={{ backgroundColor: level ? level.bg : 'transparent', color: level ? level.text : 'var(--text-muted)' }}
-                              >
-                                {pct !== null ? `${pct}%` : '—'}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              )}
+
+              {companeros.length === 0 && (
+                <div className="empty-state">
+                  <Users size={30} />
+                  <span className="empty-state-title">Todavía no hay compañeros activos</span>
+                  <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
                 </div>
-              </div>
+              )}
 
-              {/* Best Partners List */}
-              <div className="section-card glass">
-                <h4 className="section-title">
-                  <Trophy size={15} className="section-title-icon" />
-                  Tus Compañeros con Mayor Afinidad
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {affinity.filter(row => row.email?.toLowerCase() === currentUser.email.toLowerCase()).map((row, i) => {
-                    const sortedStats = [...row.stats]
-                      .filter(s => s.pct !== null)
-                      .sort((a, b) => b.pct - a.pct);
-                    const topStats = sortedStats.filter(s => s.pct > 0).slice(0, 2);
+              {companeros.length > 0 && !mejor && (
+                <div className="empty-state">
+                  <AlertCircle size={30} />
+                  <span className="empty-state-title">Aún sin coincidencias horarias</span>
+                  <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
+                </div>
+              )}
 
-                    if (sortedStats.length === 0) {
-                      return (
-                        <div className="empty-state" key={i}>
-                          <Users size={30} />
-                          <span className="empty-state-title">Todavía no hay compañeros activos</span>
-                          <span className="empty-state-desc">Cuando se sumen más personas a la sala, vas a ver acá con quién más coincidís.</span>
-                        </div>
-                      );
-                    }
-
-                    if (topStats.length === 0) {
-                      return (
-                        <div className="empty-state" key={i}>
-                          <AlertCircle size={30} />
-                          <span className="empty-state-title">Aún sin coincidencias horarias</span>
-                          <span className="empty-state-desc">Por ahora ningún compañero comparte horas libres con las tuyas. Cargá más franjas en "Cargar Disponibilidad" para aumentar tus chances.</span>
-                        </div>
-                      );
-                    }
-
+              {mejor && (
+                <ul className="affinity-list">
+                  {companeros.map(s => {
+                    const nivel = nivelAfinidad(s.pct);
+                    const compa = members.find(m => m.email.toLowerCase() === s.email.toLowerCase());
                     return (
-                      <React.Fragment key={i}>
-                        {topStats.map(s => {
-                          const level = levelForAffinity(s.pct);
-                          const statMember = members.find(m => m.email.toLowerCase() === s.email.toLowerCase());
-                          return (
-                            <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
-                              <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className="participant-avatar-mini" style={avatarStyle(s.name)}>
-                                  <AvatarPhoto avatarUrl={statMember?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
-                                </span>
-                                {s.name}
-                              </span>
-                              <span className="affinity-pct-badge" style={{ backgroundColor: level.bg, color: level.text }}>
-                                {s.pct}%
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </React.Fragment>
+                      <li className={`affinity-row ${s.pct === 0 ? 'affinity-row-empty' : ''}`} key={s.email || s.name}>
+                        <span className="participant-avatar-mini" style={avatarStyle(s.name)}>
+                          <AvatarPhoto avatarUrl={compa?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
+                        </span>
+                        <span className="affinity-row-name">{s.name}</span>
+                        <span className="affinity-bar">
+                          {s.pct > 0 && (
+                            <span className="affinity-bar-fill" style={{ width: `${s.pct}%`, backgroundColor: nivel.bg }}></span>
+                          )}
+                        </span>
+                        <span className="affinity-row-pct">{s.pct}%</span>
+                      </li>
                     );
                   })}
-                </div>
-              </div>
+                </ul>
+              )}
+
+              {mejor && sinCruce > 0 && (
+                <p className="section-subtitle" style={{ margin: 0 }}>
+                  {sinCruce === 1
+                    ? 'Con un compañero no compartís ninguna hora todavía: puede ser que sus franjas no se crucen con las tuyas, o que aún no haya cargado ninguna.'
+                    : `Con ${sinCruce} compañeros no compartís ninguna hora todavía: puede ser que sus franjas no se crucen con las tuyas, o que aún no hayan cargado ninguna.`}
+                </p>
+              )}
             </div>
             );
           })()}

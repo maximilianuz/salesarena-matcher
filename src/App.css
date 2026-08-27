@@ -901,49 +901,90 @@
 }
 
 /* Affinity Matrix */
-.affinity-table {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  overflow: hidden;
-  min-width: 500px;
-}
-
-.affinity-th {
-  background-color: var(--bg-card-hover);
-  padding: 14px 10px;
-  font-weight: 600;
-  font-size: 12px;
-  text-align: center;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.affinity-td-label {
-  background-color: var(--bg-card-hover);
-  font-weight: 600;
-  padding: 14px;
-  font-size: 12px;
-  border-right: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+/* Afinidad: una lista ordenada, no una matriz. Antes esto era una tabla de N
+   columnas que mostraba UNA sola fila (la propia) —una lista disfrazada de
+   matriz, que ademas obligaba a scrollear de costado al crecer el equipo— y
+   debajo la misma informacion otra vez, recortada al top 2. */
+.affinity-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--r-card);
+  background-color: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  font-size: var(--t-body);
   color: var(--text-main);
 }
 
-.affinity-cell {
-  text-align: center;
-  padding: 14px;
-  font-size: 13px;
-  font-weight: 600;
-  border-right: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+.affinity-lead svg {
+  color: var(--color-accent);
+  flex-shrink: 0;
 }
 
-.affinity-pct-badge {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
+.affinity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.affinity-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: var(--r-button);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card-hover);
+}
+
+.affinity-row-name {
+  font-size: var(--t-body);
+  font-weight: 600;
+  color: var(--text-main);
+  width: 140px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.affinity-bar {
+  flex-grow: 1;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background-color: rgba(var(--neutral-rgb), 0.16);
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.affinity-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.affinity-row-pct {
+  font-size: var(--t-data);
+  font-weight: 700;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  width: 46px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.affinity-row-empty .affinity-row-name,
+.affinity-row-empty .affinity-row-pct {
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  .affinity-row-name { width: 96px; }
 }
 
 /* Members Manager Rows */
