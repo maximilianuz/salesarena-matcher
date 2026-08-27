@@ -4881,6 +4881,17 @@ export default function App() {
               return HEATMAP_LEVELS.find(l => ratio <= l.max) || HEATMAP_LEVELS[HEATMAP_LEVELS.length - 1];
             };
 
+            // La franja más concurrida. La app ya tenía el dato y hacía que se
+            // dedujera mirando 168 celdas: ahora lo dice. Ante empate gana la
+            // más temprana de la semana, que es el orden en que se recorre.
+            let pico = null;
+            for (let d = 0; d < 7; d++) {
+              for (let h = 0; h < 24; h++) {
+                const celda = heatmap[d]?.[h];
+                if (celda && celda.count > (pico?.count ?? 0)) pico = { day: d, hour: h, count: celda.count };
+              }
+            }
+
             return (
               <div className="section-card glass" style={{ maxWidth: '100%' }}>
                 <div className="heatmap-container">
@@ -4895,6 +4906,23 @@ export default function App() {
                   <p style={{ color: 'var(--text-muted)', fontSize: '12.5px', margin: 0 }}>
                     Cada celda muestra cuántas personas están disponibles. Hacé click (o Enter con teclado) en un bloque para ver quiénes son.
                   </p>
+
+                  {/* La conclusión, antes de la tabla. Era el dato que uno viene
+                      a buscar y había que deducirlo de 168 celdas. */}
+                  {pico && (
+                    <button
+                      type="button"
+                      className="heatmap-lead"
+                      onClick={() => setSelectedHeatmapCell({ day: pico.day, hour: pico.hour })}
+                    >
+                      <Flame size={16} aria-hidden="true" />
+                      <span>
+                        La franja con más gente libre es el <strong>{DIAS[pico.day].toLowerCase()} a las {String(pico.hour).padStart(2, '0')}:00</strong>
+                        {' · '}{pico.count} de {totalActive} {totalActive === 1 ? 'persona' : 'personas'}
+                      </span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                  )}
 
                   {/* SCALE LEGEND: la única forma antes era el tooltip, ahora la escala es siempre visible */}
                   <div className="heatmap-legend" role="img" aria-label="Escala de disponibilidad: de nadie a más del 75% del equipo">
@@ -5241,12 +5269,18 @@ export default function App() {
 
           {activeTab === 'reportes' && (
             <div>
-              <div className="glass" style={{ padding: '14px 18px', marginBottom: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                <BarChart3 size={18} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: '1px' }} />
-                <div style={{ fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                  Estas métricas se calculan a partir de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos automáticamente, no analizarlos. Un mes puntual con problemas de conexión no te perjudica frente al resto de la sala: estos números son para tu propia referencia, no un ranking público.
-                </div>
-              </div>
+              {/* El descargo abria la pantalla con cinco lineas antes de mostrar
+                  un solo dato. Es necesario, pero no es el titular: pasa a un
+                  desplegable que sigue estando a un clic. */}
+              <details className="reportes-nota">
+                <summary>
+                  <BarChart3 size={14} aria-hidden="true" />
+                  Cómo se calculan estos números
+                </summary>
+                <p>
+                  Salen de lo que cada participante reporta después de cada sesión (asistió, llegó tarde, no se presentó). La app no accede al contenido de las videollamadas: su función es coordinar los emparejamientos, no analizarlos. Un mes puntual con problemas de conexión no te perjudica frente al resto de la sala: estos números son para tu propia referencia, no un ranking público.
+                </p>
+              </details>
 
               {/* KPIs personales */}
               <h4 className="section-title" style={{ marginBottom: '12px' }}>
@@ -5288,42 +5322,26 @@ export default function App() {
                 <TrendingUp size={15} className="section-title-icon" />
                 Resumen de la Sala
               </h4>
-              <div className="metrics-grid" style={{ marginBottom: '8px' }}>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
-                    <Video size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{meetingsThisMonth.length}</span>
-                    <span className="kpi-label">Sesiones Este Mes</span>
-                  </div>
+              {/* Los cuatro numeros de la sala son contexto, no titular: entre
+                  "Tu confiabilidad" y "Role-players en la sala" no habia ninguna
+                  diferencia visual aunque uno es sobre vos y el otro no. Bajan a
+                  una fila secundaria. */}
+              <div className="room-stats">
+                <div className="room-stat">
+                  <span className="room-stat-val">{meetingsThisMonth.length}</span>
+                  <span className="room-stat-label">sesiones este mes</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
-                    <ShieldCheck size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{roomReliability !== null ? `${roomReliability}%` : '—'}</span>
-                    <span className="kpi-label">Confiabilidad de la Sala</span>
-                  </div>
+                <div className="room-stat">
+                  <span className="room-stat-val">{roomReliability !== null ? `${roomReliability}%` : '—'}</span>
+                  <span className="room-stat-label">confiabilidad de la sala</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
-                    <Users size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{members.length}</span>
-                    <span className="kpi-label">Role-Players en la Sala</span>
-                  </div>
+                <div className="room-stat">
+                  <span className="room-stat-val">{members.length}</span>
+                  <span className="room-stat-label">{members.length === 1 ? 'role-player' : 'role-players'}</span>
                 </div>
-                <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(var(--warning-rgb), 0.12)' : 'rgba(var(--neutral-rgb), 0.08)', color: blockedMembersCount > 0 ? 'var(--color-warning)' : 'var(--text-muted)' }}>
-                    <Clock size={18} />
-                  </div>
-                  <div className="kpi-info">
-                    <span className="kpi-val">{blockedMembersCount}</span>
-                    <span className="kpi-label">Sin Emparejamiento Este Mes</span>
-                  </div>
+                <div className="room-stat">
+                  <span className={`room-stat-val ${blockedMembersCount > 0 ? 'is-warn' : ''}`}>{blockedMembersCount}</span>
+                  <span className="room-stat-label">sin emparejamiento este mes</span>
                 </div>
               </div>
               <p className="section-subtitle" style={{ margin: '0 0 24px' }}>
