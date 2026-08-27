@@ -106,7 +106,7 @@ import {
 } from './closeouts';
 import {
   getInitials,
-  getAvatarColor,
+  avatarStyle,
   escapeLikeLiteral,
   nameFromEmail,
   sleep,
@@ -3559,7 +3559,7 @@ export default function App() {
           <div style={{
             width: '52px', height: '52px', borderRadius: '50%', margin: '0 auto 18px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backgroundColor: 'rgba(255,59,48,0.1)', color: 'var(--color-danger)'
+            backgroundColor: 'rgba(var(--danger-rgb), 0.1)', color: 'var(--color-danger)'
           }}>
             <Lock size={24} />
           </div>
@@ -3764,7 +3764,7 @@ export default function App() {
 
         <div className="profile-card">
           <div className="profile-card-top">
-            <div className="profile-avatar" style={{ backgroundColor: getAvatarColor(currentUser.name) }}>
+            <div className="profile-avatar" style={avatarStyle(currentUser.name)}>
               <AvatarPhoto avatarUrl={currentUser.avatarUrl}>{getInitials(currentUser.name)}</AvatarPhoto>
               <span className={`profile-status-dot ${currentUser.active ? 'on' : 'off'}`} title={currentUser.active ? 'Participando esta semana' : 'Inactivo esta semana'}></span>
             </div>
@@ -3883,8 +3883,8 @@ export default function App() {
                     width: '40px',
                     height: '40px',
                     borderRadius: '12px',
-                    background: 'linear-gradient(135deg, rgba(10,132,255,0.15), rgba(94,92,230,0.15))',
-                    border: '1px solid rgba(10,132,255,0.3)',
+                    background: 'linear-gradient(135deg, rgba(var(--primary-rgb), 0.15), rgba(var(--primary-rgb), 0.15))',
+                    border: '1px solid rgba(var(--primary-rgb), 0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -3967,7 +3967,7 @@ export default function App() {
                   {openCloseouts.map(p => (
                     <div className="closeout-prompt-card glass" key={p.meetingId}>
                       <div className="attendance-prompt-info">
-                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(p.partnerName) }}>
+                        <div className="attendance-prompt-avatar" style={avatarStyle(p.partnerName)}>
                           <AvatarPhoto avatarUrl={p.partnerAvatarUrl}>{getInitials(p.partnerName)}</AvatarPhoto>
                         </div>
                         <div>
@@ -4004,7 +4004,7 @@ export default function App() {
                     return (
                     <div className="attendance-prompt-card glass" key={attendance.id}>
                       <div className="attendance-prompt-info">
-                        <div className="attendance-prompt-avatar" style={{ backgroundColor: getAvatarColor(attendance.memberName) }}>
+                        <div className="attendance-prompt-avatar" style={avatarStyle(attendance.memberName)}>
                           <AvatarPhoto avatarUrl={reportedMember?.avatarUrl}>{getInitials(attendance.memberName)}</AvatarPhoto>
                         </div>
                         <div>
@@ -4128,7 +4128,7 @@ export default function App() {
               {/* KPIs */}
               <div className="metrics-grid">
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
                     <Users size={18} />
                   </div>
                   <div className="kpi-info">
@@ -4137,7 +4137,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
                     <Clock size={18} />
                   </div>
                   <div className="kpi-info">
@@ -4146,7 +4146,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
                     <Sparkles size={18} />
                   </div>
                   <div className="kpi-info">
@@ -4155,7 +4155,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(255,149,0,0.12)', color: '#ff9500' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--warning-rgb), 0.12)', color: 'var(--color-warning)' }}>
                     <Video size={18} />
                   </div>
                   <div className="kpi-info">
@@ -4264,7 +4264,7 @@ export default function App() {
                       <div key={proposal.id} className={`match-card glass ${isConfirmed ? 'match-card-mine' : ''}`}>
                         <div className="match-card-header">
                           <div className="match-card-identity" style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-                            <span className="participant-avatar-mini match-avatar-lg" style={{ backgroundColor: getAvatarColor(partnerName) }}>
+                            <span className="participant-avatar-mini match-avatar-lg" style={avatarStyle(partnerName)}>
                               <AvatarPhoto avatarUrl={partnerMember?.avatarUrl}>{getInitials(partnerName)}</AvatarPhoto>
                             </span>
                             <div style={{ minWidth: 0 }}>
@@ -4870,13 +4870,13 @@ export default function App() {
             // Los escalones garantizan contraste perceptible sin importar el tamaño del equipo.
             const HEATMAP_LEVELS = [
               { max: 0,    bg: 'transparent',                 ink: 'var(--text-muted)', label: 'Nadie' },
-              { max: 0.25, bg: 'rgba(52, 199, 89, 0.18)',      ink: 'var(--text-main)',  label: 'Hasta 25%' },
-              { max: 0.5,  bg: 'rgba(52, 199, 89, 0.38)',      ink: 'var(--text-main)',  label: '26–50%' },
+              { max: 0.25, bg: 'rgba(var(--accent-rgb), 0.18)',      ink: 'var(--text-main)',  label: 'Hasta 25%' },
+              { max: 0.5,  bg: 'rgba(var(--accent-rgb), 0.38)',      ink: 'var(--text-main)',  label: '26–50%' },
               // Niveles 3 y 4: el verde ya es lo bastante saturado en claro y oscuro
               // como para que el texto oscuro pierda contraste sobre fondo oscuro (bg-main).
               // Blanco funciona en ambos temas para estos dos escalones.
-              { max: 0.75, bg: 'rgba(52, 199, 89, 0.62)',      ink: '#ffffff',           label: '51–75%' },
-              { max: 1,    bg: 'rgba(52, 199, 89, 0.9)',       ink: '#ffffff',           label: 'Más de 75%' },
+              { max: 0.75, bg: 'rgba(var(--accent-rgb), 0.62)',      ink: '#ffffff',           label: '51–75%' },
+              { max: 1,    bg: 'rgba(var(--accent-rgb), 0.9)',       ink: '#ffffff',           label: 'Más de 75%' },
             ];
             const levelFor = (count) => {
               const ratio = totalActive ? count / totalActive : 0;
@@ -4996,7 +4996,7 @@ export default function App() {
             const AFFINITY_LEVELS = [
               { label: 'Baja o sin coincidencia aún', min: 0, max: 39, bg: 'rgba(120, 120, 120, 0.1)', text: 'var(--text-muted)' },
               { label: 'Moderada (40-69%)', min: 40, max: 69, bg: 'rgba(255, 159, 10, 0.12)', text: 'var(--color-warning)' },
-              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(52, 199, 89, 0.15)', text: '#34c759' }
+              { label: 'Alta (70-100%)', min: 70, max: 100, bg: 'rgba(var(--accent-rgb), 0.15)', text: 'var(--color-accent)' }
             ];
             const levelForAffinity = (pct) => AFFINITY_LEVELS.find(l => pct >= l.min && pct <= l.max) || AFFINITY_LEVELS[0];
 
@@ -5094,7 +5094,7 @@ export default function App() {
                           return (
                             <div key={s.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)', fontSize: '13px', flexWrap: 'wrap', gap: '8px' }}>
                               <span style={{ fontWeight: '600', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span className="participant-avatar-mini" style={{ backgroundColor: getAvatarColor(s.name) }}>
+                                <span className="participant-avatar-mini" style={avatarStyle(s.name)}>
                                   <AvatarPhoto avatarUrl={statMember?.avatarUrl}>{getInitials(s.name)}</AvatarPhoto>
                                 </span>
                                 {s.name}
@@ -5129,7 +5129,7 @@ export default function App() {
                     const isSelf = m.email.toLowerCase() === currentUser.email.toLowerCase();
                     return (
                     <div className={`member-row ${isSelf ? 'member-row-self' : ''}`} key={idx}>
-                      <div className="member-row-avatar" style={{ backgroundColor: getAvatarColor(m.name) }}>
+                      <div className="member-row-avatar" style={avatarStyle(m.name)}>
                         <AvatarPhoto avatarUrl={m.avatarUrl}>{getInitials(m.name)}</AvatarPhoto>
                       </div>
                       <div className="member-row-info">
@@ -5282,7 +5282,7 @@ export default function App() {
               </h4>
               <div className="metrics-grid" style={{ marginBottom: '28px' }}>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
                     <ShieldCheck size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5291,7 +5291,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
                     <Handshake size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5300,7 +5300,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: getMonthlyFaltas(currentUser.email) > 0 ? 'rgba(255,59,48,0.1)' : 'rgba(120,120,120,0.08)', color: getMonthlyFaltas(currentUser.email) > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: getMonthlyFaltas(currentUser.email) > 0 ? 'rgba(var(--danger-rgb), 0.1)' : 'rgba(var(--neutral-rgb), 0.08)', color: getMonthlyFaltas(currentUser.email) > 0 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
                     <X size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5317,7 +5317,7 @@ export default function App() {
               </h4>
               <div className="metrics-grid" style={{ marginBottom: '8px' }}>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(0,113,227,0.08)', color: 'var(--color-primary)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--primary-rgb), 0.08)', color: 'var(--color-primary)' }}>
                     <Video size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5326,7 +5326,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(52,199,89,0.12)', color: '#34c759' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.12)', color: 'var(--color-accent)' }}>
                     <ShieldCheck size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5335,7 +5335,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(120,120,120,0.08)', color: 'var(--text-muted)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: 'rgba(var(--neutral-rgb), 0.08)', color: 'var(--text-muted)' }}>
                     <Users size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5344,7 +5344,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="kpi-card glass glass-hover">
-                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(255,149,0,0.12)' : 'rgba(120,120,120,0.08)', color: blockedMembersCount > 0 ? '#ff9500' : 'var(--text-muted)' }}>
+                  <div className="kpi-icon-container" style={{ backgroundColor: blockedMembersCount > 0 ? 'rgba(var(--warning-rgb), 0.12)' : 'rgba(var(--neutral-rgb), 0.08)', color: blockedMembersCount > 0 ? 'var(--color-warning)' : 'var(--text-muted)' }}>
                     <Clock size={18} />
                   </div>
                   <div className="kpi-info">
@@ -5894,7 +5894,7 @@ export default function App() {
               ) : feedbackReviewList.map(f => (
                 <div key={f.id} className="feedback-review-row">
                   <div className="feedback-review-row-header">
-                    <span className="participant-avatar-mini" style={{ width: '32px', height: '32px', fontSize: '12px', backgroundColor: getAvatarColor(f.member_name) }}>
+                    <span className="participant-avatar-mini" style={{ width: '32px', height: '32px', fontSize: '12px', ...avatarStyle(f.member_name) }}>
                       <AvatarPhoto avatarUrl={f.avatar_url}>{getInitials(f.member_name)}</AvatarPhoto>
                     </span>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -6121,7 +6121,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <AlertTriangle size={22} style={{ color: '#ff9500' }} />
+                <AlertTriangle size={22} style={{ color: 'var(--color-warning)' }} />
                 <h3 className="join-title">No pudimos abrir la reunión</h3>
                 <p className="join-desc">{joinError}</p>
                 <button
