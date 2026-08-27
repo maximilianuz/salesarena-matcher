@@ -157,9 +157,15 @@ export const fmtT = (s) => {
   return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
 };
 
+// Caption secundaria (closer + rubro), NO el nombre del análisis — ese es
+// `titulo`, editable arriba de todo en el encabezado. Antes esta función caía
+// en "Análisis sin nombre" cuando faltaba el closer, y esa frase se leía como
+// si fuera el título sin poner: por eso ahora devuelve '' y el llamador la
+// omite en vez de mostrar un texto que parece un nombre pendiente.
 export const tituloAnalisis = (a) => {
   const m = (a && a.meta) || {};
-  return (m.closer ? ('Closer: ' + m.closer) : 'Análisis sin nombre') + (m.rubro ? (' · ' + m.rubro) : '');
+  if (!m.closer) return '';
+  return 'Closer: ' + m.closer + (m.rubro ? (' · ' + m.rubro) : '');
 };
 
 export const blankMeta = () => ({
