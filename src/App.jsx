@@ -86,6 +86,7 @@ import {
   toggleDay as toggleDayCells,
   toggleHourRow as toggleHourCells,
   describeDrag,
+  runAt,
   goalState
 } from './domain/availabilityGrid';
 import {
@@ -437,6 +438,14 @@ export default function App() {
   // del paso 1; sin pasos hay que hacerla al entrar, una sola vez, para no
   // pisar lo que se esté editando en cada re-render.
   const grillaSembrada = useRef(false);
+  // Las celdas marcadas como conjunto. Antes cada una de las 168 celdas hacía
+  // su propio .some() sobre el array en cada render; ahora además hay que mirar
+  // la de arriba y la de abajo para saber dónde empieza y termina cada tramo,
+  // y con el array eso sería recorrerlo tres veces por celda.
+  const celdasMarcadas = React.useMemo(
+    () => new Set(wizardGrid.map(s => `${s.dayIdx}-${s.hour}`)),
+    [wizardGrid]
+  );
   // Corrección de la zona horaria detectada, desde el asistente.
   const [editingTz, setEditingTz] = useState(false);
   const [savingTz, setSavingTz] = useState(false);
@@ -4734,12 +4743,18 @@ export default function App() {
                                 </button>
                               </td>
                               {Array.from({ length: 7 }).map((_, d) => {
-                                const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
-                                const dayLabel = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][d];
+                                const tramo = runAt(celdasMarcadas, d, h, showAllHours ? 0 : 6);
+                                const isActive = tramo !== null;
+                                const dayLabel = DIAS[d];
                                 return (
                                   <td
                                     key={d}
-                                    className={`editor-cell ${isActive ? 'active' : ''}`}
+                                    className={[
+                                      'editor-cell',
+                                      isActive ? 'active' : '',
+                                      tramo?.esInicio ? 'run-start' : '',
+                                      tramo?.esFin ? 'run-end' : ''
+                                    ].filter(Boolean).join(' ')}
                                     role="button"
                                     tabIndex={0}
                                     aria-pressed={isActive}
@@ -4747,7 +4762,16 @@ export default function App() {
                                     onMouseDown={(e) => handleCellMouseDown(d, h, e)}
                                     onMouseEnter={(e) => handleCellMouseEnter(d, h, e)}
                                     onKeyDown={(e) => handleCellKeyDown(d, h, e)}
-                                  ></td>
+                                  >
+                                    {/* La duración va solo en la celda que abre
+                                        el tramo, como la hora de un evento en
+                                        un calendario. Es decorativa: el
+                                        aria-label de cada celda ya dice su hora
+                                        y si está seleccionada. */}
+                                    {tramo?.esInicio && tramo.largo > 1 && (
+                                      <span className="editor-run-label" aria-hidden="true">{tramo.largo} h</span>
+                                    )}
+                                  </td>
                                 );
                               })}
                             </tr>
