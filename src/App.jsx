@@ -44,7 +44,6 @@ import {
   Handshake,
   Trophy,
   Mail,
-  Pencil,
   Save,
   Eraser,
   Target,
@@ -431,9 +430,13 @@ export default function App() {
   const feedbackReviewModalRef = useDialogA11y(showFeedbackReviewModal, () => setShowFeedbackReviewModal(false));
   const pendingFeedbackCount = feedbackReviewList.filter(f => f.status === 'pending').length;
 
-  // Estados de carga del Wizard
-  const [wizardStep, setWizardStep] = useState(1); // 1: Bienvenida, 2: Opciones, 3: Grid
+  // Estados de carga del Wizard. Ya no hay pasos: la grilla es la pantalla.
   const [wizardGrid, setWizardGrid] = useState([]); // [{dayIdx, hour}]
+  // Si la grilla ya se sembró con lo que la persona tenía guardado, en esta
+  // visita a la pestaña. Antes esa siembra la hacía el botón "Sí, participaré"
+  // del paso 1; sin pasos hay que hacerla al entrar, una sola vez, para no
+  // pisar lo que se esté editando en cada re-render.
+  const grillaSembrada = useRef(false);
   // Corrección de la zona horaria detectada, desde el asistente.
   const [editingTz, setEditingTz] = useState(false);
   const [savingTz, setSavingTz] = useState(false);
@@ -1233,66 +1236,49 @@ export default function App() {
   };
 
   // --- ACCIONES DEL WIZARD ---
-  const handleWizardParticipation = (participate) => {
+  // Darse de baja de la semana. Antes era una de las dos mitades de la pantalla
+  // de bienvenida del asistente ("¿vas a participar?"), que cobraba peaje a
+  // todo el mundo para llegar a la grilla. Ahora la baja es un enlace al pie de
+  // la grilla y el "sí" es implícito: guardar horarios ES participar.
+  const optOutOfWeek = () => {
     setWizardStatus({ type: 'loading', msg: 'Guardando tu estado...' });
     setTimeout(async () => {
-      // Modificar en la lista de miembros (y persistir en la DB: antes el
-      // cambio de participación del wizard se perdía al recargar)
       const updatedMembers = members.map(m =>
-        m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: participate } : m
+        m.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...m, active: false } : m
       );
       setMembers(updatedMembers);
-      setCurrentUser(prev => ({ ...prev, active: participate }));
+      setCurrentUser(prev => ({ ...prev, active: false }));
       if (!useMockDb) {
         await supabase.from('members')
-          .update({ active: participate })
+          .update({ active: false })
           .eq('room_id', currentRoomId)
           .eq('email', currentUser.email);
       }
 
-      if (participate) {
-        // Cargar horarios del usuario activo en la grilla visual
-        const userRules = availabilities.filter(a => ruleBelongsTo(a, currentUser));
-        const gridSlots = [];
-        userRules.forEach(rule => {
-          for (let h = rule.startHour; h < rule.endHour; h++) {
-            gridSlots.push({ dayIdx: rule.dayIdx, hour: h });
-          }
-        });
-        setWizardGrid(gridSlots);
-        setWizardStep(2);
-        // Se limpia el "Guardando tu estado..." antes de pasar a elegir horarios:
-        // si no, el spinner quedaba fijo arriba de la grilla durante toda la
-        // edición, como si la app estuviera guardando algo que ya terminó.
-        setWizardStatus(null);
-      } else {
-        // Borrar horarios semanales (también en la DB: antes solo se limpiaba
-        // el estado local y las marcas "volvían" al recargar la página)
-        const clearError = await replaceMyAvailability([]);
-        if (clearError) {
-          setWizardStatus({ type: 'error', msg: clearError });
-          return;
-        }
-        const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
-        setAvailabilities(cleanAvail);
-        // Quien se da de baja no puede sostener sus role-plays: del otro lado
-        // hay gente que se organizó para estar. Se cancelan para que vuelvan al
-        // emparejamiento y puedan conseguir otro compañero esta misma semana.
-        const caidas = await cancelStaleProposals(null);
-        setWizardStatus({
-          type: 'success',
-          msg: caidas > 0
-            ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
-            : '¡Registrado! Has sido excluido por esta semana.'
-        });
-        // Reasignar a los que quedaron sueltos en el acto, no en la próxima
-        // pasada del cron: es gente que se organizó para practicar hoy.
-        if (caidas > 0) triggerWeeklyMatcher({ yaGuardado: 'Registramos tu baja' });
-        setTimeout(() => {
-          setActiveTab('dashboard');
-          setWizardStep(1);
-        }, 2000);
+      // Borrar horarios semanales (también en la DB: antes solo se limpiaba
+      // el estado local y las marcas "volvían" al recargar la página)
+      const clearError = await replaceMyAvailability([]);
+      if (clearError) {
+        setWizardStatus({ type: 'error', msg: clearError });
+        return;
       }
+      const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
+      setAvailabilities(cleanAvail);
+      setWizardGrid([]);
+      // Quien se da de baja no puede sostener sus role-plays: del otro lado
+      // hay gente que se organizó para estar. Se cancelan para que vuelvan al
+      // emparejamiento y puedan conseguir otro compañero esta misma semana.
+      const caidas = await cancelStaleProposals(null);
+      setWizardStatus({
+        type: 'success',
+        msg: caidas > 0
+          ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
+          : '¡Registrado! Has sido excluido por esta semana.'
+      });
+      // Reasignar a los que quedaron sueltos en el acto, no en la próxima
+      // pasada del cron: es gente que se organizó para practicar hoy.
+      if (caidas > 0) triggerWeeklyMatcher({ yaGuardado: 'Registramos tu baja' });
+      setTimeout(() => setActiveTab('dashboard'), 2000);
     }, 1000);
   };
 
@@ -1485,45 +1471,31 @@ export default function App() {
     }
   };
 
-  const handleUseTemplate = () => {
-    setWizardStatus({ type: 'loading', msg: 'Aplicando horarios base de tu plantilla...' });
-    setTimeout(async () => {
-      const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
+  // Traer la plantilla base A LA GRILLA. Antes era una pantalla entera del
+  // asistente y guardaba sola, sin que se llegara a ver qué había aplicado.
+  // Ahora es un botón sobre la grilla: se ve el resultado y se confirma con el
+  // mismo "Guardar horarios" que todo lo demás — un solo camino de guardado.
+  const loadTemplateIntoGrid = () => {
+    const userTemplateRules = templates.filter(t => ruleBelongsTo(t, currentUser));
 
-      // Sin plantilla guardada no hay nada que aplicar: antes este camino
-      // BORRABA la disponibilidad ya cargada (la plantilla vivía solo en
-      // memoria y quedaba vacía tras recargar la página).
-      if (userTemplateRules.length === 0) {
-        setWizardStatus({
-          type: 'error',
-          msg: 'Todavía no tenés una plantilla base guardada. Cargá tus horarios a mano y marcá "Guardar como mi Plantilla Base".'
-        });
-        return;
-      }
+    // Sin plantilla guardada no hay nada que aplicar: antes este camino
+    // BORRABA la disponibilidad ya cargada (la plantilla vivía solo en
+    // memoria y quedaba vacía tras recargar la página).
+    if (userTemplateRules.length === 0) {
+      showNotification(
+        'Todavía no tenés una plantilla base guardada. Marcá tus horarios acá y tildá "Guardar como mi plantilla base" antes de guardar.',
+        'info'
+      );
+      return;
+    }
 
-      // Reemplazar horarios en la DB (antes solo se cambiaba el estado local
-      // y el heatmap/matcher de los demás nunca veían el cambio)
-      const templateError = await replaceMyAvailability(userTemplateRules);
-      if (templateError) {
-        setWizardStatus({ type: 'error', msg: templateError });
-        return;
-      }
-
-      const cleanAvail = availabilities.filter(a => !ruleBelongsTo(a, currentUser));
-      setAvailabilities([...cleanAvail, ...userTemplateRules]);
-
-      setWizardStatus({ type: 'success', msg: '¡Horario base cargado con éxito para esta semana!' });
-
-      await cancelStaleProposals(userTemplateRules);
-
-      // Disparar weekly-matcher al instante para generar propuestas
-      triggerWeeklyMatcher();
-
-      setTimeout(() => {
-        setActiveTab('dashboard');
-        setWizardStep(1);
-      }, 2000);
-    }, 1000);
+    pushGridHistory();
+    const celdas = [];
+    userTemplateRules.forEach(regla => {
+      for (let h = regla.startHour; h < regla.endHour; h++) celdas.push({ dayIdx: regla.dayIdx, hour: h });
+    });
+    setWizardGrid(celdas);
+    showNotification('Cargamos tu horario base en la grilla. Revisalo y guardá para aplicarlo.', 'info');
   };
 
   const saveWizardGrid = async () => {
@@ -1570,6 +1542,31 @@ export default function App() {
     if (gridError) {
       setWizardStatus({ type: 'error', msg: gridError });
       return;
+    }
+
+    // Guardar horarios ES participar. Antes el "sí" se declaraba aparte, en la
+    // pantalla de bienvenida del asistente; sin ese paso, alguien que estaba
+    // excluido y viene a cargar horarios tiene que volver a entrar en la
+    // rotación al guardar, o cargaría disponibilidad que nadie va a cruzar.
+    // Solo se toca si hay horas: guardar una grilla vacía no reactiva a nadie.
+    if (!currentUser.active && newRules.length > 0) {
+      if (!useMockDb) {
+        const { error: activeError } = await supabase.from('members')
+          .update({ active: true })
+          .eq('room_id', currentRoomId)
+          .eq('email', currentUser.email);
+        if (activeError) {
+          console.error('reactivar participación:', activeError);
+          showNotification(
+            'Tus horarios se guardaron, pero no pudimos reactivar tu participación. Activala desde el Panel de Control para entrar en el emparejamiento.',
+            'error'
+          );
+        }
+      }
+      setCurrentUser(prev => ({ ...prev, active: true }));
+      setMembers(prev => prev.map(mem =>
+        mem.email.toLowerCase() === currentUser.email.toLowerCase() ? { ...mem, active: true } : mem
+      ));
     }
 
     // 2b. Cuántos role-plays quiere esta semana. Si esto falla, los horarios YA
@@ -1683,7 +1680,6 @@ export default function App() {
 
     setTimeout(() => {
       setActiveTab('dashboard');
-      setWizardStep(1);
     }, 2000);
   };
 
@@ -3297,10 +3293,30 @@ export default function App() {
     });
   };
 
-  // ⌘Z / Ctrl+Z mientras se edita la grilla. Solo en el paso 3 y solo fuera de
-  // un campo de texto, para no pisarle el deshacer propio al input de sesiones.
+  // Sembrar la grilla con los horarios ya guardados al abrir la pestaña. Se
+  // espera a que los datos de la sala terminen de cargar: sembrar con la lista
+  // todavía vacía mostraría la grilla en blanco y guardar borraría todo.
   useEffect(() => {
-    if (activeTab !== 'wizard' || wizardStep !== 3) return;
+    if (activeTab !== 'wizard') {
+      grillaSembrada.current = false;
+      return;
+    }
+    if (grillaSembrada.current || isRoomDataLoading) return;
+    const misReglas = availabilities.filter(a => ruleBelongsTo(a, currentUser));
+    const celdas = [];
+    misReglas.forEach(regla => {
+      for (let h = regla.startHour; h < regla.endHour; h++) celdas.push({ dayIdx: regla.dayIdx, hour: h });
+    });
+    setWizardGrid(celdas);
+    setGridHistory([]);
+    grillaSembrada.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, isRoomDataLoading, availabilities]);
+
+  // ⌘Z / Ctrl+Z mientras se edita la grilla. Solo fuera de un campo de texto,
+  // para no pisarle el deshacer propio al input de sesiones.
+  useEffect(() => {
+    if (activeTab !== 'wizard') return;
     const onKeyDown = (e) => {
       if (e.key !== 'z' && e.key !== 'Z') return;
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
@@ -3312,7 +3328,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, wizardStep]);
+  }, [activeTab]);
 
   const handleCellMouseDown = (dayIdx, hour, e) => {
     setIsMouseDown(true);
@@ -3712,7 +3728,7 @@ export default function App() {
           <button type="button" title="Panel de Control" className={`nav-link ${activeTab === 'dashboard' ? 'active' : ''}`} aria-current={activeTab === 'dashboard' ? 'page' : undefined} onClick={() => handleTabClick('dashboard')}>
             <LayoutDashboard size={17} aria-hidden="true" /> <span className="nav-link-label">Panel de Control</span>
           </button>
-          <button type="button" title="Cargar Disponibilidad" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => { handleTabClick('wizard'); setWizardStep(1); }}>
+          <button type="button" title="Cargar Disponibilidad" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => handleTabClick('wizard')}>
             <CalendarClock size={17} aria-hidden="true" /> <span className="nav-link-label">Cargar Disponibilidad</span>
           </button>
           <button type="button" title="Mapa de Calor" className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} aria-current={activeTab === 'heatmap' ? 'page' : undefined} onClick={() => handleTabClick('heatmap')}>
@@ -4511,16 +4527,6 @@ export default function App() {
           {activeTab === 'wizard' && (
             <div className="wizard-card glass">
 
-              {/* Los 3 pasos no tenían ninguna señal de cuántos faltan; quien
-                  llegaba a la grilla de horarios (paso 3, el más largo) no
-                  sabía si era el último paso o si venía algo más después. */}
-              <div className="wizard-progress">
-                <span className="wizard-progress-label">Paso {wizardStep} de 3</span>
-                <div className="wizard-progress-track">
-                  <div className="wizard-progress-fill" style={{ width: `${(wizardStep / 3) * 100}%` }}></div>
-                </div>
-              </div>
-
               {/* Wizard Status Alert */}
               {wizardStatus && (
                 <div id="status" className={`status-${wizardStatus.type}`} style={{ display: 'block', marginBottom: '16px' }}>
@@ -4528,117 +4534,46 @@ export default function App() {
                 </div>
               )}
 
-              {/* STEP 1: Bienvenida */}
-              {wizardStep === 1 && (
-                <div>
-                  <div className="wizard-hero-icon">
-                    <Target size={30} />
-                  </div>
-                  {/* "de nuevo" solo si ya tenía horarios cargados: a alguien
-                      que acaba de registrarse le sonaba a error. */}
-                  <h3 className="wizard-title">
-                    {availabilities.some(a => ruleBelongsTo(a, currentUser))
-                      ? `¡Hola de nuevo, ${currentUser.name}!`
-                      : `¡Hola, ${currentUser.name}!`}
-                  </h3>
-                  <p className="wizard-desc">¿Vas a participar en las sesiones de role-plays programadas para esta semana?</p>
-
-                  <div className="participation-choice">
-                    <button className="choice-card choice-yes" onClick={() => handleWizardParticipation(true)}>
-                      <span className="choice-icon">
-                        <Check size={24} strokeWidth={3} />
-                      </span>
-                      <span className="choice-text">
-                        <span className="choice-title">Sí, participaré</span>
-                        <span className="choice-sub">Coincidiré con mi equipo esta semana</span>
-                      </span>
-                    </button>
-                    <button className="choice-card choice-no" onClick={() => handleWizardParticipation(false)}>
-                      <span className="choice-icon">
-                        <X size={24} strokeWidth={3} />
-                      </span>
-                      <span className="choice-text">
-                        <span className="choice-title">No puedo esta semana</span>
-                        <span className="choice-sub">Me excluyo de los emparejamientos</span>
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* La zona horaria se detecta del navegador y hasta ahora no
-                      había NINGÚN lugar para corregirla. Si la detección erraba,
-                      la persona marcaba "9 a 12" y recibía propuestas a otra
-                      hora, sin forma de darse cuenta de por qué. Va acá, al
-                      inicio del asistente, porque todo lo que sigue —el
-                      calendario, el mapa de calor, las propuestas— se
-                      interpreta con este dato. */}
-                  <div className="wizard-tz-row">
-                    <span className="wizard-tz-current">
-                      <Globe size={13} aria-hidden="true" />
-                      Tus horarios se leen en <strong>{tzCity(currentUser?.tz)}</strong>
-                    </span>
-                    {editingTz ? (
-                      <div className="wizard-tz-edit">
-                        <select
-                          className="form-input"
-                          aria-label="Elegí tu país o zona horaria"
-                          value={ZONAS.some(z => z.tz === currentUser?.tz) ? currentUser.tz : ''}
-                          onChange={(e) => saveMyTimezone(e.target.value)}
-                          disabled={savingTz}
-                        >
-                          <option value="" disabled>
-                            {ZONAS.some(z => z.tz === currentUser?.tz)
-                              ? 'Elegí tu país...'
-                              : `Detectada: ${tzCity(currentUser?.tz)}`}
-                          </option>
-                          {ZONAS.map(z => (
-                            <option key={z.tz} value={z.tz}>{z.flag} {z.country}</option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn-small"
-                          onClick={() => setEditingTz(false)}
-                          disabled={savingTz}
-                        >
-                          Cancelar
-                        </button>
-                      </div>
-                    ) : (
-                      <button type="button" className="btn-small" onClick={() => setEditingTz(true)}>
-                        No es mi zona
+              <div className="editor-grid-container">
+                <h3 className="wizard-title">Marcá tu disponibilidad</h3>
+                <div className="wizard-tz-row">
+                  <span className="wizard-tz-current">
+                    <Globe size={13} aria-hidden="true" />
+                    Tus horarios se leen en <strong>{tzCity(currentUser?.tz)}</strong>
+                  </span>
+                  {editingTz ? (
+                    <div className="wizard-tz-edit">
+                      <select
+                        className="form-input"
+                        aria-label="Elegí tu país o zona horaria"
+                        value={ZONAS.some(z => z.tz === currentUser?.tz) ? currentUser.tz : ''}
+                        onChange={(e) => saveMyTimezone(e.target.value)}
+                        disabled={savingTz}
+                      >
+                        <option value="" disabled>
+                          {ZONAS.some(z => z.tz === currentUser?.tz)
+                            ? 'Elegí tu país...'
+                            : `Detectada: ${tzCity(currentUser?.tz)}`}
+                        </option>
+                        {ZONAS.map(z => (
+                          <option key={z.tz} value={z.tz}>{z.flag} {z.country}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn-small"
+                        onClick={() => setEditingTz(false)}
+                        disabled={savingTz}
+                      >
+                        Cancelar
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn-small" onClick={() => setEditingTz(true)}>
+                      No es mi zona
+                    </button>
+                  )}
                 </div>
-              )}
-
-              {/* STEP 2: Usar Plantilla vs Carga manual */}
-              {wizardStep === 2 && (
-                <div>
-                  <div className="wizard-hero-icon">
-                    <CalendarRange size={30} />
-                  </div>
-                  <h3 className="wizard-title">Carga de Disponibilidad</h3>
-                  <p className="wizard-desc">Elige si deseas restablecer tu disponibilidad desde tu plantilla base cargada o configurarlo a mano:</p>
-
-                  <div className="wizard-options">
-                    <button className="wizard-btn wizard-btn-primary" onClick={handleUseTemplate}>
-                      <CalendarCheck size={16} /> Usar mi horario base habitual (Plantilla)
-                    </button>
-                    <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(3)}>
-                      <Pencil size={15} /> Cargar/Editar horarios específicos para esta semana
-                    </button>
-                    <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(1)}>
-                      <ChevronLeft size={15} /> Atrás
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3: Grid Semanal (estilo Cal.com) */}
-              {wizardStep === 3 && (
-                <div className="editor-grid-container">
-                  <h3 className="wizard-title">Marca tu Disponibilidad</h3>
                   {/* Decir el tope acá evita el malentendido de fondo: marcar
                       muchas horas NO agenda muchas sesiones. Sin esta frase la
                       gente marcaba el día entero creyendo que era necesario. */}
@@ -4738,22 +4673,31 @@ export default function App() {
                       mano las horas que de verdad sirven es más claro y da
                       mejores coincidencias. Queda solo el borrado, que no
                       interpreta nada. */}
-                  {(wizardGrid.length > 0 || gridHistory.length > 0) && (
-                    <div className="preset-bar">
-                      <button
-                        type="button"
-                        className="preset-btn"
-                        onClick={undoGridChange}
-                        disabled={gridHistory.length === 0}
-                        title="Deshacer el último cambio (⌘Z)"
-                      >
-                        <RotateCcw size={12} /> Deshacer
-                      </button>
-                      <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} disabled={wizardGrid.length === 0} title="Borrar toda la selección">
-                        <Eraser size={12} /> Limpiar
-                      </button>
-                    </div>
-                  )}
+                <div className="preset-bar">
+                  {/* La plantilla era una pantalla entera del asistente que
+                      guardaba sola. Acá es un boton sobre la grilla: trae las
+                      horas, se ven, y se confirman con el mismo Guardar. */}
+                  <button
+                    type="button"
+                    className="preset-btn"
+                    onClick={loadTemplateIntoGrid}
+                    title="Traer a la grilla tu horario base guardado"
+                  >
+                    <CalendarCheck size={12} /> Usar mi horario base
+                  </button>
+                  <button
+                    type="button"
+                    className="preset-btn"
+                    onClick={undoGridChange}
+                    disabled={gridHistory.length === 0}
+                    title="Deshacer el último cambio (⌘Z)"
+                  >
+                    <RotateCcw size={12} /> Deshacer
+                  </button>
+                  <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} disabled={wizardGrid.length === 0} title="Borrar toda la selección">
+                    <Eraser size={12} /> Limpiar
+                  </button>
+                </div>
 
                   <div className="editor-grid-scroll" onMouseLeave={endCellDrag} onMouseUp={endCellDrag}>
                     <table className="editor-table">
@@ -4842,18 +4786,21 @@ export default function App() {
                       onChange={(e) => setSaveAsTemplate(e.target.checked)}
                     />
                     <label htmlFor="saveTemplate" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Save size={13} /> Guardar como mi Plantilla Base habitual
+                      <Save size={13} /> Guardar como mi plantilla base
                     </label>
                   </div>
 
-                  <button className="wizard-btn wizard-btn-primary" onClick={saveWizardGrid}>
-                    <Check size={16} /> Guardar Horarios
-                  </button>
-                  <button className="wizard-btn wizard-btn-outline" onClick={() => setWizardStep(2)}>
-                    <ChevronLeft size={15} /> Atrás
-                  </button>
-                </div>
-              )}
+                <button className="wizard-btn wizard-btn-primary" onClick={saveWizardGrid} disabled={wizardStatus?.type === 'loading'}>
+                  <Check size={16} /> Guardar horarios
+                </button>
+
+                {/* La baja de la semana. Antes era media pantalla de bienvenida
+                    por la que pasaba todo el mundo; es la excepción, no la
+                    pregunta de entrada, así que vive al pie y en tono menor. */}
+                <button type="button" className="wizard-optout" onClick={optOutOfWeek} disabled={wizardStatus?.type === 'loading'}>
+                  <X size={13} aria-hidden="true" /> No voy a participar esta semana
+                </button>
+              </div>
 
             </div>
           )}
@@ -5712,7 +5659,7 @@ export default function App() {
                   </button>
                 )}
                 {isLast ? (
-                  <button className="btn btn-indigo" onClick={() => { closeOnboarding(); setActiveTab('wizard'); setWizardStep(1); }}>
+                  <button className="btn btn-indigo" onClick={() => { closeOnboarding(); setActiveTab('wizard'); }}>
                     <CalendarCheck size={14} /> Cargar mi disponibilidad
                   </button>
                 ) : (

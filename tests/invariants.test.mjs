@@ -179,14 +179,63 @@ test('todo lo que devuelve gente al pool vuelve a emparejar en el acto', () => {
   // El cron corre cada 10 minutos. Si estos caminos no disparan la corrida
   // dirigida, quien cancela o rechaza se queda mirando una pantalla vacía ese
   // rato entero aunque el match ya se pudiera formar.
+  //
+  // La definición NO entra en la cuenta: se declara como
+  // `const triggerWeeklyMatcher = async ({...})`, sin paréntesis pegado al
+  // nombre, así que la expresión solo encuentra llamadas. (El comentario
+  // anterior decía "1 definición + 6 llamadas" y estaba mal: eran 7 llamadas.)
+  //
+  // Bajó de 7 a 6 al unificar el guardado del asistente: aplicar la plantilla
+  // base dejó de escribir en la base por su cuenta —ahora solo trae las horas a
+  // la grilla— así que en ese momento ya no vuelve nadie al pool. El disparo
+  // sigue estando, una sola vez, cuando se guarda la grilla.
   const disparos = appSrc.match(/triggerWeeklyMatcher\(/g) || [];
   assert.ok(
-    disparos.length >= 7, // 1 definición + 6 llamadas
-    `se esperaban al menos 6 llamadas a triggerWeeklyMatcher y hay ${disparos.length - 1}`
+    disparos.length >= 6,
+    `se esperaban al menos 6 llamadas a triggerWeeklyMatcher y hay ${disparos.length}`
   );
   for (const motivo of ['Registramos tu rechazo', 'Registramos tu cancelación', 'Registramos tu baja']) {
     assert.match(appSrc, new RegExp(motivo), `falta el disparo tras "${motivo}"`);
   }
+});
+
+test('guardar la grilla reactiva la participación', () => {
+  // El asistente dejó de tener una pantalla de bienvenida que preguntaba "¿vas
+  // a participar?" antes de la grilla. Ese "sí" persistía active: true; sin él,
+  // alguien excluido que viene a cargar horarios los guardaría y seguiría fuera
+  // del emparejamiento, viendo su disponibilidad cargada y ninguna propuesta.
+  // Ahora guardar horarios ES participar, y eso tiene que quedar escrito.
+  const i = appSrc.indexOf('const saveWizardGrid');
+  assert.ok(i > 0, 'no se encontró saveWizardGrid en App.jsx');
+  const cuerpo = appSrc.slice(i, appSrc.indexOf('\n  };', i));
+
+  assert.match(
+    cuerpo,
+    /!currentUser\.active/,
+    'saveWizardGrid no comprueba si la persona está excluida antes de guardar'
+  );
+  assert.match(
+    cuerpo,
+    /active: true/,
+    'saveWizardGrid no reactiva la participación al guardar horarios'
+  );
+  // Guardar una grilla vacía es borrar la disponibilidad, no darse de alta.
+  assert.match(
+    cuerpo,
+    /newRules\.length > 0/,
+    'la reactivación no debe dispararse al guardar una grilla vacía'
+  );
+});
+
+test('el asistente es una sola pantalla', () => {
+  // Eran tres: bienvenida, plantilla-o-manual, y recién ahí la grilla, que es
+  // lo único que la persona viene a hacer. Si vuelve a aparecer un contador de
+  // pasos es que se reintrodujo el peaje.
+  assert.doesNotMatch(
+    appSrc,
+    /wizardStep/,
+    'volvió el estado de pasos del asistente'
+  );
 });
 
 test('darse de baja cancela las propuestas vivas por los dos caminos', () => {

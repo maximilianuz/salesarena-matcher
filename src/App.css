@@ -197,16 +197,19 @@
 }
 
 /* Wizard / Stepper - (theme-aware overrides in :root and html.dark) */
+/* Era el contenedor de las tres pantallas-heroe del asistente (bienvenida,
+   plantilla-o-manual, grilla), de ahi el ancho angosto y el centrado. Ahora
+   aloja una sola pantalla de trabajo: mas ancho para que la grilla respire, y
+   alineado a la izquierda como se lee cualquier formulario. */
 .wizard-card {
-  max-width: 560px;
+  max-width: 720px;
   margin: 10px auto;
-  padding: 36px 32px;
+  padding: 32px;
   background: var(--wizard-card-bg);
   backdrop-filter: blur(24px) saturate(1.5);
   -webkit-backdrop-filter: blur(24px) saturate(1.5);
   border: 1px solid var(--wizard-card-border);
   border-radius: 24px;
-  text-align: center;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -220,46 +223,9 @@
   }
 }
 
-/* Progreso de los 3 pasos ("Paso X de 3" + barra). Vive fuera del gap de
-   24px de .wizard-card por eso el margin-bottom negativo: sin él, cada paso
-   quedaba con demasiado aire antes de su título. */
-.wizard-progress {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: -12px;
-}
-
-.wizard-progress-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-align: left;
-}
-
-.wizard-progress-track {
-  height: 4px;
-  border-radius: 999px;
-  background-color: rgba(var(--neutral-rgb), 0.16);
-  overflow: hidden;
-}
-
-.wizard-progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #0a84ff 0%, #5e5ce6 100%);
-  transition: width 0.3s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wizard-progress-fill {
-    transition: none;
-  }
-}
-
 .wizard-title {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--t-title);
   font-weight: 700;
   letter-spacing: -0.5px;
   color: var(--text-main);
@@ -2935,11 +2901,9 @@ html.dark .feedback-status-rejected {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
   gap: 10px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
+  margin-top: -8px;
+  padding-bottom: 4px;
   font-size: 12.5px;
   color: var(--text-muted);
 }
@@ -3125,4 +3089,37 @@ html.dark .feedback-status-rejected {
 .room-stat-label {
   font-size: var(--t-small);
   color: var(--text-muted);
+}
+
+/* Baja de la semana. Era media pantalla de bienvenida ("¿vas a participar?")
+   por la que pasaba todo el mundo para llegar a la grilla. Es la excepcion, no
+   la pregunta de entrada: vive al pie y en tono menor. */
+.wizard-optout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  align-self: center;
+  margin-top: 4px;
+  padding: 10px 14px;
+  min-height: 44px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--r-button);
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.wizard-optout:hover:not(:disabled) {
+  color: var(--color-danger);
+  background-color: rgba(var(--danger-rgb), 0.08);
+}
+
+.wizard-optout:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
