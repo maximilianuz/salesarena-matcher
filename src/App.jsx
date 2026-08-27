@@ -4638,7 +4638,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)}>
+                  <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)} onMouseUp={() => setIsMouseDown(false)}>
                     <table className="editor-table">
                       <thead>
                         <tr>
@@ -4667,7 +4667,6 @@ export default function App() {
                                     aria-label={`${dayLabel} ${String(h).padStart(2, '0')}:00${isActive ? ', seleccionado' : ''}`}
                                     onMouseDown={() => handleCellMouseDown(d, h)}
                                     onMouseEnter={() => handleCellMouseEnter(d, h)}
-                                    onMouseUp={() => setIsMouseDown(false)}
                                     onKeyDown={(e) => handleCellKeyDown(d, h, e)}
                                   ></td>
                                 );
