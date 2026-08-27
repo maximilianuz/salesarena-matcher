@@ -73,7 +73,9 @@ import {
   ThumbsUp,
   Gauge,
   AlertTriangle,
-  PhoneCall
+  PhoneCall,
+  // Deshacer en la grilla de disponibilidad
+  RotateCcw
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
@@ -85,6 +87,7 @@ import {
   visibleHours,
   toggleDay as toggleDayCells,
   toggleHourRow as toggleHourCells,
+  describeDrag,
   goalState
 } from './domain/availabilityGrid';
 import {
@@ -143,6 +146,11 @@ const FEEDBACK_STATUS_LABEL = {
   approved: 'Publicada',
   rejected: 'Rechazada'
 };
+
+// Cuántas acciones hacia atrás guarda el "deshacer" de la grilla horaria.
+// Cada entrada es una copia del array de celdas: 40 pasos es más de lo que
+// nadie deshace de corrido y sigue siendo memoria despreciable.
+const HISTORY_LIMIT = 40;
 
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input:not([disabled]), select, [tabindex]:not([tabindex="-1"])';
 
@@ -485,6 +493,12 @@ export default function App() {
   // Variables para arrastre en la grilla visual
   const [isMouseDown, setIsMouseDown] = useState(false);
   const [dragMode, setDragMode] = useState(true); // true = pintar, false = borrar
+  // Trazo en curso: qué celdas se vienen pintando y dónde está el puntero, para
+  // mostrar el rango en vivo en vez de hacer contar celdas al soltar.
+  const [dragInfo, setDragInfo] = useState(null);
+  // Deshacer. Se apila una entrada por acción (un trazo entero, un clic de
+  // cabecera, un Limpiar), no por celda.
+  const [gridHistory, setGridHistory] = useState([]);
 
   // Rango horario visible en el editor (estilo Cal.com: horas útiles por defecto)
   const [showAllHours, setShowAllHours] = useState(false);
@@ -3268,12 +3282,54 @@ export default function App() {
   });
 
   // --- GESTIÓN DE CELDAS DEL CALENDARIO ---
-  const handleCellMouseDown = (dayIdx, hour) => {
+
+  // Toda edición de la grilla guarda antes el estado anterior. Sin esto, un
+  // arrastre que se fue de largo solo se arreglaba con Limpiar y empezar de
+  // cero — perdiendo también todo lo que ya estaba bien cargado.
+  const pushGridHistory = () => {
+    setGridHistory(prev => [...prev.slice(-HISTORY_LIMIT + 1), wizardGrid]);
+  };
+
+  const undoGridChange = () => {
+    setGridHistory(prev => {
+      if (!prev.length) return prev;
+      setWizardGrid(prev[prev.length - 1]);
+      return prev.slice(0, -1);
+    });
+  };
+
+  // ⌘Z / Ctrl+Z mientras se edita la grilla. Solo en el paso 3 y solo fuera de
+  // un campo de texto, para no pisarle el deshacer propio al input de sesiones.
+  useEffect(() => {
+    if (activeTab !== 'wizard' || wizardStep !== 3) return;
+    const onKeyDown = (e) => {
+      if (e.key !== 'z' && e.key !== 'Z') return;
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      e.preventDefault();
+      undoGridChange();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, wizardStep]);
+
+  const handleCellMouseDown = (dayIdx, hour, e) => {
     setIsMouseDown(true);
     const exists = wizardGrid.some(s => s.dayIdx === dayIdx && s.hour === hour);
     const active = !exists;
     setDragMode(active);
+    pushGridHistory();
+    // Un trazo entero es UNA acción: el historial se apila al apretar, no en
+    // cada celda que se pinta al pasar.
+    setDragInfo({ active, touched: [{ dayIdx, hour }], x: e?.clientX ?? 0, y: e?.clientY ?? 0 });
     toggleCell(dayIdx, hour, active);
+  };
+
+  const endCellDrag = () => {
+    setIsMouseDown(false);
+    setDragInfo(null);
   };
 
   // Arrastrar para seleccionar un rango es un gesto de mouse/touch: no tiene
@@ -3286,10 +3342,19 @@ export default function App() {
     handleCellMouseDown(dayIdx, hour);
   };
 
-  const handleCellMouseEnter = (dayIdx, hour) => {
-    if (isMouseDown) {
-      toggleCell(dayIdx, hour, dragMode);
-    }
+  const handleCellMouseEnter = (dayIdx, hour, e) => {
+    if (!isMouseDown) return;
+    toggleCell(dayIdx, hour, dragMode);
+    setDragInfo(prev => {
+      if (!prev) return prev;
+      const yaTocada = prev.touched.some(t => t.dayIdx === dayIdx && t.hour === hour);
+      return {
+        ...prev,
+        x: e?.clientX ?? prev.x,
+        y: e?.clientY ?? prev.y,
+        touched: yaTocada ? prev.touched : [...prev.touched, { dayIdx, hour }]
+      };
+    });
   };
 
   const toggleCell = (dayIdx, hour, active) => {
@@ -3304,16 +3369,19 @@ export default function App() {
   };
 
   const clearAllCells = () => {
+    pushGridHistory();
     setWizardGrid([]);
   };
 
   // Atajos de cabecera: un clic marca un día entero o una franja horaria en los
   // siete días. Cargar "todas las mañanas" pasaba por 21 clics uno por uno.
   const handleDayHeaderClick = (dayIdx) => {
+    pushGridHistory();
     setWizardGrid(prev => toggleDayCells(prev, dayIdx, visibleHours(showAllHours)));
   };
 
   const handleHourHeaderClick = (hour) => {
+    pushGridHistory();
     setWizardGrid(prev => toggleHourCells(prev, hour));
   };
 
@@ -4674,15 +4742,24 @@ export default function App() {
                       mano las horas que de verdad sirven es más claro y da
                       mejores coincidencias. Queda solo el borrado, que no
                       interpreta nada. */}
-                  {wizardGrid.length > 0 && (
+                  {(wizardGrid.length > 0 || gridHistory.length > 0) && (
                     <div className="preset-bar">
-                      <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} title="Borrar toda la selección">
+                      <button
+                        type="button"
+                        className="preset-btn"
+                        onClick={undoGridChange}
+                        disabled={gridHistory.length === 0}
+                        title="Deshacer el último cambio (⌘Z)"
+                      >
+                        <RotateCcw size={12} /> Deshacer
+                      </button>
+                      <button type="button" className="preset-btn preset-btn-clear" onClick={clearAllCells} disabled={wizardGrid.length === 0} title="Borrar toda la selección">
                         <Eraser size={12} /> Limpiar
                       </button>
                     </div>
                   )}
 
-                  <div className="editor-grid-scroll" onMouseLeave={() => setIsMouseDown(false)} onMouseUp={() => setIsMouseDown(false)}>
+                  <div className="editor-grid-scroll" onMouseLeave={endCellDrag} onMouseUp={endCellDrag}>
                     <table className="editor-table">
                       <thead>
                         <tr>
@@ -4727,8 +4804,8 @@ export default function App() {
                                     tabIndex={0}
                                     aria-pressed={isActive}
                                     aria-label={`${dayLabel} ${String(h).padStart(2, '0')}:00${isActive ? ', seleccionado' : ''}`}
-                                    onMouseDown={() => handleCellMouseDown(d, h)}
-                                    onMouseEnter={() => handleCellMouseEnter(d, h)}
+                                    onMouseDown={(e) => handleCellMouseDown(d, h, e)}
+                                    onMouseEnter={(e) => handleCellMouseEnter(d, h, e)}
                                     onKeyDown={(e) => handleCellKeyDown(d, h, e)}
                                   ></td>
                                 );
@@ -4739,6 +4816,23 @@ export default function App() {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Lectura en vivo del trazo. Sigue al puntero y se voltea
+                      cerca del borde derecho para no salirse de la pantalla. */}
+                  {dragInfo && dragInfo.touched.length > 0 && (
+                    <div
+                      className={`wizard-drag-badge ${dragInfo.active ? '' : 'is-erasing'}`}
+                      style={{
+                        left: dragInfo.x,
+                        top: dragInfo.y,
+                        transform: dragInfo.x > window.innerWidth - 240 ? 'translate(-100%, 20px)' : 'translate(16px, 20px)'
+                      }}
+                      aria-hidden="true"
+                    >
+                      {!dragInfo.active && 'Borrando · '}
+                      {describeDrag(dragInfo.touched)}
+                    </div>
+                  )}
 
                   <button type="button" className="show-hours-toggle" onClick={() => setShowAllHours(!showAllHours)}>
                     {showAllHours ? 'Ocultar madrugada (00:00–06:00)' : 'Mostrar madrugada (00:00–06:00)'}
