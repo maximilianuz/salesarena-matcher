@@ -3951,7 +3951,7 @@ export default function App() {
             >
               <span className="room-indicator-dot" aria-hidden="true"></span>
               <span>Sala Activa: <strong>{roomName}</strong></span>
-              <Settings size={13} style={{ opacity: 0.75 }} aria-hidden="true" />
+              <Network size={13} style={{ opacity: 0.75 }} aria-hidden="true" />
             </button>
           </div>
         </header>
