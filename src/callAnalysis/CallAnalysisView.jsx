@@ -1,4 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Play, Pause, RotateCcw, PictureInPicture2, Plus, Pencil, Check, X,
+  NotebookPen, Layers, ShieldAlert, Wrench, Target, Info, BookOpen, FolderClock, Users,
+  User, FileQuestion
+} from 'lucide-react';
 import './callAnalysis.css';
 import {
   FASES, TIPOS, tipoOf, TEC, ICE, CAPAS, COLORES, fmtT, tituloAnalisis, blankMeta
@@ -28,20 +33,27 @@ import {
 // tenerlo a la vista mientras se escribe acá.
 
 const SUBTABS = [
-  { id: 'notas', label: 'Notas' },
-  { id: 'fases', label: 'Por fase' },
-  { id: 'objeciones', label: 'Objeciones' },
-  { id: 'tecnico', label: 'Técnico' },
-  { id: 'plan', label: 'Mi plan' },
-  { id: 'datos', label: 'Datos' },
-  { id: 'consulta', label: 'Consulta' },
-  { id: 'mis', label: 'Mis análisis' },
-  { id: 'grupo', label: 'Grupo' }
+  { id: 'notas', label: 'Notas', icon: NotebookPen },
+  { id: 'fases', label: 'Por fase', icon: Layers },
+  { id: 'objeciones', label: 'Objeciones', icon: ShieldAlert },
+  { id: 'tecnico', label: 'Técnico', icon: Wrench },
+  { id: 'plan', label: 'Mi plan', icon: Target },
+  { id: 'datos', label: 'Datos', icon: Info },
+  { id: 'consulta', label: 'Consulta', icon: BookOpen },
+  { id: 'mis', label: 'Mis análisis', icon: FolderClock },
+  { id: 'grupo', label: 'Grupo', icon: Users }
 ];
 
 function escapeHtml(s) {
   return (s == null ? '' : String(s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
+
+// La ventana flotante vive en un `document` propio (Picture-in-Picture o
+// popup) armado con innerHTML plano, no con React — no se le puede montar un
+// ícono de lucide-react ahí. Estos SVG calcan el trazo de Play/Pause de la
+// librería para que la ventana flotante no vuelva a los caracteres ▶/❚❚.
+const PIP_PLAY_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>';
+const PIP_PAUSE_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>';
 
 export default function CallAnalysisView({ supabase, useMockDb, roomId, currentUser }) {
   const [subTab, setSubTab] = useState('notas');
@@ -65,6 +77,11 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
 
   const [groupLoading, setGroupLoading] = useState(false);
   const [groupPeers, setGroupPeers] = useState([]);
+
+  // Renombrado rápido desde "Mis análisis": no depende de tener ese análisis
+  // abierto (a diferencia de updateTitulo, que solo toca el activo).
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
 
   const disabled = useMockDb || !supabase || !roomId || !currentUser?.email;
 
@@ -191,6 +208,18 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
     }
     setAnalyses(prev => [created, ...prev]);
     setActiveId(created.id);
+  }
+
+  async function renameAnalysis(id, rawTitle) {
+    const value = rawTitle.trim() || 'Sin título';
+    setRenamingId(null);
+    setAnalyses(prev => prev.map(a => (a.id === id ? { ...a, titulo: value } : a)));
+    if (id === activeId) setActive(prev => (prev ? { ...prev, titulo: value } : prev));
+    if (disabled) return;
+    const { error } = await supabase.from('call_analyses')
+      .update({ titulo: value, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) setErrorMsg('No se pudo renombrar: ' + error.message);
   }
 
   async function deleteAnalysisRow(id) {
@@ -323,7 +352,7 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
     els.clock.textContent = fmtT(liveRef.current.t);
     els.clock.classList.toggle('run', liveRef.current.running);
     els.stampBtn.textContent = fmtT(liveRef.current.stampT === null ? liveRef.current.t : liveRef.current.stampT);
-    els.play.textContent = liveRef.current.running ? '❚❚' : '▶';
+    els.play.innerHTML = liveRef.current.running ? PIP_PAUSE_SVG : PIP_PLAY_SVG;
   }
   function renderPipRecent() {
     const els = pipElsRef.current; if (!els) return;
@@ -352,7 +381,7 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
     doc.body.className = 'ca-pip-body';
     doc.body.innerHTML = `
       <div class="ca-pip-head">
-        <button class="btn btn-outline ca-pip-icon" id="pPlay" title="Arrancar / pausar">▶</button>
+        <button class="btn btn-outline ca-pip-icon" id="pPlay" title="Arrancar / pausar">${PIP_PLAY_SVG}</button>
         <div class="ca-clock" id="pClock">00:00</div>
         <span class="ca-pip-title">Notas · flotante</span>
       </div>
@@ -407,10 +436,11 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
       <div className="section-card glass">
         <h3 className="section-title">Análisis de Llamada</h3>
         <div className="empty-state">
-          <div className="empty-state-title">No disponible en este modo</div>
-          <p className="empty-state-desc">
+          <FileQuestion size={30} />
+          <span className="empty-state-title">No disponible en este modo</span>
+          <span className="empty-state-desc">
             Esta pestaña necesita una sala real conectada a Supabase (no funciona con la base de datos de prueba local).
-          </p>
+          </span>
         </div>
       </div>
     );
@@ -421,12 +451,28 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
   const noteCounts = { todas: notes.length };
   TIPOS.forEach(x => { noteCounts[x.id || 'sin'] = notes.filter(n => (n.tipo || '') === x.id).length; });
 
+  const claridad = active ? tituloAnalisis(active) : '';
+
   return (
     <div className="ca-wrap">
-      <div className="section-card glass" style={{ gap: 12 }}>
+      <div className="section-card glass ca-header-card">
+        <div className="ca-title-row">
+          <input
+            className="ca-title-input"
+            value={active ? (active.titulo || '') : ''}
+            placeholder={active ? 'Nombrá este análisis (así te encuentra el grupo)' : 'Cargando…'}
+            onChange={e => updateTitulo(e.target.value)}
+            disabled={!active}
+          />
+          <div className="ca-title-meta">
+            <span className="ca-title-meta-item"><User size={11} /> {(active && active.member_name) || currentUser.name}</span>
+            {claridad && <span className="ca-title-meta-item">{claridad}</span>}
+          </div>
+        </div>
+
         <div className="ca-timerbar">
-          <button type="button" className="btn btn-outline" onClick={() => setRunning(r => !r)} title="Arrancar / pausar">
-            {running ? '❚❚' : '▶'}
+          <button type="button" className="btn btn-outline ca-icon-btn" onClick={() => setRunning(r => !r)} title="Arrancar / pausar">
+            {running ? <Pause size={15} /> : <Play size={15} />}
           </button>
           <div className={`ca-clock ${running ? 'run' : ''}`}>{fmtT(t)}</div>
           <input
@@ -436,25 +482,32 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
             title="Poner el cronómetro en el minuto del video"
           />
           <button type="button" className="btn btn-outline btn-small" onClick={applySetTime}>Sincronizar</button>
-          <button type="button" className="btn btn-outline btn-small" onClick={() => { setRunning(false); setT(0); setStampT(null); }}>Reiniciar</button>
-          <button type="button" className="btn btn-outline btn-small" onClick={openFloatingNotes} title="Ventana de notas separada, para dejarla arriba del video (Skool, Zoom, YouTube...)">
-            🗗 Flotante
+          <button type="button" className="btn btn-outline ca-icon-btn" onClick={() => { setRunning(false); setT(0); setStampT(null); }} title="Reiniciar cronómetro">
+            <RotateCcw size={15} />
           </button>
-          {active && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>{tituloAnalisis(active)}</span>}
+          <button type="button" className="btn btn-outline btn-small" onClick={openFloatingNotes} title="Ventana de notas separada, para dejarla arriba del video (Skool, Zoom, YouTube...)">
+            <PictureInPicture2 size={14} /> Flotante
+          </button>
         </div>
+
         {errorMsg && (
-          <div style={{ fontSize: 12, color: 'var(--color-danger)' }}>
-            {errorMsg} <button type="button" className="btn-danger-icon" onClick={() => setErrorMsg('')} style={{ display: 'inline' }}>✕</button>
+          <div className="ca-error-banner">
+            {errorMsg} <button type="button" className="btn-danger-icon" onClick={() => setErrorMsg('')}><X size={14} /></button>
           </div>
         )}
+
         <div className="ca-subnav">
-          {SUBTABS.map(s => (
-            <button key={s.id} type="button" className={`ca-subnav-btn ${subTab === s.id ? 'active' : ''}`} onClick={() => setSubTab(s.id)}>
-              {s.label}
-              {s.id === 'notas' && notes.length > 0 && <span className="ca-subnav-badge">{notes.length}</span>}
-              {s.id === 'objeciones' && objections.length > 0 && <span className="ca-subnav-badge">{objections.length}</span>}
-            </button>
-          ))}
+          {SUBTABS.map(s => {
+            const Icon = s.icon;
+            return (
+              <button key={s.id} type="button" className={`ca-subnav-btn ${subTab === s.id ? 'active' : ''}`} onClick={() => setSubTab(s.id)}>
+                <Icon size={13} />
+                {s.label}
+                {s.id === 'notas' && notes.length > 0 && <span className="ca-subnav-badge">{notes.length}</span>}
+                {s.id === 'objeciones' && objections.length > 0 && <span className="ca-subnav-badge">{objections.length}</span>}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -490,7 +543,11 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
               </div>
 
               {filteredNotes.length === 0 ? (
-                <div className="empty-state"><div className="empty-state-desc">Todavía no hay notas. Dale play al video, escribí arriba y apretá Enter.</div></div>
+                <div className="empty-state">
+                  <NotebookPen size={30} />
+                  <span className="empty-state-title">Todavía no hay notas</span>
+                  <span className="empty-state-desc">Dale play al video, escribí arriba y apretá Enter.</span>
+                </div>
               ) : filteredNotes.map(n => {
                 const tipo = tipoOf(n.tipo);
                 return (
@@ -508,7 +565,7 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
                       <select className="form-select" value={n.tipo || ''} onChange={e => updateNoteField(n.id, { tipo: e.target.value })}>
                         {TIPOS.map(x => <option key={x.id || 'sin'} value={x.id}>{x.n}</option>)}
                       </select>
-                      <button type="button" className="btn-danger-icon" onClick={() => deleteNote(n.id)} title="Borrar">✕</button>
+                      <button type="button" className="btn-danger-icon" onClick={() => deleteNote(n.id)} title="Borrar"><X size={14} /></button>
                     </div>
                   </div>
                 );
@@ -561,12 +618,16 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
               <h3 className="section-title">Objeciones</h3>
               <p className="section-subtitle">Separá el hecho de la interpretación. Escribí la frase literal, pensá 2 o 3 lecturas posibles, y marcá si el closer la verificó con una pregunta o se quedó con la primera.</p>
               {objections.length === 0 ? (
-                <div className="empty-state"><div className="empty-state-desc">Sin objeciones cargadas. Agregá una con el botón de abajo.</div></div>
+                <div className="empty-state">
+                  <ShieldAlert size={30} />
+                  <span className="empty-state-title">Sin objeciones cargadas</span>
+                  <span className="empty-state-desc">Agregá una con el botón de abajo.</span>
+                </div>
               ) : objections.map((o, i) => (
                 <div key={o.id} className="section-card" style={{ padding: 16, background: 'var(--bg-card-hover)', borderRadius: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <b>Objeción {i + 1}</b>
-                    <button type="button" className="btn-danger-icon" onClick={() => deleteObjection(o.id)}>✕</button>
+                    <button type="button" className="btn-danger-icon" onClick={() => deleteObjection(o.id)} title="Borrar"><X size={14} /></button>
                   </div>
                   <div className="grid-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div className="form-group">
@@ -596,7 +657,7 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
                   </div>
                 </div>
               ))}
-              <button type="button" className="btn btn-indigo" onClick={addObjection}>+ Agregar objeción</button>
+              <button type="button" className="btn btn-indigo" onClick={addObjection}><Plus size={14} /> Agregar objeción</button>
             </div>
           )}
 
@@ -815,20 +876,45 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
             <div className="section-card glass">
               <h3 className="section-title">Mis análisis</h3>
               <p className="section-subtitle">Cada llamada que analizás queda guardada en tu cuenta — se ve desde cualquier dispositivo en el que inicies sesión.</p>
-              <button type="button" className="btn btn-indigo" style={{ alignSelf: 'flex-start' }} onClick={createAnalysis}>+ Nuevo análisis</button>
-              {analyses.map(a => (
-                <div key={a.id} className={`ca-analysis-row ${a.id === activeId ? 'active' : ''}`}>
-                  <div className="ca-info">
-                    <b>{a.titulo || 'Sin título'}</b>
-                    <span>{tituloAnalisis(a)} · {(a.meta && a.meta.fecha) || (a.created_at || '').slice(0, 10)}{a.id === activeId ? ' · en uso' : ''}</span>
+              <button type="button" className="btn btn-indigo" style={{ alignSelf: 'flex-start' }} onClick={createAnalysis}><Plus size={14} /> Nuevo análisis</button>
+              {analyses.map(a => {
+                const closerInfo = tituloAnalisis(a);
+                const fecha = (a.meta && a.meta.fecha) || (a.created_at || '').slice(0, 10);
+                return (
+                  <div key={a.id} className={`ca-analysis-row ${a.id === activeId ? 'active' : ''}`}>
+                    <div className="ca-info">
+                      {renamingId === a.id ? (
+                        <div className="ca-rename-row">
+                          <input
+                            className="form-input ca-rename-input" autoFocus value={renameDraft}
+                            onChange={e => setRenameDraft(e.target.value)}
+                            onBlur={() => renameAnalysis(a.id, renameDraft)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') renameAnalysis(a.id, renameDraft);
+                              if (e.key === 'Escape') setRenamingId(null);
+                            }}
+                          />
+                          <button type="button" className="btn-danger-icon ca-rename-ok" onMouseDown={e => e.preventDefault()} onClick={() => renameAnalysis(a.id, renameDraft)} title="Guardar nombre">
+                            <Check size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <b className="ca-analysis-title" onClick={() => { setRenamingId(a.id); setRenameDraft(a.titulo || ''); }} title="Click para renombrar">
+                          {a.titulo || 'Sin título'} <Pencil size={11} className="ca-rename-hint" />
+                        </b>
+                      )}
+                      <span>
+                        {closerInfo ? `${closerInfo} · ` : ''}{fecha}{a.id === activeId ? ' · en uso' : ''}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      {a.id !== activeId && <button type="button" className="btn btn-outline btn-small" onClick={() => setActiveId(a.id)}>Abrir</button>}
+                      <button type="button" className="btn btn-outline btn-small" onClick={() => duplicateAnalysis(a.id)}>Duplicar</button>
+                      <button type="button" className="btn-danger-icon" onClick={() => deleteAnalysisRow(a.id)} title="Borrar"><X size={14} /></button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {a.id !== activeId && <button type="button" className="btn btn-outline btn-small" onClick={() => setActiveId(a.id)}>Abrir</button>}
-                    <button type="button" className="btn btn-outline btn-small" onClick={() => duplicateAnalysis(a.id)}>Duplicar</button>
-                    <button type="button" className="btn-danger-icon" onClick={() => deleteAnalysisRow(a.id)} title="Borrar">✕</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -842,8 +928,9 @@ export default function CallAnalysisView({ supabase, useMockDb, roomId, currentU
                 <div className="empty-state">Buscando…</div>
               ) : groupPeers.length <= 1 ? (
                 <div className="empty-state">
-                  <div className="empty-state-title">Todavía nadie más analizó esta llamada</div>
-                  <div className="empty-state-desc">En cuanto otro miembro de la sala titule su análisis igual que el tuyo, sus notas van a aparecer acá comparadas por fase.</div>
+                  <Users size={30} />
+                  <span className="empty-state-title">Todavía nadie más analizó esta llamada</span>
+                  <span className="empty-state-desc">En cuanto otro miembro de la sala titule su análisis igual que el tuyo, sus notas van a aparecer acá comparadas por fase.</span>
                 </div>
               ) : (
                 <>
