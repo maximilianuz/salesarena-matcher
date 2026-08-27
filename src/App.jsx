@@ -72,7 +72,8 @@ import {
   ClipboardCheck,
   ThumbsUp,
   Gauge,
-  AlertTriangle
+  AlertTriangle,
+  PhoneCall
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
@@ -3644,7 +3645,7 @@ export default function App() {
             <BarChart3 size={17} aria-hidden="true" /> <span className="nav-link-label">Reportes y Análisis</span>
           </button>
           <button type="button" title="Análisis de Llamada" className={`nav-link ${activeTab === 'analisis' ? 'active' : ''}`} aria-current={activeTab === 'analisis' ? 'page' : undefined} onClick={() => handleTabClick('analisis')}>
-            <ClipboardCheck size={17} aria-hidden="true" /> <span className="nav-link-label">Análisis de Llamada</span>
+            <PhoneCall size={17} aria-hidden="true" /> <span className="nav-link-label">Análisis de Llamada</span>
           </button>
 
           {/* Al pie de la lista y con etiqueta propia, no como ícono suelto en
