@@ -4449,13 +4449,21 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <button
-                  className={`btn ${currentUser.active ? 'btn-outline' : 'btn-indigo'}`}
-                  style={{ fontSize: '12px', padding: '6px 14px' }}
-                  onClick={toggleCurrentUserActive}
-                >
-                  {currentUser.active ? 'Desactivar participación' : 'Activar participación'}
-                </button>
+                <div className="participation-toggle-wrap">
+                  <span className={`participation-toggle-caption ${currentUser.active ? 'on' : ''}`}>
+                    {currentUser.active ? 'Activo' : 'Inactivo'}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={currentUser.active}
+                    aria-label={currentUser.active ? 'Desactivar participación semanal' : 'Activar participación semanal'}
+                    className={`participation-toggle ${currentUser.active ? 'on' : 'off'}`}
+                    onClick={toggleCurrentUserActive}
+                  >
+                    <span className="participation-toggle-thumb" aria-hidden="true"></span>
+                  </button>
+                </div>
               </div>
 
               {/* MI CREDIBILIDAD.

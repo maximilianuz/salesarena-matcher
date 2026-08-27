@@ -177,6 +177,72 @@
   background-color: var(--bg-card-hover);
 }
 
+/* Toggle de "Mi Participación Semanal", en vez del botón Activar/Desactivar.
+   Mismo verbo visual que el punto de estado y el badge ACTIVO de al lado
+   (mismo verde, mismo resplandor): las tres señales de esa tarjeta ahora
+   dicen lo mismo con el mismo color, en vez de un botón de un tercer color
+   aparte. Apagado usa el mismo gris translúcido que ya usa la barra del
+   medidor de cobertura en Cargar Disponibilidad. */
+.participation-toggle-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.participation-toggle-caption {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  min-width: 62px;
+  text-align: right;
+}
+
+.participation-toggle-caption.on {
+  color: var(--color-accent);
+}
+
+.participation-toggle {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border-color);
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  background-color: rgba(var(--neutral-rgb), 0.18);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.participation-toggle.on {
+  background-color: rgba(var(--accent-rgb), 0.22);
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+
+.participation-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.participation-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), background-color 0.2s ease;
+}
+
+.participation-toggle.on .participation-toggle-thumb {
+  transform: translateX(20px);
+  background-color: var(--color-accent);
+  box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.7);
+}
+
 .btn-danger-icon {
   background-color: transparent;
   color: var(--text-muted);
