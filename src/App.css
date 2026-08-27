@@ -576,8 +576,34 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  padding: 8px 4px;
+  padding: 0;
   border-bottom: 1px solid var(--border-color);
+}
+
+/* Cabeceras que seleccionan: el día marca su columna, la hora marca esa franja
+   en los siete días. El padding vive en el botón y no en la celda para que
+   toda el área de la cabecera sea clicable, no solo el texto. */
+.editor-head-btn {
+  width: 100%;
+  height: 100%;
+  padding: 8px 4px;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.editor-head-btn:hover {
+  color: var(--color-primary);
+  background-color: rgba(94, 92, 230, 0.1);
+}
+
+.editor-hour-label .editor-head-btn {
+  padding: 0 4px;
 }
 
 .editor-th.weekend {
@@ -590,6 +616,7 @@
 
 .editor-hour-label {
   height: 26px;
+  padding: 0;
   font-size: 12px;
   text-align: center;
   background-color: var(--bg-sidebar);
@@ -759,13 +786,76 @@
   outline-offset: 1px;
 }
 
-/* Aviso cuando pidió más sesiones que horas marcadas: no es un error, es que
-   todavía no hay dónde ubicarlas. */
-.weekly-target-hint {
-  margin: 0;
+/* Medidor de cobertura. Antes acá había un aviso naranja que solo aparecía
+   cuando faltaban horas: un reproche que va y viene enseña menos que una barra
+   siempre presente que dice cuánto falta y cuándo ya alcanza. */
+.wizard-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 13px 16px;
+  border-radius: 13px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.wizard-goal-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wizard-goal-count {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.wizard-goal-count b {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.wizard-goal-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wizard-goal-bar {
+  height: 6px;
+  border-radius: 999px;
+  background-color: rgba(120, 120, 120, 0.18);
+  overflow: hidden;
+}
+
+.wizard-goal-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.wizard-goal-hint {
+  margin: 0;
+  font-size: 11.5px;
   line-height: 1.45;
-  color: var(--color-warning, #ff9f0a);
+  color: var(--text-muted);
+}
+
+/* Tres estados: sin horas suficientes para ubicar las sesiones pedidas, justo,
+   y con margen. El color vive en el relleno y en la etiqueta, no en el fondo:
+   una tarjeta entera teñida de rojo lee como error de la app. */
+.wizard-goal-short .wizard-goal-label { color: var(--color-danger); }
+.wizard-goal-short .wizard-goal-fill { background-color: var(--color-danger); }
+.wizard-goal-ok .wizard-goal-label { color: var(--color-primary); }
+.wizard-goal-ok .wizard-goal-fill { background-color: var(--color-primary); }
+.wizard-goal-good .wizard-goal-label { color: var(--color-accent); }
+.wizard-goal-good .wizard-goal-fill {
+  background-image: linear-gradient(90deg, var(--color-primary), var(--color-accent));
 }
 
 .show-hours-toggle {
