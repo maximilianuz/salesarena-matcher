@@ -76,6 +76,7 @@ import {
 } from 'lucide-react';
 
 import { ChessKnightIcon, GoogleMark, ReliabilityBadge, LoginConnectionsOrbit, AvatarPhoto } from './components/Brand';
+import CallAnalysisView from './callAnalysis/CallAnalysisView';
 import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessLocationFromBrowser } from './domain/zones';
 import { getNextMatchDateUtc, formatMeetingDateUtc, canRecordJoin } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
@@ -3642,6 +3643,9 @@ export default function App() {
           <button type="button" title="Reportes y Análisis" className={`nav-link ${activeTab === 'reportes' ? 'active' : ''}`} aria-current={activeTab === 'reportes' ? 'page' : undefined} onClick={() => handleTabClick('reportes')}>
             <BarChart3 size={17} aria-hidden="true" /> <span className="nav-link-label">Reportes y Análisis</span>
           </button>
+          <button type="button" title="Análisis de Llamada" className={`nav-link ${activeTab === 'analisis' ? 'active' : ''}`} aria-current={activeTab === 'analisis' ? 'page' : undefined} onClick={() => handleTabClick('analisis')}>
+            <ClipboardCheck size={17} aria-hidden="true" /> <span className="nav-link-label">Análisis de Llamada</span>
+          </button>
 
           {/* Al pie de la lista y con etiqueta propia, no como ícono suelto en
               la cabecera: ahí competía por ancho con la marca y partía "Sales
@@ -3755,6 +3759,7 @@ export default function App() {
               {activeTab === 'affinity' && 'Afinidad Horaria y Matrices'}
               {activeTab === 'members' && 'Gestionar Equipo'}
               {activeTab === 'reportes' && 'Reportes y Análisis'}
+              {activeTab === 'analisis' && 'Análisis de Llamada'}
             </h2>
             <p className="view-subtitle">
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
@@ -3763,6 +3768,7 @@ export default function App() {
               {activeTab === 'affinity' && '% de coincidencia relativa entre parejas de role-players.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
               {activeTab === 'reportes' && 'Métricas de asistencia y coordinación de la sala, en base a lo que cada participante reporta después de cada sesión.'}
+              {activeTab === 'analisis' && 'Tomá notas cronometradas de una llamada de ejemplo, clasificalas por fase y compará con lo que anotó el resto de la sala.'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -5196,6 +5202,16 @@ export default function App() {
               </p>
 
             </div>
+          )}
+
+          {/* VIEW: ANÁLISIS DE LLAMADA */}
+          {activeTab === 'analisis' && (
+            <CallAnalysisView
+              supabase={supabase}
+              useMockDb={useMockDb}
+              roomId={currentRoomId}
+              currentUser={currentUser}
+            />
           )}
 
         </div>
