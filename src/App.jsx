@@ -1311,7 +1311,7 @@ export default function App() {
       setWizardStatus({
         type: 'success',
         msg: caidas > 0
-          ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
+          ? `¡Registrado! Quedás excluido por esta semana y se cancelaron tus ${caidas === 1 ? 'Role-Play' : `${caidas} Role-Plays`} para que tus compañeros puedan reasignarse.`
           : '¡Registrado! Has sido excluido por esta semana.'
       });
       // Reasignar a los que quedaron sueltos en el acto, no en la próxima
@@ -1628,7 +1628,7 @@ export default function App() {
         targetGuardado = anterior;
         setWizardWeeklyTarget(anterior);
         showNotification(
-          `Tus horarios se guardaron, pero no pudimos cambiar la cantidad de role-plays por semana: sigue en ${anterior}. Probá de nuevo desde el asistente.`,
+          `Tus horarios se guardaron, pero no pudimos cambiar la cantidad de Role-Plays por semana: sigue en ${anterior}. Probá de nuevo desde el asistente.`,
           'error'
         );
       }
@@ -1649,7 +1649,7 @@ export default function App() {
     ).length;
     if (misPropuestasVivas > wizardWeeklyTarget) {
       showNotification(
-        `Ya tenés ${misPropuestasVivas} role-plays agendados esta semana, más de los ${wizardWeeklyTarget} que pediste. ` +
+        `Ya tenés ${misPropuestasVivas} Role-Plays agendados esta semana, más de los ${wizardWeeklyTarget} que pediste. ` +
         'Esos siguen en pie porque del otro lado hay alguien esperándote: si no podés con alguno, cancelalo desde la tarjeta. ' +
         'El cupo nuevo se aplica desde la próxima semana.',
         'info'
@@ -1708,8 +1708,8 @@ export default function App() {
     if (caidas > 0) {
       showNotification(
         caidas === 1
-          ? 'Se canceló 1 role-play que quedaba fuera de tu horario nuevo. Tu compañero vuelve al emparejamiento.'
-          : `Se cancelaron ${caidas} role-plays que quedaban fuera de tu horario nuevo. Tus compañeros vuelven al emparejamiento.`,
+          ? 'Se canceló 1 Role-Play que quedaba fuera de tu horario nuevo. Tu compañero vuelve al emparejamiento.'
+          : `Se cancelaron ${caidas} Role-Plays que quedaban fuera de tu horario nuevo. Tus compañeros vuelven al emparejamiento.`,
         'info'
       );
     }
@@ -2686,8 +2686,8 @@ export default function App() {
       const caidas = await cancelStaleProposals(null);
       showNotification(
         caidas > 0
-          ? `Desactivaste tu participación. Se cancelaron tus ${caidas === 1 ? 'role-play' : `${caidas} role-plays`} para que tus compañeros puedan reasignarse.`
-          : 'Has desactivado tu participación. No serás coordinado para los role-plays de esta semana.'
+          ? `Desactivaste tu participación. Se cancelaron tus ${caidas === 1 ? 'Role-Play' : `${caidas} Role-Plays`} para que tus compañeros puedan reasignarse.`
+          : 'Has desactivado tu participación. No serás coordinado para los Role-Plays de esta semana.'
       );
       // Los que quedaron sueltos vuelven al pool ahora mismo.
       if (caidas > 0) triggerWeeklyMatcher({ yaGuardado: 'Registramos tu baja' });
@@ -3653,7 +3653,7 @@ export default function App() {
             Acceso retirado de esta sala
           </h1>
           <p style={{ margin: '0 0 16px 0', fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-            Detectamos ausencias o cancelaciones tardías reportadas en {CHRONIC_BLOCK_THRESHOLD} meses distintos con esta cuenta de Google, dejando a tu compañero de role-play sin sesión cada vez. Por eso <strong style={{ color: 'var(--text-main)' }}>{currentUser.email}</strong> ya no puede coordinar sesiones en <strong style={{ color: 'var(--text-main)' }}>{roomName}</strong>.
+            Detectamos ausencias o cancelaciones tardías reportadas en {CHRONIC_BLOCK_THRESHOLD} meses distintos con esta cuenta de Google, dejando a tu compañero de Role-Play sin sesión cada vez. Por eso <strong style={{ color: 'var(--text-main)' }}>{currentUser.email}</strong> ya no puede coordinar sesiones en <strong style={{ color: 'var(--text-main)' }}>{roomName}</strong>.
           </p>
           <p style={{ margin: '0 0 22px 0', fontSize: '12.5px', color: 'var(--text-muted)', lineHeight: '1.6' }}>
             Si creés que esto es un error (por ejemplo, sesiones mal reportadas), escribinos a{' '}
@@ -3934,7 +3934,7 @@ export default function App() {
             </h2>
             <p className="view-subtitle">
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
-              {activeTab === 'wizard' && 'Configura tu participación en los role-plays de esta semana en pocos clics.'}
+              {activeTab === 'wizard' && 'Configura tu participación en los Role-Plays de esta semana en pocos clics.'}
               {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
               {activeTab === 'affinity' && 'Con quiénes del equipo compartís más horas libres, de mayor a menor.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
@@ -4001,7 +4001,7 @@ export default function App() {
                         </div>
                         <div>
                           <div className="attendance-prompt-question">
-                            Cerrá tu role-play con <strong>{p.partnerName}</strong>
+                            Cerrá tu Role-Play con <strong>{p.partnerName}</strong>
                           </div>
                           <div className="attendance-prompt-meta">
                             <ClipboardCheck size={12} /> 4 preguntas · tenés tiempo hasta {closeoutDeadlineLabel(p.closesAt)}
@@ -4259,7 +4259,7 @@ export default function App() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="btn-add-calendar btn-add-calendar-wide"
-                                    title="Agregar este role-play a tu Google Calendar"
+                                    title="Agregar este Role-Play a tu Google Calendar"
                                   >
                                     <CalendarPlus size={13} /> Agregar a mi Google Calendar
                                   </a>
@@ -4309,7 +4309,7 @@ export default function App() {
                     Agenda de la Sala
                   </h4>
                   <p className="section-subtitle">
-                    Todos los role-plays confirmados de la sala. Si querés mirar o sumarte como observador al de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
+                    Todos los Role-Plays confirmados de la sala. Si querés mirar o sumarte como observador al de otros compañeros, podés unirte desde acá. Ingresá con el micrófono apagado para no interrumpir la práctica.
                   </p>
                   <div className="meetings-list">
                     {isRoomDataLoading ? (
@@ -4321,7 +4321,7 @@ export default function App() {
                     ) : upcomingMeetings.length === 0 ? (
                       <div className="empty-state">
                         <CalendarDays size={30} />
-                        <span className="empty-state-title">Nadie de la sala tiene role-plays agendados.</span>
+                        <span className="empty-state-title">Nadie de la sala tiene Role-Plays agendados.</span>
                         <span className="empty-state-desc">Cuando una propuesta sea aceptada por ambas personas —la tuya o la de cualquier compañero— el enlace aparecerá acá.</span>
                       </div>
                     ) : (
@@ -4352,7 +4352,7 @@ export default function App() {
                                       Role-Play". Se marca para que no se lea como
                                       una reunión duplicada. */}
                                   {myRow && (
-                                    <span className="meeting-mine-badge" title="Sos participante de este role-play: también lo ves en «Mi Role-Play de la Semana»">
+                                    <span className="meeting-mine-badge" title="Sos participante de este Role-Play: también lo ves en «Mi Role-Play de la Semana»">
                                       <UserCheck size={10} /> Tuyo
                                     </span>
                                   )}
@@ -4399,7 +4399,7 @@ export default function App() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="btn-add-calendar"
-                                    title="Agregar este role-play a tu Google Calendar"
+                                    title="Agregar este Role-Play a tu Google Calendar"
                                   >
                                     <CalendarPlus size={11} /> Agendar
                                   </a>
@@ -4649,7 +4649,7 @@ export default function App() {
                       muchas horas NO agenda muchas sesiones. Sin esta frase la
                       gente marcaba el día entero creyendo que era necesario. */}
                   <p className="wizard-desc" style={{ fontSize: '12px', margin: 0 }}>
-                    Marcá las horas en las que podrías hacer un role-play. Son opciones, no
+                    Marcá las horas en las que podrías hacer un Role-Play. Son opciones, no
                     compromisos: de todas las que marques se van a usar solo las que hagan falta
                     para llegar a la cantidad que elijas abajo.
                   </p>
@@ -4662,7 +4662,7 @@ export default function App() {
                   <div className="weekly-target-row">
                     <label className="weekly-target-label" htmlFor="weekly-target">
                       <Target size={13} aria-hidden="true" />
-                      ¿Cuántos role-plays querés por semana?
+                      ¿Cuántos Role-Plays querés por semana?
                     </label>
                     <div className="weekly-target-control">
                       <button
@@ -5406,7 +5406,7 @@ export default function App() {
                 </div>
                 <div className="room-stat">
                   <span className="room-stat-val">{members.length}</span>
-                  <span className="room-stat-label">{members.length === 1 ? 'role-player' : 'role-players'}</span>
+                  <span className="room-stat-label">{members.length === 1 ? 'Role-Player' : 'Role-Players'}</span>
                 </div>
                 <div className="room-stat">
                   <span className={`room-stat-val ${blockedMembersCount > 0 ? 'is-warn' : ''}`}>{blockedMembersCount}</span>
@@ -5702,12 +5702,12 @@ export default function App() {
           {
             icon: <ChessKnightIcon size={44} />,
             title: `¡Bienvenido, ${currentUser.name.split(' ')[0]}!`,
-            desc: 'Sales Arena Matcher coordina los role-plays de tu equipo cruzando la disponibilidad de todos, sin importar el país. Cargás tu horario una vez y el sistema se encarga del resto: lo único que tenés que hacer es confirmar. Esta guía te muestra cómo funciona.'
+            desc: 'Sales Arena Matcher coordina los Role-Plays de tu equipo cruzando la disponibilidad de todos, sin importar el país. Cargás tu horario una vez y el sistema se encarga del resto: lo único que tenés que hacer es confirmar. Esta guía te muestra cómo funciona.'
           },
           {
             icon: <CalendarRange size={34} />,
             title: '1 · Cargá tu disponibilidad',
-            desc: 'Entrá a "Cargar Disponibilidad" y marcá en el calendario los horarios en los que podés hacer un role-play (en tu hora local). Podés guardar tu horario como plantilla para reutilizarlo cada semana. Una vez cargado, te olvidás: el emparejador trabaja solo.'
+            desc: 'Entrá a "Cargar Disponibilidad" y marcá en el calendario los horarios en los que podés hacer un Role-Play (en tu hora local). Podés guardar tu horario como plantilla para reutilizarlo cada semana. Una vez cargado, te olvidás: el emparejador trabaja solo.'
           },
           {
             icon: <RefreshCw size={34} />,
@@ -6024,7 +6024,7 @@ export default function App() {
           >
             <h3 className="section-title" id="closeout-title">
               <ClipboardCheck size={17} className="section-title-icon" />
-              Cierre de tu role-play con {closeoutTarget.partnerName}
+              Cierre de tu Role-Play con {closeoutTarget.partnerName}
             </h3>
             <p className="closeout-privacy">
               <Lock size={12} /> {closeoutTarget.partnerName} no va a ver nunca lo que respondas.
@@ -6052,7 +6052,7 @@ export default function App() {
                   key: 'engagement',
                   label: `¿Cómo participó ${closeoutTarget.partnerName.split(' ')[0]}?`,
                   options: [
-                    { v: 'preparado', t: 'Preparado, sostuvo el role-play' },
+                    { v: 'preparado', t: 'Preparado, sostuvo el Role-Play' },
                     { v: 'a_medias', t: 'A medias' },
                     { v: 'no_participo', t: 'No participó en serio' }
                   ]
@@ -6176,7 +6176,7 @@ export default function App() {
             {joinState === 'entrando' ? (
               <>
                 <span className="spinner"></span>
-                <h3 className="join-title">Entrando a tu role-play…</h3>
+                <h3 className="join-title">Entrando a tu Role-Play…</h3>
                 <p className="join-desc">Registramos que estuviste y te llevamos a Meet.</p>
               </>
             ) : (

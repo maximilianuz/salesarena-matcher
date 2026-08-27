@@ -112,7 +112,7 @@ function buildRankRow(entry, rank) {
   count.className = 'top-roleplayer-count';
   // Solo la etiqueta: la cantidad vive en la pastilla de la derecha, y
   // repetirla acá la haría sonar dos veces en un lector de pantalla.
-  count.textContent = 'role-plays';
+  count.textContent = 'Role-Plays';
   count.setAttribute('aria-hidden', 'true');
   info.appendChild(count);
   li.appendChild(info);
@@ -122,7 +122,7 @@ function buildRankRow(entry, rank) {
   const metric = document.createElement('div');
   metric.className = 'top-roleplayer-metric';
   metric.setAttribute('role', 'img');
-  metric.setAttribute('aria-label', `${n} role-play${n === 1 ? '' : 's'} este mes`);
+  metric.setAttribute('aria-label', `${n} Role-Play${n === 1 ? '' : 's'} este mes`);
   const value = document.createElement('span');
   value.className = 'top-roleplayer-metric-value';
   value.textContent = String(n);

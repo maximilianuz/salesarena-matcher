@@ -110,7 +110,7 @@ export const googleCalendarUrl = ({ title, startsAt, durationMin = 60, meetLink,
   const stamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: title || 'Role-play',
+    text: title || 'Role-Play',
     dates: `${stamp(start)}/${stamp(end)}`,
     details: [details, meetLink ? `Videollamada: ${meetLink}` : '']
       .filter(Boolean).join('\n\n'),
