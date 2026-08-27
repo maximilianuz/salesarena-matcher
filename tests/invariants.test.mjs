@@ -364,3 +364,84 @@ test('el bloqueo por mentir saca a la persona del pool del emparejador', () => {
   assert.match(bloque, /blocked\.add\(email\)/,
     'las mentiras del mes tienen que sumar al conjunto de bloqueados');
 });
+
+// --- TOPE DIARIO EN LA PANTALLA ---
+//
+// La lógica del tope vive en availabilityGrid.js y está probada aparte. Lo que
+// se verifica acá es que la pantalla la USE: un tope correcto que el editor no
+// consulta no limita nada, y esa clase de deriva no la ve ningún test de
+// dominio porque cada mitad pasa sus propias pruebas por separado.
+
+test('el editor marca celdas a través del tope, no a mano', () => {
+  const i = appSrc.indexOf('const toggleCell');
+  assert.ok(i > 0, 'no se encontró toggleCell en App.jsx');
+  const cuerpo = appSrc.slice(i, appSrc.indexOf('\n  };', i));
+
+  assert.match(cuerpo, /addCell\(/, 'toggleCell debe agregar con addCell, que aplica el tope');
+  assert.doesNotMatch(
+    cuerpo,
+    /\[\s*\.\.\.prev\s*,\s*\{\s*dayIdx\s*,\s*hour\s*\}\s*\]/,
+    'toggleCell volvió a agregar la celda a mano y se saltea el tope'
+  );
+  assert.match(
+    cuerpo,
+    /setCapAviso/,
+    'chocar el tope tiene que avisar: una celda que no se pinta sin explicación se lee como una falla'
+  );
+});
+
+test('el atajo de día elige por popularidad y no marca la columna entera', () => {
+  const i = appSrc.indexOf('const handleDayHeaderClick');
+  assert.ok(i > 0, 'no se encontró handleDayHeaderClick en App.jsx');
+  const cuerpo = appSrc.slice(i, appSrc.indexOf('\n  };', i));
+
+  assert.match(cuerpo, /rank:/, 'el atajo debe pasar un rank; si no, marca las primeras horas del día sin mirar a la sala');
+  assert.match(
+    appSrc,
+    /const rankPorPopularidad[^\n]*heatmap/,
+    'el rank tiene que salir del mapa de calor, que es donde vive cuánta gente hay libre'
+  );
+});
+
+test('el medidor de cobertura conoce el tope', () => {
+  // Sin el tercer argumento, el medidor le pide "más horas" a quien ya está en
+  // el techo de todos los días que marcó: le pide algo que el tope le prohíbe.
+  assert.match(
+    appSrc,
+    /goalState\(\s*wizardGrid\.length\s*,\s*wizardWeeklyTarget\s*,\s*allMarkedDaysFull\(/,
+    'goalState se sigue llamando sin avisarle si la persona está en el techo diario'
+  );
+});
+
+test('los días heredados por encima del tope se señalan y no se recortan', () => {
+  assert.match(appSrc, /daysOverCap\(wizardGrid\)/, 'la pantalla no señala los días que ya excedían el tope');
+  // Recortarlos al guardar sería borrarle a alguien disponibilidad que cargó.
+  const i = appSrc.indexOf('const saveWizardGrid');
+  const cuerpo = appSrc.slice(i, appSrc.indexOf('\n  };', i));
+  assert.doesNotMatch(
+    cuerpo,
+    /MAX_HOURS_PER_DAY/,
+    'saveWizardGrid no debe recortar por tope: los días viejos se conservan hasta que la persona los edite'
+  );
+});
+
+test('la agenda de la sala fecha las reuniones en la zona de quien mira', () => {
+  // Mostraba date_utc mientras el resto del panel iba en hora local. Cerca de
+  // medianoche la conversión corre el DÍA, así que la reunión parecía ser otra
+  // fecha: es el peor lugar posible para dejar una ambigüedad.
+  assert.doesNotMatch(
+    appSrc,
+    />\{meet\.dateUtc\}</,
+    'la agenda volvió a mostrar el horario en UTC'
+  );
+  assert.match(
+    appSrc,
+    /meetingLocalLabel\(meet, currentUser\?\.tz\)/,
+    'la agenda no está fechando en la zona de quien mira'
+  );
+  const i = appSrc.indexOf('const meetingLocalLabel');
+  assert.ok(i > 0, 'no se encontró meetingLocalLabel en App.jsx');
+  const cuerpo = appSrc.slice(i, appSrc.indexOf('\n  };', i));
+  assert.match(cuerpo, /year: 'numeric'/, 'la etiqueta tiene que incluir el año, que es el punto del cambio');
+  assert.match(cuerpo, /meet\?\.dateUtc/, 'debe quedar el respaldo para filas viejas sin starts_at');
+});
