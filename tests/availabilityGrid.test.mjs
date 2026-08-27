@@ -7,6 +7,7 @@ import {
   visibleHours,
   toggleDay,
   toggleHourRow,
+  describeDrag,
   goalState
 } from '../src/domain/availabilityGrid.js';
 
@@ -97,6 +98,39 @@ test('cabecera de hora: no toca las otras franjas', () => {
   const grid = toggleHourRow([cell(0, 14)], 9);
   assert.ok(tiene(grid, 0, 14), 'las 14:00 del lunes siguen ahí');
   assert.equal(grid.length, 8, '7 nuevas + la que ya estaba');
+});
+
+// --- LECTURA EN VIVO DEL ARRASTRE ---
+//
+// El arrastre pinta libre y puede cruzar días, así que la etiqueta describe la
+// forma real del trazo en vez de fingir que siempre es un rango.
+
+test('arrastre: un día con horas seguidas muestra el rango', () => {
+  const trazo = [cell(4, 9), cell(4, 10)];
+  assert.equal(describeDrag(trazo), 'Viernes 09:00 – 11:00 · 2 horas');
+});
+
+test('arrastre: el rango termina al final de la última hora, no al empezarla', () => {
+  assert.equal(describeDrag([cell(0, 9)]), 'Lunes 09:00 – 10:00 · 1 hora');
+});
+
+test('arrastre: da igual el orden en que se pintaron las celdas', () => {
+  const alReves = [cell(2, 11), cell(2, 9), cell(2, 10)];
+  assert.equal(describeDrag(alReves), 'Miércoles 09:00 – 12:00 · 3 horas');
+});
+
+test('arrastre: un día con huecos no inventa un rango', () => {
+  const conHueco = [cell(2, 9), cell(2, 14)];
+  assert.equal(describeDrag(conHueco), 'Miércoles · 2 horas');
+});
+
+test('arrastre: cruzando días informa cuántos días y el total', () => {
+  const cruzado = [cell(0, 9), cell(1, 9), cell(2, 9)];
+  assert.equal(describeDrag(cruzado), '3 días · 3 horas');
+});
+
+test('arrastre: sin celdas no dice nada', () => {
+  assert.equal(describeDrag([]), '');
 });
 
 // --- MEDIDOR DE COBERTURA ---

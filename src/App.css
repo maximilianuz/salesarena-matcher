@@ -606,6 +606,33 @@
   padding: 0 4px;
 }
 
+/* Lectura en vivo del arrastre: sigue al puntero diciendo qué se está
+   marcando. Antes el gesto no devolvía nada hasta soltar, y había que contar
+   celdas para saber qué había quedado. */
+.wizard-drag-badge {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background-color: var(--text-main);
+  color: var(--bg-main);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.wizard-drag-badge.is-erasing {
+  background-color: var(--color-danger);
+  color: #fff;
+}
+
+.preset-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .editor-th.weekend {
   color: var(--color-primary);
 }
