@@ -42,6 +42,34 @@ export const toggleHourRow = (grid, hour) => {
 //   - piso duro: una hora por sesión pedida, si no no hay dónde ubicarlas.
 //   - margen cómodo: 3× las sesiones, para que el emparejador tenga
 //     alternativas al cruzar con la agenda del resto.
+// Dónde empieza y dónde termina el tramo contiguo al que pertenece una celda,
+// para que tres horas seguidas se lean como UN bloque con su duración escrita y
+// no como tres casillas sueltas.
+//
+// Se resuelve por celda en vez de dibujar bloques posicionados sobre la grilla:
+// así la tabla sigue siendo una tabla, y el arrastre, el foco por teclado y los
+// aria-label sobreviven intactos. Lo único que cambia es cómo se pinta.
+//
+// `primeraHoraVisible` importa porque la madrugada se colapsa: con la grilla
+// arrancando a las 06:00, una celda a esa hora es principio de bloque aunque
+// las 05:00 estén marcadas, porque en pantalla no hay nada encima.
+export const runAt = (marcadas, dayIdx, hour, primeraHoraVisible = 0) => {
+  const en = (h) => marcadas.has(`${dayIdx}-${h}`);
+  if (!en(hour)) return null;
+
+  const esInicio = hour <= primeraHoraVisible || !en(hour - 1);
+  const esFin = hour >= 23 || !en(hour + 1);
+
+  // El largo solo se cuenta en la celda que abre el tramo: es la única que
+  // muestra la etiqueta de duración.
+  let largo = 0;
+  if (esInicio) {
+    let h = hour;
+    while (h <= 23 && en(h)) { largo++; h++; }
+  }
+  return { esInicio, esFin, largo };
+};
+
 // Lectura en vivo de lo que se está pintando con el arrastre. Antes el gesto
 // no decía nada: soltabas y recién ahí contabas celdas para saber qué habías
 // marcado. El arrastre pinta libre (puede cruzar días), así que la etiqueta se

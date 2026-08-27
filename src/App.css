@@ -526,7 +526,11 @@
 
 .editor-table {
   width: 100%;
-  border-collapse: collapse;
+  /* separate y no collapse: con los bordes colapsados el navegador ignora el
+     border-radius de las celdas, y sin radio no hay bloque. Cada celda dibuja
+     solo su borde derecho e inferior, asi que separarlos no duplica lineas. */
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 500px;
   user-select: none;
 }
@@ -628,13 +632,55 @@
   transition: background-color 0.1s ease;
 }
 
+/* Horas seguidas se leen como UN tramo, no como casillas sueltas: la primera
+   redondea arriba, la ultima abajo, y entre medio no hay costura. Es lo que
+   hace que la grilla parezca un calendario y no una planilla.
+
+   Se resuelve por celda (ver runAt en domain/availabilityGrid.js) en vez de
+   dibujar bloques posicionados encima de la tabla: asi el arrastre, el foco por
+   teclado y los aria-label siguen funcionando igual que antes. */
 .editor-cell.active {
+  position: relative;
   background-color: var(--color-primary);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  border-bottom-color: transparent;
+  border-right-color: rgba(var(--neutral-rgb), 0.25);
+}
+
+.editor-cell.active.run-start {
+  border-top-left-radius: var(--r-control);
+  border-top-right-radius: var(--r-control);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.editor-cell.active.run-end {
+  border-bottom-left-radius: var(--r-control);
+  border-bottom-right-radius: var(--r-control);
+  border-bottom-color: var(--border-color);
 }
 
 .editor-cell.active:hover {
   background-color: var(--color-primary-hover);
+}
+
+/* La duracion, arriba a la izquierda del bloque, como la hora de un evento.
+   Solo aparece en tramos de dos horas o mas: en uno de una sola no cabe y
+   ademas la fila ya dice la hora. */
+.editor-run-label {
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* En columnas angostas la etiqueta compite con el propio bloque: el tramo se
+   sigue viendo por su forma, que es lo que importa. */
+@media (max-width: 620px) {
+  .editor-run-label { display: none; }
 }
 
 .editor-cell:not(.active):hover {

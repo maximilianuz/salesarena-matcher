@@ -8,6 +8,7 @@ import {
   toggleDay,
   toggleHourRow,
   describeDrag,
+  runAt,
   goalState
 } from '../src/domain/availabilityGrid.js';
 
@@ -98,6 +99,59 @@ test('cabecera de hora: no toca las otras franjas', () => {
   const grid = toggleHourRow([cell(0, 14)], 9);
   assert.ok(tiene(grid, 0, 14), 'las 14:00 del lunes siguen ahí');
   assert.equal(grid.length, 8, '7 nuevas + la que ya estaba');
+});
+
+// --- TRAMOS CONTIGUOS ---
+//
+// Tres horas seguidas tienen que leerse como un bloque: la primera redondea
+// arriba, la última abajo, y las del medio no llevan costura. La etiqueta de
+// duración va solo en la que abre.
+
+const setDe = (...celdas) => new Set(celdas.map(c => `${c.dayIdx}-${c.hour}`));
+
+test('tramo: una hora sola abre y cierra el bloque', () => {
+  const m = setDe(cell(2, 9));
+  assert.deepEqual(runAt(m, 2, 9), { esInicio: true, esFin: true, largo: 1 });
+});
+
+test('tramo: tres horas seguidas son un bloque con principio, medio y fin', () => {
+  const m = setDe(cell(2, 9), cell(2, 10), cell(2, 11));
+  assert.deepEqual(runAt(m, 2, 9), { esInicio: true, esFin: false, largo: 3 }, 'la primera abre y sabe el largo');
+  assert.deepEqual(runAt(m, 2, 10), { esInicio: false, esFin: false, largo: 0 }, 'la del medio no lleva costura ni etiqueta');
+  assert.deepEqual(runAt(m, 2, 11), { esInicio: false, esFin: true, largo: 0 }, 'la última cierra');
+});
+
+test('tramo: un hueco corta el bloque en dos', () => {
+  const m = setDe(cell(2, 9), cell(2, 10), cell(2, 13), cell(2, 14));
+  assert.equal(runAt(m, 2, 10).esFin, true, 'las 10 cierran el primer bloque');
+  assert.equal(runAt(m, 2, 13).esInicio, true, 'las 13 abren el segundo');
+  assert.equal(runAt(m, 2, 13).largo, 2, 'y cuentan solo su propio tramo');
+});
+
+test('tramo: los días no se contagian entre sí', () => {
+  const m = setDe(cell(2, 9), cell(3, 9), cell(3, 10));
+  assert.deepEqual(runAt(m, 2, 9), { esInicio: true, esFin: true, largo: 1 }, 'el miércoles no ve al jueves');
+  assert.equal(runAt(m, 3, 9).largo, 2);
+});
+
+// Este es el caso que justifica el parámetro: con la madrugada colapsada la
+// grilla arranca a las 06:00, así que esa celda abre el bloque en pantalla
+// aunque las 05:00 estén marcadas. Sin esto, el bloque nacería sin borde
+// superior y se vería cortado contra la cabecera.
+test('tramo: con la madrugada colapsada, la primera hora visible abre el bloque', () => {
+  const m = setDe(cell(2, 5), cell(2, 6), cell(2, 7));
+  assert.equal(runAt(m, 2, 6, 6).esInicio, true, 'colapsada: las 06 abren');
+  assert.equal(runAt(m, 2, 6, 6).largo, 2, 'y cuentan solo lo visible hacia abajo');
+  assert.equal(runAt(m, 2, 6, 0).esInicio, false, 'desplegada: las 06 vienen de las 05');
+});
+
+test('tramo: la última hora del día cierra el bloque', () => {
+  const m = setDe(cell(2, 22), cell(2, 23));
+  assert.equal(runAt(m, 2, 23).esFin, true, 'no hay hora 24 que continúe');
+});
+
+test('tramo: una celda sin marcar no tiene tramo', () => {
+  assert.equal(runAt(setDe(cell(2, 9)), 2, 14), null);
 });
 
 // --- LECTURA EN VIVO DEL ARRASTRE ---
