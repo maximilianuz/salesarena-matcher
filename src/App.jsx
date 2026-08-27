@@ -82,6 +82,12 @@ import { DIAS, ZONAS, getCountryFlag, tzCity, resolveTimezone, guessLocationFrom
 import { getNextMatchDateUtc, formatMeetingDateUtc, canRecordJoin } from './domain/schedule';
 import { scheduleRuleFromRow, attendanceFromRow, joinRoomErrorMessage } from './domain/rows';
 import {
+  visibleHours,
+  toggleDay as toggleDayCells,
+  toggleHourRow as toggleHourCells,
+  goalState
+} from './domain/availabilityGrid';
+import {
   getEngagement,
   getReciprocity,
   getCredibility,
@@ -3301,6 +3307,16 @@ export default function App() {
     setWizardGrid([]);
   };
 
+  // Atajos de cabecera: un clic marca un día entero o una franja horaria en los
+  // siete días. Cargar "todas las mañanas" pasaba por 21 clics uno por uno.
+  const handleDayHeaderClick = (dayIdx) => {
+    setWizardGrid(prev => toggleDayCells(prev, dayIdx, visibleHours(showAllHours)));
+  };
+
+  const handleHourHeaderClick = (hour) => {
+    setWizardGrid(prev => toggleHourCells(prev, hour));
+  };
+
   const handleTabClick = (tab) => {
     setActiveTab(tab);
     setIsSidebarOpen(false); // Cierra el menú al cambiar de pestaña en móvil
@@ -4606,13 +4622,41 @@ export default function App() {
                       >+</button>
                     </div>
                   </div>
-                  {wizardGrid.length > 0 && wizardGrid.length < wizardWeeklyTarget && (
-                    <p className="weekly-target-hint">
-                      Marcaste {wizardGrid.length} {wizardGrid.length === 1 ? 'hora' : 'horas'} y pediste{' '}
-                      {wizardWeeklyTarget} {wizardWeeklyTarget === 1 ? 'sesión' : 'sesiones'}: marcá
-                      más horas para que haya dónde ubicarlas.
-                    </p>
-                  )}
+                  {(() => {
+                    const g = goalState(wizardGrid.length, wizardWeeklyTarget);
+                    const horas = `${wizardGrid.length} ${wizardGrid.length === 1 ? 'hora' : 'horas'}`;
+                    const sesiones = `${wizardWeeklyTarget} ${wizardWeeklyTarget === 1 ? 'sesión' : 'sesiones'}`;
+                    const comodo = wizardWeeklyTarget * 3;
+                    return (
+                      <div className={`wizard-goal wizard-goal-${g.tone}`}>
+                        <div className="wizard-goal-head">
+                          <span className="wizard-goal-count">
+                            <b>{horas}</b> marcadas para <b>{sesiones}</b>
+                          </span>
+                          <span className="wizard-goal-label">
+                            {g.tone === 'good' && <Check size={13} aria-hidden="true" />}
+                            {g.tone === 'short' && <AlertCircle size={13} aria-hidden="true" />}
+                            {g.label}
+                          </span>
+                        </div>
+                        <div
+                          className="wizard-goal-bar"
+                          role="progressbar"
+                          aria-valuenow={g.pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label="Cobertura de tu disponibilidad"
+                        >
+                          <div className="wizard-goal-fill" style={{ width: `${g.pct}%` }}></div>
+                        </div>
+                        <p className="wizard-goal-hint">
+                          {g.tone === 'short' && `Necesitás al menos ${wizardWeeklyTarget} ${wizardWeeklyTarget === 1 ? 'hora' : 'horas'} para que haya dónde ubicarlas.`}
+                          {g.tone === 'ok' && `Con ${comodo} horas el emparejador tiene alternativas al cruzar con la agenda del resto.`}
+                          {g.tone === 'good' && 'Lo que marcaste de más da margen, no compromiso: se usan solo las horas que hagan falta.'}
+                        </p>
+                      </div>
+                    );
+                  })()}
 
                   <div className="editor-toolbar">
                     <span className="tz-chip" title="Tus horarios se guardan en esta zona horaria">
@@ -4644,7 +4688,16 @@ export default function App() {
                         <tr>
                           <th className="editor-th editor-th-hour">Hora</th>
                           {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((d, i) => (
-                            <th key={d} className={`editor-th ${i >= 5 ? 'weekend' : ''}`}>{d}</th>
+                            <th key={d} className={`editor-th ${i >= 5 ? 'weekend' : ''}`}>
+                              <button
+                                type="button"
+                                className="editor-head-btn"
+                                onClick={() => handleDayHeaderClick(i)}
+                                aria-label={`Marcar o borrar todas las horas visibles del ${DIAS[i]}`}
+                              >
+                                {d}
+                              </button>
+                            </th>
                           ))}
                         </tr>
                       </thead>
@@ -4653,7 +4706,16 @@ export default function App() {
                           if (!showAllHours && (h < 6)) return null;
                           return (
                             <tr key={h}>
-                              <td className="editor-hour-label">{String(h).padStart(2, '0')}:00</td>
+                              <td className="editor-hour-label">
+                                <button
+                                  type="button"
+                                  className="editor-head-btn"
+                                  onClick={() => handleHourHeaderClick(h)}
+                                  aria-label={`Marcar o borrar las ${String(h).padStart(2, '0')}:00 en los siete días`}
+                                >
+                                  {String(h).padStart(2, '0')}:00
+                                </button>
+                              </td>
                               {Array.from({ length: 7 }).map((_, d) => {
                                 const isActive = wizardGrid.some(s => s.dayIdx === d && s.hour === h);
                                 const dayLabel = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'][d];
