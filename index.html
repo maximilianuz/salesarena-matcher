@@ -894,6 +894,13 @@
             padding: 0.4rem 0.9rem;
             border-radius: 9999px;
             backdrop-filter: blur(6px);
+            /* Deja libre el rincón inferior derecho, donde viven las flechas
+               de .vtabs-gallery-nav: en una galería angosta (celular) un texto
+               largo como "04 · Practicá y cerrá la sesión" llegaba a pisarlas. */
+            max-width: calc(100% - 10rem);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .vtabs-gallery-nav {

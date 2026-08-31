@@ -443,9 +443,14 @@ html.dark .glass-hover:hover {
 }
 
 /* El botón de contraer no tiene sentido en el cajón móvil, que se abre y
-   cierra con el botón del header. */
+   cierra con el botón del header.
+   El selector va calificado con .nav-sidebar (no ".nav-collapse-btn" solo)
+   porque así gana en especificidad a la regla de más abajo ".nav-link {
+   display: flex }": con la misma especificidad, esa regla posterior en el
+   archivo ganaba el empate y el botón volvía a mostrarse en el cajón móvil
+   pese a esta media query. */
 @media (max-width: 768px) {
-  .nav-collapse-btn {
+  .nav-sidebar .nav-collapse-btn {
     display: none;
   }
 }

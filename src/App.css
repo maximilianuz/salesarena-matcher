@@ -43,16 +43,24 @@
   letter-spacing: 0.8px;
 }
 
-/* Dashboard Sections */
+/* Dashboard Sections.
+   minmax(0, ...) y no 1.6fr/1fr a secas: una columna "1fr" tiene un mínimo
+   implícito de auto, así que si el contenido de adentro no puede achicarse
+   (una fila con un email largo, sin wrap) la columna crece para no recortarlo
+   y termina más ancha que su propio contenedor. Con minmax(0, ...) la columna
+   sí puede achicarse hasta 0 antes de forzar el desborde — es lo que en
+   "Gestionar Equipo" hacía que la tarjeta se saliera de la pantalla en
+   celulares angostos aunque el body nunca reportara scroll horizontal (el
+   desborde quedaba contenido dentro de .view-content, no del documento). */
 .dashboard-sections {
   display: grid;
-  grid-template-columns: 1.6fr 1fr;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 24px;
 }
 
 @media (max-width: 1024px) {
   .dashboard-sections {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -412,6 +420,15 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+/* La celda "Hora" es siempre la primera de la fila de cabecera: se fija a la
+   izquierda igual que .heatmap-td-hour de cada fila, para no perder de vista
+   a qué hora corresponde cada fila al desplazarse en pantallas angostas. */
+.heatmap-th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+}
+
 .heatmap-td-hour {
   background-color: var(--bg-card-hover);
   color: var(--text-muted);
@@ -419,6 +436,9 @@
   font-weight: 600;
   padding: 6px;
   text-align: center;
+  position: sticky;
+  left: 0;
+  z-index: 1;
   border-right: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
@@ -755,8 +775,13 @@
   color: var(--color-primary);
 }
 
+/* Fija a la izquierda en el scroll horizontal: en pantallas angostas la
+   grilla no entra entera, y sin esto al desplazarse para ver vie/sáb/dom se
+   perdía de vista a qué hora correspondía cada fila. */
 .editor-th-hour {
   width: 52px;
+  position: sticky;
+  left: 0;
 }
 
 .editor-hour-label {
@@ -767,6 +792,9 @@
   background-color: var(--bg-sidebar);
   color: var(--text-muted);
   font-weight: 600;
+  position: sticky;
+  left: 0;
+  z-index: 4;
   border-right: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
@@ -1190,6 +1218,7 @@
 
 .member-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 14px 18px;
@@ -1208,7 +1237,16 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  flex: 1;
+  /* flex-basis 220px (no 0%) para que .member-row, ya con flex-wrap, pueda
+     detectar que esta columna más las acciones de la derecha no entran en
+     una fila angosta y las baje a su propia línea. Con basis 0% el cálculo
+     de wrap ignoraba a esta columna (pesa "0" para decidir si hace falta
+     una línea nueva) y toda la falta de espacio recaía sobre ella sola,
+     dejándola comprimida a unos pocos píxeles de ancho. min-width:0 sigue
+     haciendo falta para que, ya en su propia línea, el email largo pueda
+     ajustarse en vez de forzar el ancho de la fila. */
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .member-row-name {
@@ -2143,6 +2181,20 @@ html.dark .login-disclosure {
   pointer-events: none;
   width: 340px;
   max-width: calc(100vw - 40px);
+}
+
+/* En pantallas angostas una caja de 340px flotando en la esquina inferior
+   termina tapando lo último de la pantalla (el botón "Copiar enlace", el
+   toggle de participación...). A ancho completo y pegado abajo es el patrón
+   estándar de notificación móvil, y dura pocos segundos igual. */
+@media (max-width: 480px) {
+  .toast-container {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+    max-width: none;
+  }
 }
 
 .toast-item {
