@@ -461,6 +461,12 @@ export default function App() {
   // Propuesta cuyo Meet se está creando ahora mismo, para no dispararlo dos
   // veces desde esta misma pantalla.
   const [creatingMeetFor, setCreatingMeetFor] = useState(null);
+  // El permiso de Google Calendar (provider_token) vence a la hora y Supabase
+  // no lo renueva solo. Antes esto solo se contaba en un toast que pedía
+  // "cerrá sesión y volvé a entrar" — dos pasos manuales para algo que se
+  // arregla con el mismo botón de login. Este flag muestra en su lugar un
+  // botón de reconexión de un solo click apenas se detecta el permiso vencido.
+  const [googleReauthNeeded, setGoogleReauthNeeded] = useState(false);
   // Cuántos role-plays quiere esta semana. Se precarga con lo que ya eligió
   // para que reabrir el asistente no le pise su preferencia con el valor base.
   const [wizardWeeklyTarget, setWizardWeeklyTarget] = useState(DEFAULT_WEEKLY_TARGET);
@@ -1769,6 +1775,34 @@ export default function App() {
     }
   };
 
+  // Refresca el permiso de Google Calendar sin pasar por un logout manual.
+  // No hace falta "cerrar sesión primero": volver a pedir el mismo scope de
+  // OAuth ya emite un provider_token nuevo y actualiza la sesión existente.
+  // Es el mismo redirect que el login (por eso reusa scopes/redirectTo), solo
+  // que se dispara desde el error de token vencido en vez de la pantalla de
+  // login.
+  const reconnectGoogle = async () => {
+    if (useMockDb) {
+      // En modo demo no hay OAuth real; solo se limpia el aviso.
+      setGoogleReauthNeeded(false);
+      return;
+    }
+    setIsGoogleLoginPending(true);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        scopes: 'https://www.googleapis.com/auth/calendar.events',
+        redirectTo: window.location.origin + `/room/${currentRoomId}`
+      }
+    });
+    if (error) {
+      setIsGoogleLoginPending(false);
+      showNotification('No pudimos reconectar con Google: ' + friendlyAuthError(error, 'es'), 'error');
+    }
+    // En éxito no se resetea nada acá: el navegador ya está saliendo hacia
+    // Google y vuelve a cargar la app de cero al regresar.
+  };
+
   // Registra un miembro nuevo en Supabase y actualiza el estado local.
   // Se usa desde el auto-registro OAuth, el flujo mock y el paso de
   // código de invitación.
@@ -2861,6 +2895,12 @@ export default function App() {
           .update({ meeting_id: null })
           .eq('id', proposal.id)
           .eq('meeting_id', MEET_CLAIM);
+        // Con este mensaje puntual, en vez de pedir por texto que cierre sesión
+        // y vuelva a entrar, se muestra el botón de reconexión de un click
+        // (ver reconnectGoogle) en el lugar de "Crear Meet de la dupla".
+        if (err.message === GOOGLE_REAUTH_MESSAGE) {
+          setGoogleReauthNeeded(true);
+        }
         showNotification(`La dupla está confirmada, pero no pudimos crear el Meet. ${err.message}`, 'error');
         return;
       }
@@ -4265,6 +4305,16 @@ export default function App() {
                                   </a>
                                 )}
                               </div>
+                            ) : googleReauthNeeded ? (
+                              <button
+                                className="btn btn-indigo"
+                                style={{ width: '100%' }}
+                                onClick={reconnectGoogle}
+                                disabled={isGoogleLoginPending}
+                              >
+                                <Video size={14} />
+                                {isGoogleLoginPending ? 'Reconectando…' : 'Reconectar con Google'}
+                              </button>
                             ) : (
                               <button
                                 className="btn btn-indigo"
