@@ -110,6 +110,19 @@ const currentWeekStartISO = (now = new Date()): string => {
   return d.toISOString().slice(0, 10);
 };
 
+// Lunes (UTC) de la semana a la que pertenece un instante cualquiera. slot_start
+// (0-167) solo codifica día-de-semana + hora, no a qué semana real pertenece esa
+// ocurrencia: cuando nextSlotOccurrenceMs() hace rodar el horario a la semana
+// siguiente (porque la ocurrencia de ESTA semana ya pasó o cae dentro del piso
+// de anticipación mínima), week_start tiene que rodar CON ella. Usar el `week`
+// de la corrida (semana de `now`) para toda propuesta, sin importar a qué
+// semana real cae su horario, dejaba filas con week_start+slot_start
+// describiendo una fecha hasta 7 días antes de la real (el respond_by, que sí
+// se calcula sobre meetingMs, quedaba correcto pero desacoplado de la fecha
+// mostrada). Ver auditoría del 20260903: fila 6868 quedó 'propuesto' con fecha
+// implícita en el pasado mientras su respond_by seguía vigente a futuro.
+const weekStartOfMs = (ms: number): string => currentWeekStartISO(new Date(ms));
+
 type Member = { email: string; name: string; tz: string };
 type Pair = { a: Member; b: Member; slot: number };
 
@@ -965,6 +978,7 @@ Deno.serve(async (req) => {
             status: 'propuesto',
             status_a: null,
             status_b: null,
+            week_start: weekStartOfMs(meetingMs),
             slot_start: p.slot,
             respond_by: respondBy,
             meeting_id: null
@@ -972,7 +986,7 @@ Deno.serve(async (req) => {
         } else {
           toInsert.push({
             room_id: roomId,
-            week_start: week,
+            week_start: weekStartOfMs(meetingMs),
             member_a_email: p.a.email,
             member_a_name: p.a.name,
             member_b_email: p.b.email,

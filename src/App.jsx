@@ -3230,9 +3230,10 @@ export default function App() {
   };
 
   // El propio usuario cancela su asistencia ANTES del inicio.
-  //   +24hs de antelación → 'cancelado_con_aviso' (no penaliza)
-  //   <24hs               → 'cancelado_tarde' con MOTIVO obligatorio (cuenta
-  //                          como falta; 3 en el mes bloquean al miembro)
+  //   +CANCEL_PENALTY_HOURS hs de antelación → 'cancelado_con_aviso' (no penaliza)
+  //   <CANCEL_PENALTY_HOURS hs               → 'cancelado_tarde' con MOTIVO obligatorio
+  //                          (cuenta como falta; 3 en el mes bloquean al miembro)
+  const CANCEL_PENALTY_HOURS = 12;
   const cancelMyAttendance = async (meeting) => {
     const mine = attendances.find(a =>
       a.meetingId === meeting.id &&
@@ -3243,12 +3244,12 @@ export default function App() {
     const hoursUntil = meeting.startsAt
       ? (new Date(meeting.startsAt).getTime() - Date.now()) / 3600000
       : Infinity;
-    const isLate = hoursUntil < 24;
+    const isLate = hoursUntil < CANCEL_PENALTY_HOURS;
 
     let newStatus, cancelReason = null;
     if (isLate) {
       const reason = await showPrompt(
-        `Faltan menos de 24hs para "${meeting.title}". Cancelar ahora cuenta como falta. Detallá el motivo (obligatorio). Con 3 faltas en el mes quedarás sin emparejamientos hasta el mes siguiente.`,
+        `Faltan menos de ${CANCEL_PENALTY_HOURS}hs para "${meeting.title}". Cancelar ahora cuenta como falta. Detallá el motivo (obligatorio). Con 3 faltas en el mes quedarás sin emparejamientos hasta el mes siguiente.`,
         'Ej: surgió una urgencia laboral...'
       );
       if (reason === null) return; // el usuario desistió
@@ -3256,7 +3257,7 @@ export default function App() {
       cancelReason = reason;
     } else {
       const confirmed = await showConfirm(
-        `¿Cancelar con aviso tu asistencia a "${meeting.title}"? Faltan más de 24hs, así que NO cuenta como falta. Tus compañeros lo verán reflejado.`,
+        `¿Cancelar con aviso tu asistencia a "${meeting.title}"? Faltan más de ${CANCEL_PENALTY_HOURS}hs, así que NO cuenta como falta. Tus compañeros lo verán reflejado.`,
         'Sí, cancelar'
       );
       if (!confirmed) return;
