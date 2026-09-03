@@ -1122,6 +1122,144 @@
             }
         }
 
+        /* FAQ Section */
+        .faq-section {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem 5rem;
+        }
+
+        .faq-container {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .faq-eyebrow {
+            display: flex;
+            align-items: center;
+            gap: 0.45rem;
+            width: fit-content;
+            margin: 0 auto 1rem;
+            padding: 0.35rem 0.8rem;
+            border: 1px solid rgba(79, 70, 229, 0.3);
+            border-radius: 999px;
+            background: rgba(79, 70, 229, 0.1);
+            color: var(--primary);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .faq-eyebrow svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        .faq-container h2 {
+            text-align: center;
+            font-size: 1.6rem;
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+            margin: 0 0 0.6rem;
+        }
+
+        .faq-intro {
+            text-align: center;
+            color: var(--text-light);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            max-width: 480px;
+            margin: 0 auto 2.5rem;
+        }
+
+        .faq-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .faq-item {
+            border: 1px solid var(--border);
+            border-radius: 0.9rem;
+            background: var(--bg-white);
+            overflow: hidden;
+        }
+
+        .faq-item h3 {
+            margin: 0;
+        }
+
+        .faq-question {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            width: 100%;
+            padding: 1.15rem 1.35rem;
+            border: none;
+            background: none;
+            color: var(--text-dark);
+            font: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .faq-chevron {
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            color: var(--text-light);
+            transition: transform 0.3s ease, color 0.3s ease;
+        }
+
+        .faq-item.open .faq-chevron {
+            transform: rotate(180deg);
+            color: var(--primary);
+        }
+
+        /* grid-template-rows 0fr -> 1fr anima a la altura real del contenido
+           sin tener que adivinar un max-height fijo, y sigue funcionando si
+           el texto de alguna respuesta es más largo que las demás. */
+        .faq-answer-wrap {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.35s ease;
+        }
+
+        .faq-item.open .faq-answer-wrap {
+            grid-template-rows: 1fr;
+        }
+
+        .faq-answer-inner {
+            overflow: hidden;
+        }
+
+        .faq-answer-inner p {
+            margin: 0;
+            padding: 0 1.35rem 1.15rem;
+            color: var(--text-light);
+            font-size: 0.9rem;
+            line-height: 1.65;
+        }
+
+        @media (max-width: 640px) {
+            .faq-section {
+                padding: 0 1.25rem 4rem;
+            }
+
+            .faq-question {
+                padding: 1rem;
+                font-size: 0.95rem;
+            }
+
+            .faq-answer-inner p {
+                padding: 0 1rem 1rem;
+            }
+        }
+
         /* CTA Section */
         .cta-section {
             position: relative;
@@ -1935,6 +2073,111 @@
         </div>
     </section>
 
+    <!-- FAQ Section -->
+    <section class="faq-section" id="faq">
+        <div class="faq-container">
+            <p class="faq-eyebrow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                Preguntas Frecuentes
+            </p>
+            <h2>¿Tenés dudas?</h2>
+            <p class="faq-intro">Lo que más nos preguntan closers y equipos antes de sumarse.</p>
+            <div class="faq-list" id="faq-list">
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-1" id="faq-q-1">
+                            <span>¿Qué es Sales Arena Matcher?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-1" role="region" aria-labelledby="faq-q-1">
+                            <p>Coordina las sesiones de práctica de ventas 1:1 de tu equipo: cruza la disponibilidad de cada persona, arma las duplas rotando entre todos y crea automáticamente la videollamada de Google Meet. Vos y tu compañero solo tienen que aparecer.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-2" id="faq-q-2">
+                            <span>¿Cómo arma las duplas para practicar?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-2" role="region" aria-labelledby="faq-q-2">
+                            <p>Cruza los horarios que cada uno cargó (con su propia zona horaria) y prioriza que la sala rote entre todos sus miembros en vez de repetir siempre las mismas parejas. Entre las opciones disponibles, también pesa la confiabilidad de cada persona.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-3" id="faq-q-3">
+                            <span>¿Qué pasa si falto o cancelo una sesión?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-3" role="region" aria-labelledby="faq-q-3">
+                            <p>Podés cancelar con más de 12hs de anticipación sin que cuente como falta. Cancelar más tarde o no presentarte sí cuenta, y llegar a 3 faltas en el mes te deja afuera de los emparejamientos hasta el mes siguiente. Es lo que protege el tiempo de tu compañero.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-4" id="faq-q-4">
+                            <span>¿Alguien más ve lo que respondo sobre mi compañero?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-4" role="region" aria-labelledby="faq-q-4">
+                            <p>El cierre de sesión (lo que alimenta el puntaje de confiabilidad) está sellado: tu compañero nunca ve lo que respondiste, ni antes ni después. Aparte de eso existe una devolución de habilidades, que sí es compartida a propósito: se la mandás vos mismo, apenas terminás, para ayudarlo a mejorar.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-5" id="faq-q-5">
+                            <span>¿Qué permiso de Google me van a pedir?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-5" role="region" aria-labelledby="faq-q-5">
+                            <p>Uno solo: acceso a tu Google Calendar para crear el evento con el Meet de cada sesión confirmada. No leemos el resto de tu calendario ni accedemos al contenido de las videollamadas. Podés ver el detalle completo más arriba, en "Qué permiso de Google usamos y por qué".</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-6" id="faq-q-6">
+                            <span>¿Funciona con equipos en distintos países o zonas horarias?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-6" role="region" aria-labelledby="faq-q-6">
+                            <p>Sí. Cada persona carga su disponibilidad en su propia zona horaria y el sistema hace la conversión automáticamente al armar las duplas y mostrar los horarios. Ya lo usan equipos de distintos países.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="faq-item">
+                    <h3>
+                        <button type="button" class="faq-question" aria-expanded="false" aria-controls="faq-a-7" id="faq-q-7">
+                            <span>¿Cómo consigo una sala para mi equipo?</span>
+                            <svg class="faq-chevron" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="m4.5 7.2 3.793 3.793a1 1 0 0 0 1.414 0L13.5 7.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                    </h3>
+                    <div class="faq-answer-wrap">
+                        <div class="faq-answer-inner" id="faq-a-7" role="region" aria-labelledby="faq-q-7">
+                            <p>Escribinos por mail y te armamos la sala de tu equipo. Encontrás el enlace en el botón de abajo, "Pedir una sala para mi equipo".</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- CTA Section -->
     <section class="cta-section">
         <h2>¿Listo para Mejorar tu Equipo?</h2>
@@ -2088,6 +2331,40 @@
             }, { passive: true });
 
             updateParallax();
+        })();
+    </script>
+
+    <script>
+        (function () {
+            var list = document.getElementById('faq-list');
+            if (!list) {
+                return;
+            }
+
+            var items = Array.prototype.slice.call(list.querySelectorAll('.faq-item'));
+
+            items.forEach(function (item) {
+                var button = item.querySelector('.faq-question');
+                if (!button) {
+                    return;
+                }
+
+                button.addEventListener('click', function () {
+                    var wasOpen = item.classList.contains('open');
+
+                    // Un solo acordeón abierto a la vez: abrir uno cierra el
+                    // resto, así la lista no crece sin control en mobile.
+                    items.forEach(function (other) {
+                        other.classList.remove('open');
+                        other.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+                    });
+
+                    if (!wasOpen) {
+                        item.classList.add('open');
+                        button.setAttribute('aria-expanded', 'true');
+                    }
+                });
+            });
         })();
     </script>
 
