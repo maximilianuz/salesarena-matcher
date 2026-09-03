@@ -443,6 +443,10 @@ export default function App() {
   const [openSkillFeedback, setOpenSkillFeedback] = useState([]);
   const [skillFeedbackTarget, setSkillFeedbackTarget] = useState(null);
   const [skillFeedbackAnswers, setSkillFeedbackAnswers] = useState(null);
+  // Un paso a la vez en vez de las 5 etapas juntas en un scroll largo: se
+  // recorre como la llamada misma. 0 = aprendizaje, 1..5 = una etapa por
+  // paso, 6 = repaso final + "algo más" antes de enviar.
+  const [skillFeedbackStep, setSkillFeedbackStep] = useState(0);
   const [skillFeedbackSubmitting, setSkillFeedbackSubmitting] = useState(false);
   const [feedbackReviewLoading, setFeedbackReviewLoading] = useState(false);
   const feedbackReviewModalRef = useDialogA11y(showFeedbackReviewModal, () => setShowFeedbackReviewModal(false));
@@ -2586,30 +2590,36 @@ export default function App() {
   const SKILL_FEEDBACK_CATEGORIES = [
     {
       key: 'rapport',
+      short: 'Rapport',
       label: 'Rapport / Química',
       hint: '¿Generó conexión y bajó la guardia al arrancar la llamada?'
     },
     {
       key: 'discovery',
+      short: 'Discovery',
       label: 'Descubrimiento / Discovery',
       hint: '¿Indagó tus necesidades y problemas reales, o fue directo a ofrecer?'
     },
     {
       key: 'pitch',
+      short: 'Pitch',
       label: 'Pre-Pitch / Pitch',
       hint: '¿Encuadró la propuesta y habló de resultados, o insistió con características?'
     },
     {
       key: 'objections',
+      short: 'Objeciones',
       label: 'Objeciones',
       hint: '¿Manejó o previno tus objeciones con calma, en vez de reaccionar a la defensiva?'
     },
     {
       key: 'closing',
+      short: 'Cierre',
       label: 'Cierre',
       hint: '¿Terminó asegurando un compromiso concreto (fecha, próximo paso), o quedó todo en el aire?'
     }
   ];
+  const SKILL_RATING_LABEL = { a_mejorar: 'A mejorar', bien: 'Bien', muy_bien: 'Muy bien' };
   const SKILL_RATING_OPTIONS = [
     { v: 'a_mejorar', t: 'A mejorar' },
     { v: 'bien', t: 'Bien' },
@@ -2627,12 +2637,29 @@ export default function App() {
       closing: { rating: '', comment: '' },
       notes: ''
     });
+    setSkillFeedbackStep(0);
   };
   const closeSkillFeedbackForm = () => {
     setSkillFeedbackTarget(null);
     setSkillFeedbackAnswers(null);
+    setSkillFeedbackStep(0);
   };
   const skillFeedbackModalRef = useDialogA11y(!!skillFeedbackTarget, closeSkillFeedbackForm);
+
+  // ¿Puede avanzar desde el paso actual? Solo exige lo de ESE paso: el
+  // aprendizaje en el 0, el rating de la etapa en 1..5. El repaso final (6)
+  // no tiene "siguiente", así que no necesita esta función.
+  const skillFeedbackStepValid = () => {
+    if (!skillFeedbackAnswers) return false;
+    if (skillFeedbackStep === 0) return !!skillFeedbackAnswers.learned;
+    const cat = SKILL_FEEDBACK_CATEGORIES[skillFeedbackStep - 1];
+    return cat ? !!skillFeedbackAnswers[cat.key].rating : true;
+  };
+  const skillFeedbackGoNext = () => {
+    if (!skillFeedbackStepValid()) return;
+    setSkillFeedbackStep(s => Math.min(s + 1, SKILL_FEEDBACK_CATEGORIES.length + 1));
+  };
+  const skillFeedbackGoBack = () => setSkillFeedbackStep(s => Math.max(s - 1, 0));
 
   const submitSkillFeedback = async () => {
     if (!skillFeedbackTarget || !skillFeedbackAnswers) return;
@@ -6398,7 +6425,12 @@ export default function App() {
           Se abre automáticamente al enviar el cierre (submitCloseout), nunca
           por sí sola. A diferencia del cierre, ACÁ SÍ se identifica a quien
           escribe: no es un sobre sellado, es un intercambio. Por eso no hay
-          aviso de privacidad — lo que hay es la aclaración contraria. */}
+          aviso de privacidad — lo que hay es la aclaración contraria.
+
+          Wizard de un paso a la vez en vez de las 5 etapas juntas en un
+          scroll largo: se recorre como la llamada misma, con un stepper que
+          nombra las etapas reales (no es decorativo, es la misma estructura
+          que ya usa la sesión high-ticket). */}
       {skillFeedbackTarget && skillFeedbackAnswers && (
         <div
           role="dialog"
@@ -6416,9 +6448,9 @@ export default function App() {
             ref={skillFeedbackModalRef}
             tabIndex={-1}
             style={{
-              width: '100%', maxWidth: '560px', backgroundColor: 'var(--bg-sidebar)',
+              width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-sidebar)',
               borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column',
-              gap: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
+              gap: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
               boxSizing: 'border-box', maxHeight: '88vh'
             }}
           >
@@ -6426,13 +6458,40 @@ export default function App() {
               <Award size={17} className="section-title-icon" />
               Devolución para {skillFeedbackTarget.partnerName}
             </h3>
-            <p className="closeout-privacy skill-feedback-privacy">
-              <ThumbsUp size={12} /> {skillFeedbackTarget.partnerName} va a ver esto apenas lo envíes, y vos también vas a poder volver a verlo.
-            </p>
 
-            <div className="closeout-questions">
-              <fieldset className="closeout-question">
-                <legend className="closeout-question-label">¿Te sirvió para aprender algo?</legend>
+            {skillFeedbackStep >= 1 && (
+              <div className="skill-feedback-progress">
+                <div className="progress-track">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${(Math.min(skillFeedbackStep, 5) / 5) * 100}%` }}
+                  ></div>
+                </div>
+                <div className="stepper">
+                  {SKILL_FEEDBACK_CATEGORIES.map((cat, i) => {
+                    const nodeStep = i + 1;
+                    const done = skillFeedbackStep > nodeStep || skillFeedbackStep === 6;
+                    const active = skillFeedbackStep === nodeStep;
+                    return (
+                      <div className="stepper-node" key={cat.key}>
+                        <span className={`stepper-dot ${done ? 'done' : ''} ${active ? 'active' : ''}`}>
+                          {done ? <Check size={12} /> : nodeStep}
+                        </span>
+                        <span className={`stepper-label ${active ? 'active' : ''}`}>{cat.short}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {skillFeedbackStep === 0 && (
+              <div className="step-body">
+                <p className="closeout-privacy skill-feedback-privacy">
+                  <ThumbsUp size={12} /> {skillFeedbackTarget.partnerName} va a ver esto apenas lo envíes, y vos también vas a poder volver a verlo.
+                </p>
+                <p className="step-eyebrow">Antes de arrancar</p>
+                <h4 className="step-title">¿Te sirvió para aprender algo?</h4>
                 <div className="closeout-options">
                   {[
                     { v: 'si', t: 'Sí, me llevo algo concreto' },
@@ -6450,12 +6509,20 @@ export default function App() {
                     </button>
                   ))}
                 </div>
-              </fieldset>
+                <p className="closeout-question-hint skill-feedback-defer-hint">
+                  Si preferís hacerlo con más tiempo, podés cerrarla ahora: te la vamos a volver a pedir,
+                  y hasta que la envíes no vas a poder recibir un Role-Play nuevo.
+                </p>
+              </div>
+            )}
 
-              {SKILL_FEEDBACK_CATEGORIES.map(cat => (
-                <fieldset className="closeout-question skill-feedback-category" key={cat.key}>
-                  <legend className="closeout-question-label">{cat.label}</legend>
-                  <p className="closeout-question-hint">{cat.hint}</p>
+            {skillFeedbackStep >= 1 && skillFeedbackStep <= 5 && (() => {
+              const cat = SKILL_FEEDBACK_CATEGORIES[skillFeedbackStep - 1];
+              return (
+                <div className="step-body">
+                  <p className="step-eyebrow">Etapa {skillFeedbackStep} de 5</p>
+                  <h4 className="step-title">{cat.label}</h4>
+                  <p className="step-hint">{cat.hint}</p>
                   <div className="closeout-options">
                     {SKILL_RATING_OPTIONS.map(o => (
                       <button
@@ -6481,43 +6548,92 @@ export default function App() {
                       ...a, [cat.key]: { ...a[cat.key], comment: e.target.value }
                     }))}
                   />
-                </fieldset>
-              ))}
+                </div>
+              );
+            })()}
 
-              <fieldset className="closeout-question skill-feedback-category">
-                <legend className="closeout-question-label">
-                  Algo más para agregar <span className="closeout-optional">(opcional)</span>
-                </legend>
-                <p className="closeout-question-hint">Cualquier otra cosa que quieras contarle y no entró en las 5 etapas de arriba.</p>
-                <textarea
-                  className="closeout-textarea"
-                  rows={3}
-                  maxLength={1000}
-                  placeholder="Por ejemplo: algo puntual de esta sesión, un patrón que ya viste antes, o una sugerencia general."
-                  value={skillFeedbackAnswers.notes}
-                  onChange={(e) => setSkillFeedbackAnswers(a => ({ ...a, notes: e.target.value }))}
-                />
-              </fieldset>
-            </div>
+            {skillFeedbackStep === 6 && (
+              <div className="step-body">
+                <p className="step-eyebrow">Último paso</p>
+                <h4 className="step-title">Repaso antes de enviar</h4>
+                <div className="summary-list">
+                  {SKILL_FEEDBACK_CATEGORIES.map(cat => {
+                    const rating = skillFeedbackAnswers[cat.key].rating;
+                    return (
+                      <div className="summary-row" key={cat.key}>
+                        <span className="summary-row-label">{cat.label}</span>
+                        <span className={`summary-chip skill-rating-${rating} selected`}>
+                          {SKILL_RATING_LABEL[rating]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div>
+                  <p className="closeout-question-hint" style={{ marginBottom: '6px' }}>
+                    Algo más para agregar <span className="closeout-optional">(opcional)</span>
+                  </p>
+                  <textarea
+                    className="closeout-textarea"
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Por ejemplo: algo puntual de esta sesión, un patrón que ya viste antes, o una sugerencia general."
+                    value={skillFeedbackAnswers.notes}
+                    onChange={(e) => setSkillFeedbackAnswers(a => ({ ...a, notes: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
 
-            <p className="closeout-question-hint skill-feedback-defer-hint">
-              Si preferís hacerlo con más tiempo, podés cerrarla ahora: te la vamos a volver a pedir,
-              y hasta que la envíes no vas a poder recibir un Role-Play nuevo.
-            </p>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button type="button" className="btn btn-secondary" onClick={closeSkillFeedbackForm}>
-                Ahora no
-              </button>
-              <button
-                type="button"
-                className="btn btn-indigo"
-                onClick={submitSkillFeedback}
-                disabled={skillFeedbackSubmitting}
-              >
-                {skillFeedbackSubmitting
-                  ? <><span className="spinner" style={{ width: '14px', height: '14px' }}></span> Enviando…</>
-                  : <>Enviar devolución</>}
-              </button>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+              {skillFeedbackStep === 0 ? (
+                <>
+                  <button type="button" className="btn btn-secondary" onClick={closeSkillFeedbackForm}>
+                    Ahora no
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-indigo"
+                    style={{ flex: 1 }}
+                    disabled={!skillFeedbackStepValid()}
+                    onClick={skillFeedbackGoNext}
+                  >
+                    Empezar las 5 etapas
+                  </button>
+                </>
+              ) : skillFeedbackStep <= 5 ? (
+                <>
+                  <button type="button" className="btn btn-secondary" onClick={skillFeedbackGoBack}>
+                    Atrás
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-indigo"
+                    style={{ flex: 1 }}
+                    disabled={!skillFeedbackStepValid()}
+                    onClick={skillFeedbackGoNext}
+                  >
+                    {skillFeedbackStep === 5 ? 'Continuar' : 'Siguiente'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="btn btn-secondary" onClick={skillFeedbackGoBack}>
+                    Atrás
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-indigo"
+                    style={{ flex: 1 }}
+                    onClick={submitSkillFeedback}
+                    disabled={skillFeedbackSubmitting}
+                  >
+                    {skillFeedbackSubmitting
+                      ? <><span className="spinner" style={{ width: '14px', height: '14px' }}></span> Enviando…</>
+                      : <>Enviar devolución</>}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
