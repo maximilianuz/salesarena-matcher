@@ -18,6 +18,8 @@ import {
   isBlockedForLying,
   isCountable,
   getPraiseReceived,
+  getOwedSkillFeedback,
+  isPendingSkillFeedback,
   CLOSEOUT_WINDOW_MS,
   RECIPROCITY_FLOOR,
   VERACITY_FLOOR,
@@ -527,4 +529,39 @@ test('reincidencia: se suma a las mentiras comprobadas, con el mismo piso', () =
   assert.equal(getProvenLies('beto@x.com', closeouts, meetings, attendances, AHORA).length, 1);
   assert.equal(getPatternStrikes('beto@x.com', closeouts, meetings, attendances, AHORA), 1);
   assert.equal(getVeracity('beto@x.com', closeouts, meetings, attendances, AHORA), 0.4);
+});
+
+// --- ENCUESTA 2: FEEDBACK DE HABILIDADES ---
+
+const feedback = (meetingId, autor, sujeto) => ({ meetingId, authorEmail: autor, subjectEmail: sujeto });
+
+test('feedback: se debe cuando el cierre dice que hubo sesión real y todavía no se dio', () => {
+  const closeouts = [cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'completa' })];
+  const owed = getOwedSkillFeedback('ana@x.com', closeouts, [], [cerrada('m1')], AHORA);
+  assert.deepEqual(owed.map(o => o.meetingId), ['m1']);
+  assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, [], [cerrada('m1')], AHORA), true);
+});
+
+test('feedback: no se debe nada si "no se hizo" la sesión', () => {
+  const closeouts = [cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'no_se_hizo' })];
+  assert.deepEqual(getOwedSkillFeedback('ana@x.com', closeouts, [], [cerrada('m1')], AHORA), []);
+  assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, [], [cerrada('m1')], AHORA), false);
+});
+
+test('feedback: se salda apenas se completa, no hace falta esperar nada', () => {
+  const closeouts = [cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'completa' })];
+  const yaDada = [feedback('m1', 'ana@x.com', 'beto@x.com')];
+  assert.deepEqual(getOwedSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), []);
+  assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), false);
+});
+
+test('feedback: solo bloquea a quien debe, nunca a su compañero', () => {
+  const closeouts = [
+    cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'completa' }),
+    cierre('m1', 'beto@x.com', 'ana@x.com', { happened: 'completa' })
+  ];
+  // Solo beto dio su devolución; ana todavía no.
+  const yaDada = [feedback('m1', 'beto@x.com', 'ana@x.com')];
+  assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), true);
+  assert.equal(isPendingSkillFeedback('beto@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), false);
 });
