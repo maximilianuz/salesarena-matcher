@@ -133,6 +133,11 @@ CREATE TABLE IF NOT EXISTS public.session_skill_feedback (
   closing_rating TEXT NOT NULL CHECK (closing_rating IN ('a_mejorar', 'bien', 'muy_bien')),
   closing_comment TEXT CHECK (closing_comment IS NULL OR char_length(btrim(closing_comment)) <= 300),
 
+  -- Campo libre por si algo que le importa a la persona no entra en ninguna
+  -- de las 5 etapas fijas. Totalmente opcional: las etapas son la estructura
+  -- obligatoria, esto es el margen para lo que la estructura no previó.
+  notes TEXT CHECK (notes IS NULL OR char_length(btrim(notes)) <= 500),
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (meeting_id, author_email)
@@ -167,7 +172,8 @@ CREATE OR REPLACE FUNCTION public.submit_skill_feedback(
   p_objections_rating TEXT,
   p_objections_comment TEXT,
   p_closing_rating TEXT,
-  p_closing_comment TEXT
+  p_closing_comment TEXT,
+  p_notes TEXT DEFAULT NULL
 )
 RETURNS public.session_skill_feedback
 LANGUAGE plpgsql
@@ -231,6 +237,7 @@ BEGIN
     pitch_rating, pitch_comment,
     objections_rating, objections_comment,
     closing_rating, closing_comment,
+    notes,
     updated_at
   ) VALUES (
     p_meeting_id, v_room, v_email, v_subject, p_learned,
@@ -239,6 +246,7 @@ BEGIN
     p_pitch_rating, nullif(btrim(left(COALESCE(p_pitch_comment, ''), 300)), ''),
     p_objections_rating, nullif(btrim(left(COALESCE(p_objections_comment, ''), 300)), ''),
     p_closing_rating, nullif(btrim(left(COALESCE(p_closing_comment, ''), 300)), ''),
+    nullif(btrim(left(COALESCE(p_notes, ''), 500)), ''),
     now()
   )
   ON CONFLICT (meeting_id, author_email) DO UPDATE SET
@@ -253,6 +261,7 @@ BEGIN
     objections_comment = EXCLUDED.objections_comment,
     closing_rating     = EXCLUDED.closing_rating,
     closing_comment    = EXCLUDED.closing_comment,
+    notes              = EXCLUDED.notes,
     updated_at         = now()
   RETURNING * INTO v_row;
 
@@ -260,8 +269,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.submit_skill_feedback(uuid, text, text, text, text, text, text, text, text, text, text, text) FROM public;
-GRANT EXECUTE ON FUNCTION public.submit_skill_feedback(uuid, text, text, text, text, text, text, text, text, text, text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.submit_skill_feedback(uuid, text, text, text, text, text, text, text, text, text, text, text, text) FROM public;
+GRANT EXECUTE ON FUNCTION public.submit_skill_feedback(uuid, text, text, text, text, text, text, text, text, text, text, text, text) TO authenticated;
 
 -- ============================================================
 -- 4. QUÉ ENCUESTAS 2 ME FALTAN (esto es lo que bloquea el emparejamiento)
@@ -319,7 +328,8 @@ RETURNS TABLE(
   discovery_rating TEXT, discovery_comment TEXT,
   pitch_rating TEXT, pitch_comment TEXT,
   objections_rating TEXT, objections_comment TEXT,
-  closing_rating TEXT, closing_comment TEXT
+  closing_rating TEXT, closing_comment TEXT,
+  notes TEXT
 )
 LANGUAGE sql
 STABLE
@@ -333,7 +343,8 @@ AS $$
     sf.discovery_rating, sf.discovery_comment,
     sf.pitch_rating, sf.pitch_comment,
     sf.objections_rating, sf.objections_comment,
-    sf.closing_rating, sf.closing_comment
+    sf.closing_rating, sf.closing_comment,
+    sf.notes
   FROM public.session_skill_feedback sf
   JOIN public.meetings m ON m.id = sf.meeting_id
   LEFT JOIN public.members mem
@@ -356,7 +367,8 @@ RETURNS TABLE(
   discovery_rating TEXT, discovery_comment TEXT,
   pitch_rating TEXT, pitch_comment TEXT,
   objections_rating TEXT, objections_comment TEXT,
-  closing_rating TEXT, closing_comment TEXT
+  closing_rating TEXT, closing_comment TEXT,
+  notes TEXT
 )
 LANGUAGE sql
 STABLE
@@ -370,7 +382,8 @@ AS $$
     sf.discovery_rating, sf.discovery_comment,
     sf.pitch_rating, sf.pitch_comment,
     sf.objections_rating, sf.objections_comment,
-    sf.closing_rating, sf.closing_comment
+    sf.closing_rating, sf.closing_comment,
+    sf.notes
   FROM public.session_skill_feedback sf
   JOIN public.meetings m ON m.id = sf.meeting_id
   LEFT JOIN public.members mem

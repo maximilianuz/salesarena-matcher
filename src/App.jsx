@@ -2624,7 +2624,8 @@ export default function App() {
       discovery: { rating: '', comment: '' },
       pitch: { rating: '', comment: '' },
       objections: { rating: '', comment: '' },
-      closing: { rating: '', comment: '' }
+      closing: { rating: '', comment: '' },
+      notes: ''
     });
   };
   const closeSkillFeedbackForm = () => {
@@ -2635,7 +2636,7 @@ export default function App() {
 
   const submitSkillFeedback = async () => {
     if (!skillFeedbackTarget || !skillFeedbackAnswers) return;
-    const { learned, ...categorias } = skillFeedbackAnswers;
+    const { learned, notes, ...categorias } = skillFeedbackAnswers;
     if (!learned) {
       showNotification('Contanos si te sirvió para aprender antes de seguir.', 'error');
       return;
@@ -2665,6 +2666,7 @@ export default function App() {
           objectionsComment: categorias.objections.comment.trim().slice(0, 300) || null,
           closingRating: categorias.closing.rating,
           closingComment: categorias.closing.comment.trim().slice(0, 300) || null,
+          notes: notes.trim().slice(0, 500) || null,
           createdAt: new Date().toISOString()
         }]);
       } else {
@@ -2680,7 +2682,8 @@ export default function App() {
           p_objections_rating: categorias.objections.rating,
           p_objections_comment: categorias.objections.comment.trim() || null,
           p_closing_rating: categorias.closing.rating,
-          p_closing_comment: categorias.closing.comment.trim() || null
+          p_closing_comment: categorias.closing.comment.trim() || null,
+          p_notes: notes.trim() || null
         });
         if (error) {
           showNotification('No pudimos guardar tu devolución. Intentá de nuevo en un momento.', 'error');
@@ -6472,6 +6475,21 @@ export default function App() {
                   />
                 </fieldset>
               ))}
+
+              <fieldset className="closeout-question skill-feedback-category">
+                <legend className="closeout-question-label">
+                  Algo más para agregar <span className="closeout-optional">(opcional)</span>
+                </legend>
+                <p className="closeout-question-hint">Cualquier otra cosa que quieras contarle y no entró en las 5 etapas de arriba.</p>
+                <textarea
+                  className="closeout-textarea"
+                  rows={3}
+                  maxLength={500}
+                  placeholder="Por ejemplo: algo puntual de esta sesión, un patrón que ya viste antes, o una sugerencia general."
+                  value={skillFeedbackAnswers.notes}
+                  onChange={(e) => setSkillFeedbackAnswers(a => ({ ...a, notes: e.target.value }))}
+                />
+              </fieldset>
             </div>
 
             <p className="closeout-question-hint skill-feedback-defer-hint">
