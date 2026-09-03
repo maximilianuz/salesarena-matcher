@@ -105,6 +105,7 @@ import {
   getPatternStrikes,
   getMonthlyLies,
   isBlockedForLying,
+  getOwedSkillFeedback,
   CLOSEOUT_WINDOW_MS,
   MONTHLY_LIES_LIMIT
 } from './closeouts';
@@ -432,6 +433,17 @@ export default function App() {
   const [closeoutTarget, setCloseoutTarget] = useState(null); // el pendiente que se está respondiendo
   const [closeoutAnswers, setCloseoutAnswers] = useState(null);
   const [closeoutSubmitting, setCloseoutSubmitting] = useState(false);
+
+  // --- ENCUESTA 2: FEEDBACK DE HABILIDADES ---
+  // A diferencia del cierre, esto NO está sellado: el destinatario lo ve
+  // enseguida y quien lo escribió también puede volver a verlo. Se encadena
+  // automáticamente al enviar el cierre (closeoutTarget), así que
+  // skillFeedbackTarget usa la misma forma que closeoutTarget en vez de
+  // duplicar la lógica de "cuál es la próxima pendiente".
+  const [openSkillFeedback, setOpenSkillFeedback] = useState([]);
+  const [skillFeedbackTarget, setSkillFeedbackTarget] = useState(null);
+  const [skillFeedbackAnswers, setSkillFeedbackAnswers] = useState(null);
+  const [skillFeedbackSubmitting, setSkillFeedbackSubmitting] = useState(false);
   const [feedbackReviewLoading, setFeedbackReviewLoading] = useState(false);
   const feedbackReviewModalRef = useDialogA11y(showFeedbackReviewModal, () => setShowFeedbackReviewModal(false));
   const pendingFeedbackCount = feedbackReviewList.filter(f => f.status === 'pending').length;
@@ -2312,6 +2324,14 @@ export default function App() {
     try { localStorage.setItem(mockCloseoutKey, JSON.stringify(list)); } catch { /* modo privado */ }
   };
 
+  const mockSkillFeedbackKey = `salesarena-mock-skill-feedback-${currentRoomId}`;
+  const loadMockSkillFeedback = () => {
+    try { return JSON.parse(localStorage.getItem(mockSkillFeedbackKey) || '[]'); } catch { return []; }
+  };
+  const saveMockSkillFeedback = (list) => {
+    try { localStorage.setItem(mockSkillFeedbackKey, JSON.stringify(list)); } catch { /* modo privado */ }
+  };
+
   // Qué cierres me faltan, mi situación y los elogios recibidos.
   //
   // En producción esto son tres RPC: el cliente NUNCA recibe la tabla de
@@ -2363,13 +2383,30 @@ export default function App() {
       setCloseoutPraise(
         getPraiseReceived(email, all, meetings, attendances, now).map(p => p.praise)
       );
+      const skillAll = loadMockSkillFeedback();
+      setOpenSkillFeedback(
+        getOwedSkillFeedback(email, all, skillAll, meetings, now).map(o => {
+          const m = meetings.find(x => x.id === o.meetingId);
+          const otro = attendances.find(a =>
+            a.meetingId === o.meetingId && a.memberEmail.toLowerCase() !== email);
+          const perfil = members.find(x => x.email.toLowerCase() === otro?.memberEmail.toLowerCase());
+          return {
+            meetingId: o.meetingId,
+            startsAt: m?.startsAt,
+            partnerEmail: otro?.memberEmail || '',
+            partnerName: otro?.memberName || perfil?.name || 'Tu compañero',
+            partnerAvatarUrl: perfil?.avatarUrl || null
+          };
+        })
+      );
       return;
     }
 
-    const [pend, standing, praise] = await Promise.all([
+    const [pend, standing, praise, pendSkill] = await Promise.all([
       supabase.rpc('my_open_closeouts'),
       supabase.rpc('my_closeout_standing'),
-      supabase.rpc('my_closeout_praise', { p_limit: 5 })
+      supabase.rpc('my_closeout_praise', { p_limit: 5 }),
+      supabase.rpc('my_open_skill_feedback')
     ]);
     if (!pend.error && pend.data) {
       setOpenCloseouts(pend.data.map(d => ({
@@ -2397,6 +2434,15 @@ export default function App() {
       } : null);
     }
     if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
+    if (!pendSkill.error && pendSkill.data) {
+      setOpenSkillFeedback(pendSkill.data.map(d => ({
+        meetingId: d.meeting_id,
+        startsAt: d.starts_at,
+        partnerEmail: d.partner_email,
+        partnerName: d.partner_name || 'Tu compañero',
+        partnerAvatarUrl: d.partner_avatar_url
+      })));
+    }
   };
 
   // `members` entra en las dependencias porque el nombre y la foto del compañero
@@ -2449,7 +2495,7 @@ export default function App() {
   const openCloseoutForm = (pendiente) => {
     setCloseoutTarget(pendiente);
     setCloseoutAnswers({
-      happened: '', engagement: '', learned: '', cordial: true, concern: '', praise: ''
+      happened: '', engagement: '', cordial: true, concern: ''
     });
   };
   const closeCloseoutForm = () => {
@@ -2460,9 +2506,9 @@ export default function App() {
 
   const submitCloseout = async () => {
     if (!closeoutTarget || !closeoutAnswers) return;
-    const { happened, engagement, learned, cordial, concern, praise } = closeoutAnswers;
-    if (!happened || !engagement || !learned) {
-      showNotification('Respondé las tres primeras preguntas para poder cerrar la sesión.', 'error');
+    const { happened, engagement, cordial, concern } = closeoutAnswers;
+    if (!happened || !engagement) {
+      showNotification('Respondé las dos primeras preguntas para poder cerrar la sesión.', 'error');
       return;
     }
     if (!cordial && !concern.trim()) {
@@ -2483,9 +2529,8 @@ export default function App() {
           meetingId: closeoutTarget.meetingId,
           authorEmail: currentUser.email.toLowerCase(),
           subjectEmail: closeoutTarget.partnerEmail.toLowerCase(),
-          happened, engagement, learned, cordial,
+          happened, engagement, cordial,
           concern: concern.trim() || null,
-          praise: praise.trim().slice(0, 240) || null,
           createdAt: new Date().toISOString()
         }]);
       } else {
@@ -2493,10 +2538,8 @@ export default function App() {
           p_meeting_id: closeoutTarget.meetingId,
           p_happened: happened,
           p_engagement: engagement,
-          p_learned: learned,
           p_cordial: cordial,
-          p_concern: concern.trim() || null,
-          p_praise: praise.trim() || null
+          p_concern: concern.trim() || null
         });
         if (error) {
           const raw = `${error.message || ''} ${error.details || ''}`;
@@ -2515,6 +2558,7 @@ export default function App() {
           return;
         }
       }
+      const pendienteCerrado = closeoutTarget;
       closeCloseoutForm();
       // Si el cierre corrigió una ausencia mal puesta por el barrido, la
       // asistencia local quedó vieja: se vuelve a leer para que la persona vea
@@ -2523,8 +2567,135 @@ export default function App() {
       showNotification('¡Gracias! Tu compañero no ve lo que respondiste.', 'success');
       await loadCloseoutState();
       setRoomDataVersion(v => v + 1);
+      // Encuesta 2, encadenada en el momento: sin sesión real ('no_se_hizo')
+      // no hay nada que evaluar del compañero.
+      if (happened !== 'no_se_hizo') {
+        openSkillFeedbackForm(pendienteCerrado);
+      }
     } finally {
       setCloseoutSubmitting(false);
+    }
+  };
+
+  // --- ENCUESTA 2: FEEDBACK DE HABILIDADES ---
+  // Las 5 etapas de una sesión high-ticket, en el orden en que ocurren en la
+  // llamada: rapport primero, cierre al final, objeciones entre el pitch y
+  // el cierre (es ahí donde típicamente aparecen). No puntúan nada: son
+  // devolución pura, visible de inmediato para el destinatario y para quien
+  // la escribió.
+  const SKILL_FEEDBACK_CATEGORIES = [
+    {
+      key: 'rapport',
+      label: 'Rapport / Química',
+      hint: '¿Generó conexión y bajó la guardia al arrancar la llamada?'
+    },
+    {
+      key: 'discovery',
+      label: 'Descubrimiento / Discovery',
+      hint: '¿Indagó tus necesidades y problemas reales, o fue directo a ofrecer?'
+    },
+    {
+      key: 'pitch',
+      label: 'Pre-Pitch / Pitch',
+      hint: '¿Encuadró la propuesta y habló de resultados, o insistió con características?'
+    },
+    {
+      key: 'objections',
+      label: 'Objeciones',
+      hint: '¿Manejó o previno tus objeciones con calma, en vez de reaccionar a la defensiva?'
+    },
+    {
+      key: 'closing',
+      label: 'Cierre',
+      hint: '¿Terminó asegurando un compromiso concreto (fecha, próximo paso), o quedó todo en el aire?'
+    }
+  ];
+  const SKILL_RATING_OPTIONS = [
+    { v: 'a_mejorar', t: 'A mejorar' },
+    { v: 'bien', t: 'Bien' },
+    { v: 'muy_bien', t: 'Muy bien' }
+  ];
+
+  const openSkillFeedbackForm = (pendiente) => {
+    setSkillFeedbackTarget(pendiente);
+    setSkillFeedbackAnswers({
+      learned: '',
+      rapport: { rating: '', comment: '' },
+      discovery: { rating: '', comment: '' },
+      pitch: { rating: '', comment: '' },
+      objections: { rating: '', comment: '' },
+      closing: { rating: '', comment: '' },
+      notes: ''
+    });
+  };
+  const closeSkillFeedbackForm = () => {
+    setSkillFeedbackTarget(null);
+    setSkillFeedbackAnswers(null);
+  };
+  const skillFeedbackModalRef = useDialogA11y(!!skillFeedbackTarget, closeSkillFeedbackForm);
+
+  const submitSkillFeedback = async () => {
+    if (!skillFeedbackTarget || !skillFeedbackAnswers) return;
+    const { learned, notes, ...categorias } = skillFeedbackAnswers;
+    if (!learned) {
+      showNotification('Contanos si te sirvió para aprender antes de seguir.', 'error');
+      return;
+    }
+    const faltante = SKILL_FEEDBACK_CATEGORIES.find(c => !categorias[c.key].rating);
+    if (faltante) {
+      showNotification(`Te falta calificar "${faltante.label}" para poder enviarlo.`, 'error');
+      return;
+    }
+
+    setSkillFeedbackSubmitting(true);
+    try {
+      if (useMockDb) {
+        const all = loadMockSkillFeedback();
+        saveMockSkillFeedback([...all, {
+          meetingId: skillFeedbackTarget.meetingId,
+          authorEmail: currentUser.email.toLowerCase(),
+          subjectEmail: skillFeedbackTarget.partnerEmail.toLowerCase(),
+          learned,
+          rapportRating: categorias.rapport.rating,
+          rapportComment: categorias.rapport.comment.trim().slice(0, 300) || null,
+          discoveryRating: categorias.discovery.rating,
+          discoveryComment: categorias.discovery.comment.trim().slice(0, 300) || null,
+          pitchRating: categorias.pitch.rating,
+          pitchComment: categorias.pitch.comment.trim().slice(0, 300) || null,
+          objectionsRating: categorias.objections.rating,
+          objectionsComment: categorias.objections.comment.trim().slice(0, 300) || null,
+          closingRating: categorias.closing.rating,
+          closingComment: categorias.closing.comment.trim().slice(0, 300) || null,
+          notes: notes.trim().slice(0, 1000) || null,
+          createdAt: new Date().toISOString()
+        }]);
+      } else {
+        const { error } = await supabase.rpc('submit_skill_feedback', {
+          p_meeting_id: skillFeedbackTarget.meetingId,
+          p_learned: learned,
+          p_rapport_rating: categorias.rapport.rating,
+          p_rapport_comment: categorias.rapport.comment.trim() || null,
+          p_discovery_rating: categorias.discovery.rating,
+          p_discovery_comment: categorias.discovery.comment.trim() || null,
+          p_pitch_rating: categorias.pitch.rating,
+          p_pitch_comment: categorias.pitch.comment.trim() || null,
+          p_objections_rating: categorias.objections.rating,
+          p_objections_comment: categorias.objections.comment.trim() || null,
+          p_closing_rating: categorias.closing.rating,
+          p_closing_comment: categorias.closing.comment.trim() || null,
+          p_notes: notes.trim() || null
+        });
+        if (error) {
+          showNotification('No pudimos guardar tu devolución. Intentá de nuevo en un momento.', 'error');
+          return;
+        }
+      }
+      const nombre = skillFeedbackTarget.partnerName;
+      closeSkillFeedbackForm();
+      showNotification(`Le enviamos tu devolución a ${nombre}. Ya podés recibir tu próximo Role-Play.`, 'success');
+      await loadCloseoutState();
+    } finally {
+      setSkillFeedbackSubmitting(false);
     }
   };
 
@@ -4021,7 +4192,7 @@ export default function App() {
                   panel no. Antes convivían con todo lo demás al mismo peso
                   visual y quedaban terceros y cuartos en una pila de ocho
                   tarjetas iguales. La franja solo existe si hay algo adentro. */}
-              {(openCloseouts.length > 0 || pendingReports.filter(({ meeting }) =>
+              {(openCloseouts.length > 0 || openSkillFeedback.length > 0 || pendingReports.filter(({ meeting }) =>
                 !openCloseouts.some(c => c.meetingId === meeting.id)).length > 0) && (
                 <div className="dash-urgent">
                   <div className="dash-urgent-label">
@@ -4045,12 +4216,43 @@ export default function App() {
                             Cerrá tu Role-Play con <strong>{p.partnerName}</strong>
                           </div>
                           <div className="attendance-prompt-meta">
-                            <ClipboardCheck size={12} /> 4 preguntas · tenés tiempo hasta {closeoutDeadlineLabel(p.closesAt)}
+                            <ClipboardCheck size={12} /> 3 preguntas · tenés tiempo hasta {closeoutDeadlineLabel(p.closesAt)}
                           </div>
                         </div>
                       </div>
                       <div className="attendance-prompt-actions">
                         <button type="button" className="btn btn-indigo closeout-prompt-btn" onClick={() => openCloseoutForm(p)}>
+                          Responder
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ENCUESTA 2 PENDIENTE (feedback de habilidades).
+                  Sin esto no entra en la próxima corrida de weekly-matcher: es
+                  la deuda que hay que saldar para volver a recibir un
+                  Role-Play, así que se destaca aparte del cierre. */}
+              {openSkillFeedback.length > 0 && (
+                <div className="attendance-prompts">
+                  {openSkillFeedback.map(p => (
+                    <div className="closeout-prompt-card skill-feedback-prompt-card glass" key={p.meetingId}>
+                      <div className="attendance-prompt-info">
+                        <div className="attendance-prompt-avatar" style={avatarStyle(p.partnerName)}>
+                          <AvatarPhoto avatarUrl={p.partnerAvatarUrl}>{getInitials(p.partnerName)}</AvatarPhoto>
+                        </div>
+                        <div>
+                          <div className="attendance-prompt-question">
+                            Devolución para <strong>{p.partnerName}</strong> pendiente
+                          </div>
+                          <div className="attendance-prompt-meta">
+                            <Award size={12} /> No vas a recibir un Role-Play nuevo hasta enviarla
+                          </div>
+                        </div>
+                      </div>
+                      <div className="attendance-prompt-actions">
+                        <button type="button" className="btn btn-indigo closeout-prompt-btn" onClick={() => openSkillFeedbackForm(p)}>
                           Responder
                         </button>
                       </div>
@@ -6086,8 +6288,8 @@ export default function App() {
               Cierre de tu Role-Play con {closeoutTarget.partnerName}
             </h3>
             <p className="closeout-privacy">
-              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver nunca lo que respondas.
-              Lo único que se comparte es el elogio final, y recién 48hs después de la reunión.
+              <Lock size={12} /> {closeoutTarget.partnerName} no va a ver nunca lo que respondas acá.
+              Esto es solo para el puntaje; la devolución de habilidades es aparte y esa sí se comparte.
             </p>
 
             <div className="closeout-questions">
@@ -6114,15 +6316,6 @@ export default function App() {
                     { v: 'preparado', t: 'Preparado, sostuvo el Role-Play' },
                     { v: 'a_medias', t: 'A medias' },
                     { v: 'no_participo', t: 'No participó en serio' }
-                  ]
-                },
-                {
-                  key: 'learned',
-                  label: '¿Te sirvió para aprender algo?',
-                  options: [
-                    { v: 'si', t: 'Sí, me llevo algo concreto' },
-                    { v: 'mas_o_menos', t: 'Más o menos' },
-                    { v: 'no', t: 'No' }
                   ]
                 }
               ].map(q => (
@@ -6176,39 +6369,154 @@ export default function App() {
                   />
                 )}
               </fieldset>
-
-              <fieldset className="closeout-question">
-                <legend className="closeout-question-label">
-                  <ThumbsUp size={12} /> Una cosa que rescatás de tu compañero <span className="closeout-optional">(opcional)</span>
-                </legend>
-                <textarea
-                  className="closeout-textarea"
-                  rows={2}
-                  maxLength={240}
-                  placeholder="Esto sí se lo vamos a mostrar, cuando los dos hayan cerrado."
-                  value={closeoutAnswers.praise}
-                  onChange={(e) => setCloseoutAnswers(a => ({ ...a, praise: e.target.value }))}
-                />
-              </fieldset>
             </div>
 
             {/* "Enviar cierre" y no "Cerrar sesión": ese texto se confunde con
                 salir de la cuenta, que además es un botón real del menú.
+                Solo esta opción a propósito: no hay "ahora no" que compita
+                con la única acción que importa acá.
                 flexShrink 0: el cuerpo de preguntas scrollea, este pie no se
                 comprime — en mobile con el teclado abierto quedaba aplastado. */}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button type="button" className="btn btn-secondary" onClick={closeCloseoutForm}>
-                Ahora no
-              </button>
+            <div style={{ display: 'flex', flexShrink: 0 }}>
               <button
                 type="button"
                 className="btn btn-indigo"
+                style={{ width: '100%' }}
                 onClick={submitCloseout}
                 disabled={closeoutSubmitting}
               >
                 {closeoutSubmitting
                   ? <><span className="spinner" style={{ width: '14px', height: '14px' }}></span> Guardando…</>
                   : <>Enviar cierre</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ENCUESTA 2: FEEDBACK DE HABILIDADES.
+          Se abre automáticamente al enviar el cierre (submitCloseout), nunca
+          por sí sola. A diferencia del cierre, ACÁ SÍ se identifica a quien
+          escribe: no es un sobre sellado, es un intercambio. Por eso no hay
+          aviso de privacidad — lo que hay es la aclaración contraria. */}
+      {skillFeedbackTarget && skillFeedbackAnswers && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="skill-feedback-title"
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px'
+          }}
+        >
+          <div
+            className="glass closeout-modal skill-feedback-modal"
+            ref={skillFeedbackModalRef}
+            tabIndex={-1}
+            style={{
+              width: '100%', maxWidth: '560px', backgroundColor: 'var(--bg-sidebar)',
+              borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column',
+              gap: '14px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)', border: '1px solid var(--border-color)',
+              boxSizing: 'border-box', maxHeight: '88vh'
+            }}
+          >
+            <h3 className="section-title" id="skill-feedback-title">
+              <Award size={17} className="section-title-icon" />
+              Devolución para {skillFeedbackTarget.partnerName}
+            </h3>
+            <p className="closeout-privacy skill-feedback-privacy">
+              <ThumbsUp size={12} /> {skillFeedbackTarget.partnerName} va a ver esto apenas lo envíes, y vos también vas a poder volver a verlo.
+            </p>
+
+            <div className="closeout-questions">
+              <fieldset className="closeout-question">
+                <legend className="closeout-question-label">¿Te sirvió para aprender algo?</legend>
+                <div className="closeout-options">
+                  {[
+                    { v: 'si', t: 'Sí, me llevo algo concreto' },
+                    { v: 'mas_o_menos', t: 'Más o menos' },
+                    { v: 'no', t: 'No' }
+                  ].map(o => (
+                    <button
+                      type="button"
+                      key={o.v}
+                      className={`closeout-option ${skillFeedbackAnswers.learned === o.v ? 'selected' : ''}`}
+                      aria-pressed={skillFeedbackAnswers.learned === o.v}
+                      onClick={() => setSkillFeedbackAnswers(a => ({ ...a, learned: o.v }))}
+                    >
+                      {o.t}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {SKILL_FEEDBACK_CATEGORIES.map(cat => (
+                <fieldset className="closeout-question skill-feedback-category" key={cat.key}>
+                  <legend className="closeout-question-label">{cat.label}</legend>
+                  <p className="closeout-question-hint">{cat.hint}</p>
+                  <div className="closeout-options">
+                    {SKILL_RATING_OPTIONS.map(o => (
+                      <button
+                        type="button"
+                        key={o.v}
+                        className={`closeout-option skill-rating-${o.v} ${skillFeedbackAnswers[cat.key].rating === o.v ? 'selected' : ''}`}
+                        aria-pressed={skillFeedbackAnswers[cat.key].rating === o.v}
+                        onClick={() => setSkillFeedbackAnswers(a => ({
+                          ...a, [cat.key]: { ...a[cat.key], rating: o.v }
+                        }))}
+                      >
+                        {o.t}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    className="closeout-textarea"
+                    rows={2}
+                    maxLength={300}
+                    placeholder="Algo concreto que haría distinto, o que le funcionó (opcional)"
+                    value={skillFeedbackAnswers[cat.key].comment}
+                    onChange={(e) => setSkillFeedbackAnswers(a => ({
+                      ...a, [cat.key]: { ...a[cat.key], comment: e.target.value }
+                    }))}
+                  />
+                </fieldset>
+              ))}
+
+              <fieldset className="closeout-question skill-feedback-category">
+                <legend className="closeout-question-label">
+                  Algo más para agregar <span className="closeout-optional">(opcional)</span>
+                </legend>
+                <p className="closeout-question-hint">Cualquier otra cosa que quieras contarle y no entró en las 5 etapas de arriba.</p>
+                <textarea
+                  className="closeout-textarea"
+                  rows={3}
+                  maxLength={1000}
+                  placeholder="Por ejemplo: algo puntual de esta sesión, un patrón que ya viste antes, o una sugerencia general."
+                  value={skillFeedbackAnswers.notes}
+                  onChange={(e) => setSkillFeedbackAnswers(a => ({ ...a, notes: e.target.value }))}
+                />
+              </fieldset>
+            </div>
+
+            <p className="closeout-question-hint skill-feedback-defer-hint">
+              Si preferís hacerlo con más tiempo, podés cerrarla ahora: te la vamos a volver a pedir,
+              y hasta que la envíes no vas a poder recibir un Role-Play nuevo.
+            </p>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexShrink: 0 }}>
+              <button type="button" className="btn btn-secondary" onClick={closeSkillFeedbackForm}>
+                Ahora no
+              </button>
+              <button
+                type="button"
+                className="btn btn-indigo"
+                onClick={submitSkillFeedback}
+                disabled={skillFeedbackSubmitting}
+              >
+                {skillFeedbackSubmitting
+                  ? <><span className="spinner" style={{ width: '14px', height: '14px' }}></span> Enviando…</>
+                  : <>Enviar devolución</>}
               </button>
             </div>
           </div>

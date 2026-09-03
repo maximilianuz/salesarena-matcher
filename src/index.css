@@ -1241,6 +1241,74 @@ html.dark .view-header {
   box-sizing: border-box;
 }
 
+/* =========================================
+   ENCUESTA 2: FEEDBACK DE HABILIDADES
+   =========================================
+   A diferencia del cierre (sellado, verde = "esto queda a salvo"), acá el
+   color es el primario: la señal es "esto se comparte", no "esto se
+   protege". Se encadena tras el cierre y bloquea el próximo emparejamiento
+   hasta que se envía. */
+
+.skill-feedback-modal {
+  max-width: 560px;
+}
+
+.skill-feedback-privacy {
+  background-color: rgba(94, 92, 230, 0.1);
+  border-color: rgba(94, 92, 230, 0.3);
+}
+
+.skill-feedback-privacy svg {
+  color: var(--color-primary);
+}
+
+/* Separador sutil entre categorías: son 5 seguidas y sin nada que las
+   distinga se leen como un bloque único de texto. */
+.skill-feedback-category {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.skill-feedback-category:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+/* El rating se lee de un vistazo por color, sin depender solo del texto:
+   ámbar = a mejorar, gris = bien (neutro, no es una alarma), verde = muy
+   bien. Mismo verde que ya usa el resto de la app para "todo en orden". */
+.closeout-option.skill-rating-a_mejorar.selected {
+  border-color: var(--color-warning);
+  background-color: var(--color-warning);
+  color: #1a1a1a;
+}
+
+.closeout-option.skill-rating-bien.selected {
+  border-color: var(--text-muted);
+  background-color: var(--text-muted);
+  color: #fff;
+}
+
+.closeout-option.skill-rating-muy_bien.selected {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: #06240f;
+}
+
+.skill-feedback-defer-hint {
+  margin: 0;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* La tarjeta pendiente de la Encuesta 2 usa ámbar (advertencia), no el
+   primario del cierre: a diferencia de ese, ESTA es la que te deja afuera
+   del próximo armado de duplas si no se responde. */
+.skill-feedback-prompt-card {
+  border-color: rgba(255, 159, 10, 0.35);
+  border-left-color: var(--color-warning);
+}
+
 /* --- Tarjeta de credibilidad propia --- */
 .credibility-card {
   margin-bottom: 24px;

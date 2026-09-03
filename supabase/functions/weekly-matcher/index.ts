@@ -4,11 +4,14 @@
 // cada hora. En cada corrida, por sala:
 //   1. Expira propuestas 'propuesto' cuyo respond_by ya pasó (nadie confirmó
 //      con 4hs de antelación) → esos miembros vuelven al pool para REASIGNAR.
-//   2. Excluye del pool a los miembros BLOQUEADOS, hasta el 1ero del mes
-//      siguiente: 3+ faltas (no-show + cancelación tardía) dentro del mes
-//      calendario, o 2 mentiras comprobadas en el cierre de sesión (dijeron que
-//      la sesión no se hizo mientras el registro de ingreso al Meet mostraba que
-//      los dos habían entrado).
+//   2. Excluye del pool a los miembros BLOQUEADOS: 3+ faltas (no-show +
+//      cancelación tardía) dentro del mes calendario, o 2 mentiras comprobadas
+//      en el cierre de sesión (dijeron que la sesión no se hizo mientras el
+//      registro de ingreso al Meet mostraba que los dos habían entrado) —
+//      ambos se recuperan recién el 1ero del mes siguiente. También queda
+//      afuera quien tiene pendiente la Encuesta 2 (feedback de habilidades) de
+//      una sesión ya cerrada: ese bloqueo se levanta apenas la completa, sin
+//      esperar al mes que viene.
 //   3. Toma los miembros activos SIN propuesta viva esta semana y los empareja
 //      1:1 con criterio ANTI-AMIGUISMO: prioriza duplas que menos veces se
 //      juntaron (rotación "todos con todos"), luego mayor confiabilidad y luego
@@ -663,6 +666,23 @@ Deno.serve(async (req) => {
         if (cuando.filter(ms => ms >= monthStartMs).length >= MONTHLY_LIES_LIMIT) {
           blocked.add(email);
         }
+      }
+
+      // ENCUESTA 2 PENDIENTE (feedback de habilidades). Es el único bloqueo que
+      // no espera al mes que viene: se levanta apenas la persona completa la
+      // devolución que debía. Sin esto alguien podría recibir sesión tras
+      // sesión sin nunca devolverle nada a sus compañeros — el objetivo es que
+      // el intercambio sea win-win. Debe coincidir con getOwedSkillFeedback en
+      // src/closeouts.js.
+      const { data: skillRows } = await supabase
+        .from('session_skill_feedback')
+        .select('meeting_id, author_email')
+        .eq('room_id', roomId);
+      const yaDioFeedback = new Set((skillRows || []).map(r => `${r.meeting_id}|${r.author_email.toLowerCase()}`));
+      for (const c of closeoutRows || []) {
+        if (c.happened === 'no_se_hizo') continue;
+        const key = `${c.meeting_id}|${c.author_email.toLowerCase()}`;
+        if (!yaDioFeedback.has(key)) blocked.add(c.author_email.toLowerCase());
       }
 
       // Lo ÚNICO que bloquea a una dupla para toda la semana es un RECHAZO:

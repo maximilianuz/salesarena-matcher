@@ -32,6 +32,17 @@ import { RELIABILITY_WINDOW_DAYS, monthStartOf } from './reliability.js';
 // es la que se puede cruzar entre las dos respuestas.
 export const HAPPENED = ['completa', 'cortada', 'no_se_hizo'];
 
+// Las 5 categorías de la Encuesta 2 (feedback de habilidades), agrupando el
+// framework de ventas en lo que un compañero puede evaluar después de UNA
+// sola llamada. Cada una es un rating de 3 niveles + comentario libre.
+// A diferencia del cierre, esta encuesta NO puntúa nada: es devolución pura,
+// visible de inmediato para quien la recibe y para quien la escribió.
+// Las 5 etapas de una sesión high-ticket, en el orden en que ocurren en la
+// llamada: rapport primero, cierre al final, objeciones entre el pitch y el
+// cierre (es ahí donde típicamente aparecen).
+export const SKILL_CATEGORIES = ['rapport', 'discovery', 'pitch', 'objections', 'closing'];
+export const SKILL_RATING = ['a_mejorar', 'bien', 'muy_bien'];
+
 // ¿Cómo participó la otra persona? Es la pregunta que mueve el compromiso.
 export const ENGAGEMENT_VALUE = {
   preparado: 1,
@@ -344,3 +355,30 @@ export const getPraiseReceived = (email, closeouts, meetings, attendances = [], 
   }
   return out.sort((a, b) => b.when - a.when);
 };
+
+// Encuesta 2 que le TOCA responder: cerró la sesión (Encuesta 1) diciendo que
+// hubo sesión real (no 'no_se_hizo'), y todavía no completó la devolución de
+// habilidades sobre esa reunión. Sin ventana de vencimiento a propósito: la
+// deuda no prescribe, porque lo que hace que se salde es completarla, no que
+// pase el tiempo.
+export const getOwedSkillFeedback = (email, closeouts, skillFeedbacks, meetings, now = Date.now()) => {
+  const yaDio = new Set(
+    skillFeedbacks
+      .filter(f => sameEmail(f.authorEmail, email))
+      .map(f => f.meetingId)
+  );
+  return closeouts
+    .filter(c => sameEmail(c.authorEmail, email) && c.happened !== 'no_se_hizo')
+    .filter(c => !yaDio.has(c.meetingId))
+    .map(c => ({ meetingId: c.meetingId, when: meetingTimeOf(c.meetingId, meetings) }))
+    .filter(o => !Number.isNaN(o.when) && o.when <= now)
+    .sort((a, b) => a.when - b.when);
+};
+
+// ¿Queda fuera del próximo armado de duplas por no haber devuelto feedback de
+// alguna sesión ya cerrada? Es el único bloqueo del sistema que se levanta
+// apenas la persona actúa, sin esperar reloj ni mes calendario: el objetivo no
+// es sancionar, es que el intercambio sea win-win — quien recibe una sesión
+// nueva es porque también devolvió la que le tocaba.
+export const isPendingSkillFeedback = (email, closeouts, skillFeedbacks, meetings, now = Date.now()) =>
+  getOwedSkillFeedback(email, closeouts, skillFeedbacks, meetings, now).length > 0;
