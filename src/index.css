@@ -1245,7 +1245,7 @@ html.dark .view-header {
    hasta que se envía. */
 
 .skill-feedback-modal {
-  max-width: 560px;
+  max-width: 520px;
 }
 
 .skill-feedback-privacy {
@@ -1257,34 +1257,24 @@ html.dark .view-header {
   color: var(--color-primary);
 }
 
-/* Separador sutil entre categorías: son 5 seguidas y sin nada que las
-   distinga se leen como un bloque único de texto. */
-.skill-feedback-category {
-  padding-top: 14px;
-  border-top: 1px solid var(--border-color);
-}
-
-.skill-feedback-category:first-of-type {
-  padding-top: 0;
-  border-top: none;
-}
-
 /* El rating se lee de un vistazo por color, sin depender solo del texto:
    ámbar = a mejorar, gris = bien (neutro, no es una alarma), verde = muy
-   bien. Mismo verde que ya usa el resto de la app para "todo en orden". */
-.closeout-option.skill-rating-a_mejorar.selected {
+   bien. Mismo verde que ya usa el resto de la app para "todo en orden".
+   Se aplica tanto a los botones de rating como a los chips del resumen
+   final, por eso el selector no está atado a .closeout-option. */
+.skill-rating-a_mejorar.selected {
   border-color: var(--color-warning);
   background-color: var(--color-warning);
   color: #1a1a1a;
 }
 
-.closeout-option.skill-rating-bien.selected {
+.skill-rating-bien.selected {
   border-color: var(--text-muted);
   background-color: var(--text-muted);
   color: #fff;
 }
 
-.closeout-option.skill-rating-muy_bien.selected {
+.skill-rating-muy_bien.selected {
   border-color: var(--color-accent);
   background-color: var(--color-accent);
   color: #06240f;
@@ -1294,6 +1284,166 @@ html.dark .view-header {
   margin: 0;
   padding-top: 4px;
   border-top: 1px solid var(--border-color);
+}
+
+/* =========================================
+   ENCUESTA 2: WIZARD PASO A PASO
+   =========================================
+   Un paso a la vez en vez de las 5 etapas juntas en un scroll largo: se
+   recorre como la llamada misma. El stepper de abajo nombra las etapas
+   reales -- no es decoración, es el mismo mapa que ya usa la sesión
+   high-ticket, así que sirve como estructura y no solo como progreso. */
+
+.progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background-color: var(--border-color);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background-color: var(--color-primary);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stepper {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.stepper-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.stepper-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  background-color: var(--bg-sidebar);
+  transition: all 0.25s ease;
+}
+
+.stepper-dot.active {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: #fff;
+  transform: scale(1.12);
+}
+
+.stepper-dot.done {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: #06240f;
+}
+
+.stepper-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.stepper-label.active {
+  color: var(--text-main);
+}
+
+/* Cada paso entra con un fade sutil: es lo que hace que avanzar SE SIENTA
+   como un paso nuevo y no como un simple cambio de texto. */
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  animation: skillStepIn 0.28s ease;
+  overflow-y: auto;
+}
+
+@keyframes skillStepIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-body { animation: none; }
+  .progress-fill, .stepper-dot { transition: none; }
+}
+
+.step-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.step-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.step-hint {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* Repaso final: recién acá se ven las 5 etapas juntas, ya contestadas --
+   durante el wizard se ve una por vez. */
+.summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+
+.summary-row-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.summary-chip {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  flex-shrink: 0;
 }
 
 /* La tarjeta pendiente de la Encuesta 2 usa ámbar (advertencia), no el
