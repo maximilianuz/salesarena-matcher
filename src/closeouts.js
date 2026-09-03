@@ -37,7 +37,10 @@ export const HAPPENED = ['completa', 'cortada', 'no_se_hizo'];
 // sola llamada. Cada una es un rating de 3 niveles + comentario libre.
 // A diferencia del cierre, esta encuesta NO puntúa nada: es devolución pura,
 // visible de inmediato para quien la recibe y para quien la escribió.
-export const SKILL_CATEGORIES = ['discovery', 'tone', 'persuasion', 'authority', 'framing'];
+// Las 5 etapas de una sesión high-ticket, en el orden en que ocurren en la
+// llamada: rapport primero, cierre al final, objeciones entre el pitch y el
+// cierre (es ahí donde típicamente aparecen).
+export const SKILL_CATEGORIES = ['rapport', 'discovery', 'pitch', 'objections', 'closing'];
 export const SKILL_RATING = ['a_mejorar', 'bien', 'muy_bien'];
 
 // ¿Cómo participó la otra persona? Es la pregunta que mueve el compromiso.

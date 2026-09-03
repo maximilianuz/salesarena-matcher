@@ -119,18 +119,19 @@ CREATE TABLE IF NOT EXISTS public.session_skill_feedback (
   -- Recuperado del cierre viejo: no puntúa, es agregado para la sala.
   learned TEXT NOT NULL CHECK (learned IN ('si', 'mas_o_menos', 'no')),
 
-  -- Las 5 categorías del framework de ventas. Cada una es un rating de 3
-  -- niveles + comentario libre opcional para hacerlo accionable.
+  -- Las 5 etapas de una sesión high-ticket, en el orden en que ocurren en la
+  -- llamada. Cada una es un rating de 3 niveles + comentario libre opcional
+  -- para hacerlo accionable.
+  rapport_rating TEXT NOT NULL CHECK (rapport_rating IN ('a_mejorar', 'bien', 'muy_bien')),
+  rapport_comment TEXT CHECK (rapport_comment IS NULL OR char_length(btrim(rapport_comment)) <= 300),
   discovery_rating TEXT NOT NULL CHECK (discovery_rating IN ('a_mejorar', 'bien', 'muy_bien')),
   discovery_comment TEXT CHECK (discovery_comment IS NULL OR char_length(btrim(discovery_comment)) <= 300),
-  tone_rating TEXT NOT NULL CHECK (tone_rating IN ('a_mejorar', 'bien', 'muy_bien')),
-  tone_comment TEXT CHECK (tone_comment IS NULL OR char_length(btrim(tone_comment)) <= 300),
-  persuasion_rating TEXT NOT NULL CHECK (persuasion_rating IN ('a_mejorar', 'bien', 'muy_bien')),
-  persuasion_comment TEXT CHECK (persuasion_comment IS NULL OR char_length(btrim(persuasion_comment)) <= 300),
-  authority_rating TEXT NOT NULL CHECK (authority_rating IN ('a_mejorar', 'bien', 'muy_bien')),
-  authority_comment TEXT CHECK (authority_comment IS NULL OR char_length(btrim(authority_comment)) <= 300),
-  framing_rating TEXT NOT NULL CHECK (framing_rating IN ('a_mejorar', 'bien', 'muy_bien')),
-  framing_comment TEXT CHECK (framing_comment IS NULL OR char_length(btrim(framing_comment)) <= 300),
+  pitch_rating TEXT NOT NULL CHECK (pitch_rating IN ('a_mejorar', 'bien', 'muy_bien')),
+  pitch_comment TEXT CHECK (pitch_comment IS NULL OR char_length(btrim(pitch_comment)) <= 300),
+  objections_rating TEXT NOT NULL CHECK (objections_rating IN ('a_mejorar', 'bien', 'muy_bien')),
+  objections_comment TEXT CHECK (objections_comment IS NULL OR char_length(btrim(objections_comment)) <= 300),
+  closing_rating TEXT NOT NULL CHECK (closing_rating IN ('a_mejorar', 'bien', 'muy_bien')),
+  closing_comment TEXT CHECK (closing_comment IS NULL OR char_length(btrim(closing_comment)) <= 300),
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -157,16 +158,16 @@ CREATE POLICY "Service role manages skill feedback"
 CREATE OR REPLACE FUNCTION public.submit_skill_feedback(
   p_meeting_id UUID,
   p_learned TEXT,
+  p_rapport_rating TEXT,
+  p_rapport_comment TEXT,
   p_discovery_rating TEXT,
   p_discovery_comment TEXT,
-  p_tone_rating TEXT,
-  p_tone_comment TEXT,
-  p_persuasion_rating TEXT,
-  p_persuasion_comment TEXT,
-  p_authority_rating TEXT,
-  p_authority_comment TEXT,
-  p_framing_rating TEXT,
-  p_framing_comment TEXT
+  p_pitch_rating TEXT,
+  p_pitch_comment TEXT,
+  p_objections_rating TEXT,
+  p_objections_comment TEXT,
+  p_closing_rating TEXT,
+  p_closing_comment TEXT
 )
 RETURNS public.session_skill_feedback
 LANGUAGE plpgsql
@@ -225,33 +226,33 @@ BEGIN
 
   INSERT INTO public.session_skill_feedback (
     meeting_id, room_id, author_email, subject_email, learned,
+    rapport_rating, rapport_comment,
     discovery_rating, discovery_comment,
-    tone_rating, tone_comment,
-    persuasion_rating, persuasion_comment,
-    authority_rating, authority_comment,
-    framing_rating, framing_comment,
+    pitch_rating, pitch_comment,
+    objections_rating, objections_comment,
+    closing_rating, closing_comment,
     updated_at
   ) VALUES (
     p_meeting_id, v_room, v_email, v_subject, p_learned,
+    p_rapport_rating, nullif(btrim(left(COALESCE(p_rapport_comment, ''), 300)), ''),
     p_discovery_rating, nullif(btrim(left(COALESCE(p_discovery_comment, ''), 300)), ''),
-    p_tone_rating, nullif(btrim(left(COALESCE(p_tone_comment, ''), 300)), ''),
-    p_persuasion_rating, nullif(btrim(left(COALESCE(p_persuasion_comment, ''), 300)), ''),
-    p_authority_rating, nullif(btrim(left(COALESCE(p_authority_comment, ''), 300)), ''),
-    p_framing_rating, nullif(btrim(left(COALESCE(p_framing_comment, ''), 300)), ''),
+    p_pitch_rating, nullif(btrim(left(COALESCE(p_pitch_comment, ''), 300)), ''),
+    p_objections_rating, nullif(btrim(left(COALESCE(p_objections_comment, ''), 300)), ''),
+    p_closing_rating, nullif(btrim(left(COALESCE(p_closing_comment, ''), 300)), ''),
     now()
   )
   ON CONFLICT (meeting_id, author_email) DO UPDATE SET
     learned            = EXCLUDED.learned,
+    rapport_rating     = EXCLUDED.rapport_rating,
+    rapport_comment    = EXCLUDED.rapport_comment,
     discovery_rating   = EXCLUDED.discovery_rating,
     discovery_comment  = EXCLUDED.discovery_comment,
-    tone_rating        = EXCLUDED.tone_rating,
-    tone_comment       = EXCLUDED.tone_comment,
-    persuasion_rating  = EXCLUDED.persuasion_rating,
-    persuasion_comment = EXCLUDED.persuasion_comment,
-    authority_rating   = EXCLUDED.authority_rating,
-    authority_comment  = EXCLUDED.authority_comment,
-    framing_rating     = EXCLUDED.framing_rating,
-    framing_comment    = EXCLUDED.framing_comment,
+    pitch_rating       = EXCLUDED.pitch_rating,
+    pitch_comment      = EXCLUDED.pitch_comment,
+    objections_rating  = EXCLUDED.objections_rating,
+    objections_comment = EXCLUDED.objections_comment,
+    closing_rating     = EXCLUDED.closing_rating,
+    closing_comment    = EXCLUDED.closing_comment,
     updated_at         = now()
   RETURNING * INTO v_row;
 
@@ -314,11 +315,11 @@ RETURNS TABLE(
   starts_at TIMESTAMPTZ,
   author_name TEXT,
   learned TEXT,
+  rapport_rating TEXT, rapport_comment TEXT,
   discovery_rating TEXT, discovery_comment TEXT,
-  tone_rating TEXT, tone_comment TEXT,
-  persuasion_rating TEXT, persuasion_comment TEXT,
-  authority_rating TEXT, authority_comment TEXT,
-  framing_rating TEXT, framing_comment TEXT
+  pitch_rating TEXT, pitch_comment TEXT,
+  objections_rating TEXT, objections_comment TEXT,
+  closing_rating TEXT, closing_comment TEXT
 )
 LANGUAGE sql
 STABLE
@@ -328,11 +329,11 @@ AS $$
   WITH me AS (SELECT lower(nullif(auth.jwt() ->> 'email', '')) AS email)
   SELECT
     sf.meeting_id, m.starts_at, mem.name, sf.learned,
+    sf.rapport_rating, sf.rapport_comment,
     sf.discovery_rating, sf.discovery_comment,
-    sf.tone_rating, sf.tone_comment,
-    sf.persuasion_rating, sf.persuasion_comment,
-    sf.authority_rating, sf.authority_comment,
-    sf.framing_rating, sf.framing_comment
+    sf.pitch_rating, sf.pitch_comment,
+    sf.objections_rating, sf.objections_comment,
+    sf.closing_rating, sf.closing_comment
   FROM public.session_skill_feedback sf
   JOIN public.meetings m ON m.id = sf.meeting_id
   LEFT JOIN public.members mem
@@ -351,11 +352,11 @@ RETURNS TABLE(
   starts_at TIMESTAMPTZ,
   subject_name TEXT,
   learned TEXT,
+  rapport_rating TEXT, rapport_comment TEXT,
   discovery_rating TEXT, discovery_comment TEXT,
-  tone_rating TEXT, tone_comment TEXT,
-  persuasion_rating TEXT, persuasion_comment TEXT,
-  authority_rating TEXT, authority_comment TEXT,
-  framing_rating TEXT, framing_comment TEXT
+  pitch_rating TEXT, pitch_comment TEXT,
+  objections_rating TEXT, objections_comment TEXT,
+  closing_rating TEXT, closing_comment TEXT
 )
 LANGUAGE sql
 STABLE
@@ -365,11 +366,11 @@ AS $$
   WITH me AS (SELECT lower(nullif(auth.jwt() ->> 'email', '')) AS email)
   SELECT
     sf.meeting_id, m.starts_at, mem.name, sf.learned,
+    sf.rapport_rating, sf.rapport_comment,
     sf.discovery_rating, sf.discovery_comment,
-    sf.tone_rating, sf.tone_comment,
-    sf.persuasion_rating, sf.persuasion_comment,
-    sf.authority_rating, sf.authority_comment,
-    sf.framing_rating, sf.framing_comment
+    sf.pitch_rating, sf.pitch_comment,
+    sf.objections_rating, sf.objections_comment,
+    sf.closing_rating, sf.closing_comment
   FROM public.session_skill_feedback sf
   JOIN public.meetings m ON m.id = sf.meeting_id
   LEFT JOIN public.members mem

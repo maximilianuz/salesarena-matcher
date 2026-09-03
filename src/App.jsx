@@ -2578,35 +2578,36 @@ export default function App() {
   };
 
   // --- ENCUESTA 2: FEEDBACK DE HABILIDADES ---
-  // Las 5 categorías del framework de ventas, agrupadas en lo que un
-  // compañero puede evaluar después de UNA sola llamada. No puntúan nada: son
+  // Las 5 etapas de una sesión high-ticket, en el orden en que ocurren en la
+  // llamada: rapport primero, cierre al final, objeciones entre el pitch y
+  // el cierre (es ahí donde típicamente aparecen). No puntúan nada: son
   // devolución pura, visible de inmediato para el destinatario y para quien
   // la escribió.
   const SKILL_FEEDBACK_CATEGORIES = [
     {
+      key: 'rapport',
+      label: 'Rapport / Química',
+      hint: '¿Generó conexión y bajó la guardia al arrancar la llamada?'
+    },
+    {
       key: 'discovery',
-      label: 'Descubrimiento del problema',
-      hint: '¿Indagó tus necesidades reales, o fue directo a ofrecer?'
+      label: 'Descubrimiento / Discovery',
+      hint: '¿Indagó tus necesidades y problemas reales, o fue directo a ofrecer?'
     },
     {
-      key: 'tone',
-      label: 'Tonalidad y desarme',
-      hint: '¿El tono generó confianza, o sonó a interrogatorio?'
+      key: 'pitch',
+      label: 'Pre-Pitch / Pitch',
+      hint: '¿Encuadró la propuesta y habló de resultados, o insistió con características?'
     },
     {
-      key: 'persuasion',
-      label: 'Persuasión guiada por resultados',
-      hint: '¿Habló del impacto en tu vida, o insistió con características?'
+      key: 'objections',
+      label: 'Objeciones',
+      hint: '¿Manejó o previno tus objeciones con calma, en vez de reaccionar a la defensiva?'
     },
     {
-      key: 'authority',
-      label: 'Autoridad y objeciones',
-      hint: '¿Se posicionó con calma, y previno objeciones antes de que aparecieran?'
-    },
-    {
-      key: 'framing',
-      label: 'Encuadre y cierre',
-      hint: '¿Fijó la agenda al inicio y cerró con un compromiso concreto?'
+      key: 'closing',
+      label: 'Cierre',
+      hint: '¿Terminó asegurando un compromiso concreto (fecha, próximo paso), o quedó todo en el aire?'
     }
   ];
   const SKILL_RATING_OPTIONS = [
@@ -2619,11 +2620,11 @@ export default function App() {
     setSkillFeedbackTarget(pendiente);
     setSkillFeedbackAnswers({
       learned: '',
+      rapport: { rating: '', comment: '' },
       discovery: { rating: '', comment: '' },
-      tone: { rating: '', comment: '' },
-      persuasion: { rating: '', comment: '' },
-      authority: { rating: '', comment: '' },
-      framing: { rating: '', comment: '' }
+      pitch: { rating: '', comment: '' },
+      objections: { rating: '', comment: '' },
+      closing: { rating: '', comment: '' }
     });
   };
   const closeSkillFeedbackForm = () => {
@@ -2654,32 +2655,32 @@ export default function App() {
           authorEmail: currentUser.email.toLowerCase(),
           subjectEmail: skillFeedbackTarget.partnerEmail.toLowerCase(),
           learned,
+          rapportRating: categorias.rapport.rating,
+          rapportComment: categorias.rapport.comment.trim().slice(0, 300) || null,
           discoveryRating: categorias.discovery.rating,
           discoveryComment: categorias.discovery.comment.trim().slice(0, 300) || null,
-          toneRating: categorias.tone.rating,
-          toneComment: categorias.tone.comment.trim().slice(0, 300) || null,
-          persuasionRating: categorias.persuasion.rating,
-          persuasionComment: categorias.persuasion.comment.trim().slice(0, 300) || null,
-          authorityRating: categorias.authority.rating,
-          authorityComment: categorias.authority.comment.trim().slice(0, 300) || null,
-          framingRating: categorias.framing.rating,
-          framingComment: categorias.framing.comment.trim().slice(0, 300) || null,
+          pitchRating: categorias.pitch.rating,
+          pitchComment: categorias.pitch.comment.trim().slice(0, 300) || null,
+          objectionsRating: categorias.objections.rating,
+          objectionsComment: categorias.objections.comment.trim().slice(0, 300) || null,
+          closingRating: categorias.closing.rating,
+          closingComment: categorias.closing.comment.trim().slice(0, 300) || null,
           createdAt: new Date().toISOString()
         }]);
       } else {
         const { error } = await supabase.rpc('submit_skill_feedback', {
           p_meeting_id: skillFeedbackTarget.meetingId,
           p_learned: learned,
+          p_rapport_rating: categorias.rapport.rating,
+          p_rapport_comment: categorias.rapport.comment.trim() || null,
           p_discovery_rating: categorias.discovery.rating,
           p_discovery_comment: categorias.discovery.comment.trim() || null,
-          p_tone_rating: categorias.tone.rating,
-          p_tone_comment: categorias.tone.comment.trim() || null,
-          p_persuasion_rating: categorias.persuasion.rating,
-          p_persuasion_comment: categorias.persuasion.comment.trim() || null,
-          p_authority_rating: categorias.authority.rating,
-          p_authority_comment: categorias.authority.comment.trim() || null,
-          p_framing_rating: categorias.framing.rating,
-          p_framing_comment: categorias.framing.comment.trim() || null
+          p_pitch_rating: categorias.pitch.rating,
+          p_pitch_comment: categorias.pitch.comment.trim() || null,
+          p_objections_rating: categorias.objections.rating,
+          p_objections_comment: categorias.objections.comment.trim() || null,
+          p_closing_rating: categorias.closing.rating,
+          p_closing_comment: categorias.closing.comment.trim() || null
         });
         if (error) {
           showNotification('No pudimos guardar tu devolución. Intentá de nuevo en un momento.', 'error');
@@ -6361,15 +6362,15 @@ export default function App() {
 
             {/* "Enviar cierre" y no "Cerrar sesión": ese texto se confunde con
                 salir de la cuenta, que además es un botón real del menú.
+                Solo esta opción a propósito: no hay "ahora no" que compita
+                con la única acción que importa acá.
                 flexShrink 0: el cuerpo de preguntas scrollea, este pie no se
                 comprime — en mobile con el teclado abierto quedaba aplastado. */}
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', flexShrink: 0 }}>
-              <button type="button" className="btn btn-secondary" onClick={closeCloseoutForm}>
-                Ahora no
-              </button>
+            <div style={{ display: 'flex', flexShrink: 0 }}>
               <button
                 type="button"
                 className="btn btn-indigo"
+                style={{ width: '100%' }}
                 onClick={submitCloseout}
                 disabled={closeoutSubmitting}
               >
