@@ -2666,7 +2666,7 @@ export default function App() {
           objectionsComment: categorias.objections.comment.trim().slice(0, 300) || null,
           closingRating: categorias.closing.rating,
           closingComment: categorias.closing.comment.trim().slice(0, 300) || null,
-          notes: notes.trim().slice(0, 500) || null,
+          notes: notes.trim().slice(0, 1000) || null,
           createdAt: new Date().toISOString()
         }]);
       } else {
@@ -6484,7 +6484,7 @@ export default function App() {
                 <textarea
                   className="closeout-textarea"
                   rows={3}
-                  maxLength={500}
+                  maxLength={1000}
                   placeholder="Por ejemplo: algo puntual de esta sesión, un patrón que ya viste antes, o una sugerencia general."
                   value={skillFeedbackAnswers.notes}
                   onChange={(e) => setSkillFeedbackAnswers(a => ({ ...a, notes: e.target.value }))}

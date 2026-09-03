@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS public.session_skill_feedback (
   -- Campo libre por si algo que le importa a la persona no entra en ninguna
   -- de las 5 etapas fijas. Totalmente opcional: las etapas son la estructura
   -- obligatoria, esto es el margen para lo que la estructura no previó.
-  notes TEXT CHECK (notes IS NULL OR char_length(btrim(notes)) <= 500),
+  notes TEXT CHECK (notes IS NULL OR char_length(btrim(notes)) <= 1000),
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -246,7 +246,7 @@ BEGIN
     p_pitch_rating, nullif(btrim(left(COALESCE(p_pitch_comment, ''), 300)), ''),
     p_objections_rating, nullif(btrim(left(COALESCE(p_objections_comment, ''), 300)), ''),
     p_closing_rating, nullif(btrim(left(COALESCE(p_closing_comment, ''), 300)), ''),
-    nullif(btrim(left(COALESCE(p_notes, ''), 500)), ''),
+    nullif(btrim(left(COALESCE(p_notes, ''), 1000)), ''),
     now()
   )
   ON CONFLICT (meeting_id, author_email) DO UPDATE SET
