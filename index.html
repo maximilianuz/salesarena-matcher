@@ -54,11 +54,6 @@
             --shadow-lg: 0 24px 48px rgba(17, 24, 39, 0.12);
             --shadow-glow: 0 0 0 1px rgba(79, 70, 229, 0.06), 0 20px 40px rgba(79, 70, 229, 0.12);
             --card-bg: rgba(255, 255, 255, 0.7);
-            /* Versión más opaca de --card-bg, solo para el panel del hero: con
-               un borde en degradé (ver .hero-content) el relleno tiene que
-               taparlo casi del todo para que el color quede en el filo y no
-               se cuele por toda la tarjeta. */
-            --card-bg-strong: rgba(255, 255, 255, 0.92);
             /* Superficie de tarjeta con degradado vertical y filo superior
                iluminado. Se define por tema porque en claro el degradado va de
                blanco a translúcido y en oscuro es un velo de luz sobre el
@@ -85,7 +80,6 @@
                 --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
                 --shadow-glow: 0 0 0 1px rgba(129, 140, 248, 0.15), 0 20px 40px rgba(79, 70, 229, 0.25);
                 --card-bg: rgba(31, 41, 55, 0.6);
-                --card-bg-strong: rgba(17, 24, 39, 0.92);
             }
         }
 
@@ -106,7 +100,6 @@
             --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
             --shadow-glow: 0 0 0 1px rgba(129, 140, 248, 0.15), 0 20px 40px rgba(79, 70, 229, 0.25);
             --card-bg: rgba(31, 41, 55, 0.6);
-            --card-bg-strong: rgba(17, 24, 39, 0.92);
             --surface-from: rgba(255, 255, 255, 0.08);
             --surface-to: rgba(255, 255, 255, 0.02);
             --surface-hi: rgba(255, 255, 255, 0.14);
@@ -125,11 +118,6 @@
             --shadow-lg: 0 24px 48px rgba(17, 24, 39, 0.12);
             --shadow-glow: 0 0 0 1px rgba(79, 70, 229, 0.06), 0 20px 40px rgba(79, 70, 229, 0.12);
             --card-bg: rgba(255, 255, 255, 0.7);
-            /* Versión más opaca de --card-bg, solo para el panel del hero: con
-               un borde en degradé (ver .hero-content) el relleno tiene que
-               taparlo casi del todo para que el color quede en el filo y no
-               se cuele por toda la tarjeta. */
-            --card-bg-strong: rgba(255, 255, 255, 0.92);
             --surface-from: rgba(255, 255, 255, 0.95);
             --surface-to: rgba(255, 255, 255, 0.55);
             --surface-hi: rgba(255, 255, 255, 1);
@@ -427,11 +415,12 @@
         }
 
         /* Antes el panel del hero tenía un borde de 1px casi del mismo color
-           que el video de fondo: técnicamente estaba ahí, pero no se leía
-           como una tarjeta. El truco de doble fondo (padding-box + border-box)
-           pinta un borde en degradé con los 3 acentos de marca y un halo de
-           color hace de resplandor, para que el rectángulo se distinga del
-           video sin taparlo. */
+           que el video de fondo: técnicamente estaba ahí, pero no se leía como
+           una tarjeta. El borde en degradé vive en ::before, DETRÁS del panel
+           (z-index -1) y con background-clip: padding-box en el panel mismo
+           para que su propio fondo no tape ese anillo. Así el borde queda
+           bien marcado sin subir la opacidad del panel — el video de fondo se
+           sigue viendo igual de transparente que antes. */
         .hero-content {
             position: relative;
             z-index: 3;
@@ -439,13 +428,22 @@
             margin: 0 auto;
             padding: 3rem 2.5rem;
             border-radius: 1.75rem;
+            /* Doble fondo: el degradé (border-box) queda solo debajo del filo de
+               1.5px, porque el relleno translúcido (padding-box) lo tapa en el
+               resto de la tarjeta. Los tres acentos van con su propio alfa —no
+               el color sólido— así lo poco que se filtra por el relleno tiñe
+               apenas la superficie en vez de taparla: el video sigue siendo lo
+               que más se ve. Un ::before detrás hubiera sido más prolijo, pero
+               un z-index negativo pinta detrás de los HERMANOS, no del fondo
+               propio del elemento — quedaba igual de sólido que este approach
+               con el degradé al 100% de opacidad. */
             background:
-                linear-gradient(var(--card-bg-strong), var(--card-bg-strong)) padding-box,
-                linear-gradient(135deg, var(--primary), var(--accent-purple), var(--accent-cyan)) border-box;
+                linear-gradient(var(--card-bg), var(--card-bg)) padding-box,
+                linear-gradient(135deg, rgba(79, 70, 229, 0.55), rgba(139, 92, 246, 0.55), rgba(6, 182, 212, 0.55)) border-box;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border: 1.5px solid transparent;
-            box-shadow: var(--shadow-lg), 0 0 60px rgba(139, 92, 246, 0.25);
+            box-shadow: var(--shadow-lg), 0 0 60px rgba(139, 92, 246, 0.2);
         }
 
         h1 {
@@ -1161,6 +1159,17 @@
             margin: 0 auto;
         }
 
+        .faq-showcase {
+            display: block;
+            width: 100%;
+            max-width: 960px;
+            height: auto;
+            margin: 0 auto 2.5rem;
+            border-radius: 1.25rem;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+        }
+
         .faq-eyebrow {
             display: flex;
             align-items: center;
@@ -1275,6 +1284,11 @@
         @media (max-width: 640px) {
             .faq-section {
                 padding: 0 1.25rem 4rem;
+            }
+
+            .faq-showcase {
+                border-radius: 1rem;
+                margin-bottom: 1.75rem;
             }
 
             .faq-question {
@@ -2102,6 +2116,13 @@
 
     <!-- FAQ Section -->
     <section class="faq-section" id="faq">
+        <img
+            class="faq-showcase"
+            src="/images/faq-showcase.jpg"
+            width="1400" height="781"
+            loading="lazy"
+            alt="Pantalla de Sales Arena Matcher mostrando un match confirmado entre dos closers para una sesión de role-play, con el enlace de Google Meet ya generado."
+        >
         <div class="faq-container">
             <p class="faq-eyebrow">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
