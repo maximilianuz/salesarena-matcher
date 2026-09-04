@@ -1,0 +1,58 @@
+name: Deploy Supabase
+
+# Aplica migraciones y redeploya las Edge Functions cada vez que algo bajo
+# supabase/ llega a main. Antes esto era un paso manual (alguien tenía que
+# acordarse de correr `supabase db push` / `supabase functions deploy`), y
+# quedarse atrás rompió en producción el 20260904: el frontend ya esperaba
+# la firma nueva de submit_session_closeout pero la base todavía tenía la
+# vieja, así que nadie podía cerrar una sesión.
+#
+# Requiere dos secrets del repo (Settings → Secrets and variables → Actions):
+#   SUPABASE_ACCESS_TOKEN  → Personal access token de supabase.com/dashboard/account/tokens
+#   SUPABASE_DB_PASSWORD   → La contraseña de la base del proyecto (Settings → Database)
+# El project ref no es secreto: ya está en supabase/config.toml.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-supabase
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref gxqkfqxgmmnleqdmssva --password "$SUPABASE_DB_PASSWORD"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Apply pending migrations
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Deploy weekly-matcher
+        run: supabase functions deploy weekly-matcher --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
