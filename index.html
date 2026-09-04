@@ -54,6 +54,11 @@
             --shadow-lg: 0 24px 48px rgba(17, 24, 39, 0.12);
             --shadow-glow: 0 0 0 1px rgba(79, 70, 229, 0.06), 0 20px 40px rgba(79, 70, 229, 0.12);
             --card-bg: rgba(255, 255, 255, 0.7);
+            /* Versión más opaca de --card-bg, solo para el panel del hero: con
+               un borde en degradé (ver .hero-content) el relleno tiene que
+               taparlo casi del todo para que el color quede en el filo y no
+               se cuele por toda la tarjeta. */
+            --card-bg-strong: rgba(255, 255, 255, 0.92);
             /* Superficie de tarjeta con degradado vertical y filo superior
                iluminado. Se define por tema porque en claro el degradado va de
                blanco a translúcido y en oscuro es un velo de luz sobre el
@@ -80,6 +85,7 @@
                 --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
                 --shadow-glow: 0 0 0 1px rgba(129, 140, 248, 0.15), 0 20px 40px rgba(79, 70, 229, 0.25);
                 --card-bg: rgba(31, 41, 55, 0.6);
+                --card-bg-strong: rgba(17, 24, 39, 0.92);
             }
         }
 
@@ -100,6 +106,7 @@
             --shadow-lg: 0 24px 48px rgba(0, 0, 0, 0.45);
             --shadow-glow: 0 0 0 1px rgba(129, 140, 248, 0.15), 0 20px 40px rgba(79, 70, 229, 0.25);
             --card-bg: rgba(31, 41, 55, 0.6);
+            --card-bg-strong: rgba(17, 24, 39, 0.92);
             --surface-from: rgba(255, 255, 255, 0.08);
             --surface-to: rgba(255, 255, 255, 0.02);
             --surface-hi: rgba(255, 255, 255, 0.14);
@@ -118,6 +125,11 @@
             --shadow-lg: 0 24px 48px rgba(17, 24, 39, 0.12);
             --shadow-glow: 0 0 0 1px rgba(79, 70, 229, 0.06), 0 20px 40px rgba(79, 70, 229, 0.12);
             --card-bg: rgba(255, 255, 255, 0.7);
+            /* Versión más opaca de --card-bg, solo para el panel del hero: con
+               un borde en degradé (ver .hero-content) el relleno tiene que
+               taparlo casi del todo para que el color quede en el filo y no
+               se cuele por toda la tarjeta. */
+            --card-bg-strong: rgba(255, 255, 255, 0.92);
             --surface-from: rgba(255, 255, 255, 0.95);
             --surface-to: rgba(255, 255, 255, 0.55);
             --surface-hi: rgba(255, 255, 255, 1);
@@ -414,18 +426,26 @@
             opacity: 0.3;
         }
 
+        /* Antes el panel del hero tenía un borde de 1px casi del mismo color
+           que el video de fondo: técnicamente estaba ahí, pero no se leía
+           como una tarjeta. El truco de doble fondo (padding-box + border-box)
+           pinta un borde en degradé con los 3 acentos de marca y un halo de
+           color hace de resplandor, para que el rectángulo se distinga del
+           video sin taparlo. */
         .hero-content {
             position: relative;
             z-index: 3;
             max-width: 860px;
             margin: 0 auto;
             padding: 3rem 2.5rem;
-            border-radius: 1.5rem;
-            background: var(--card-bg);
+            border-radius: 1.75rem;
+            background:
+                linear-gradient(var(--card-bg-strong), var(--card-bg-strong)) padding-box,
+                linear-gradient(135deg, var(--primary), var(--accent-purple), var(--accent-cyan)) border-box;
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow-lg);
+            border: 1.5px solid transparent;
+            box-shadow: var(--shadow-lg), 0 0 60px rgba(139, 92, 246, 0.25);
         }
 
         h1 {
