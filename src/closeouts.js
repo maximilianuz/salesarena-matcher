@@ -331,29 +331,27 @@ export const getCredibility = (attendance, engagement, reciprocity, veracity = 1
   return Math.round(base * recFactor * verFactor);
 };
 
-// Elogios recibidos cuyo plazo ya venció. Es lo único del cierre que la otra
-// persona llega a ver, y solo en positivo: el resto de las respuestas no se
-// comparte nunca, ni antes ni después del plazo.
-export const getPraiseReceived = (email, closeouts, meetings, attendances = [], now = Date.now()) => {
-  const descartadas = discardedKeys(closeouts, attendances);
-  const byMeeting = new Map();
-  for (const c of closeouts) {
-    if (!byMeeting.has(c.meetingId)) byMeeting.set(c.meetingId, []);
-    byMeeting.get(c.meetingId).push(c);
+// Resumen de UNA devolución de la Encuesta 2, para encabezar su tarjeta en el
+// historial sin obligar a leer las 5 etapas.
+//
+// `aplica` en false es el caso de roles sin invertir: el compañero nunca hizo
+// de closer, así que no hay etapas calificadas y la tarjeta lo dice en vez de
+// mostrar cinco casilleros vacíos —que se leerían como "no contestó"—.
+export const summarizeSkillFeedback = (feedback) => {
+  if (!feedback || feedback.partnerWasCloser === false) {
+    return { aplica: false, a_mejorar: 0, bien: 0, muy_bien: 0, total: 0 };
   }
-  const out = [];
-  for (const [meetingId, rows] of byMeeting) {
-    const when = meetingTimeOf(meetingId, meetings);
-    if (Number.isNaN(when)) continue;
-    if (!isCountable(meetingEndOf(meetingId, meetings, when), now)) continue;
-    for (const c of rows) {
-      if (!sameEmail(c.subjectEmail, email)) continue;
-      if (descartadas.has(keyOf(c))) continue;
-      const praise = (c.praise || '').trim();
-      if (praise) out.push({ meetingId, praise, when });
-    }
+  const conteo = { a_mejorar: 0, bien: 0, muy_bien: 0 };
+  let total = 0;
+  for (const cat of SKILL_CATEGORIES) {
+    const rating = feedback[`${cat}Rating`];
+    if (conteo[rating] === undefined) continue;
+    conteo[rating]++;
+    total++;
   }
-  return out.sort((a, b) => b.when - a.when);
+  // Sin ninguna etapa calificada tampoco hay nada que resumir, aunque la fila
+  // diga que el compañero sí fue closer (datos viejos o a medio guardar).
+  return { aplica: total > 0, ...conteo, total };
 };
 
 // Encuesta 2 que le TOCA responder: cerró la sesión (Encuesta 1) diciendo que
