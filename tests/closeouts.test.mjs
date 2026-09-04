@@ -565,3 +565,13 @@ test('feedback: solo bloquea a quien debe, nunca a su compañero', () => {
   assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), true);
   assert.equal(isPendingSkillFeedback('beto@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), false);
 });
+
+test('feedback: se salda igual cuando el compañero no fue closer (nada que calificar)', () => {
+  // Sin roles invertidos: beto hizo de closer toda la sesión, ana de lead.
+  // Ana no tiene nada que calificarle a beto sobre su desempeño de closer, así
+  // que su devolución no trae ratings — igual debe saldar la deuda.
+  const closeouts = [cierre('m1', 'ana@x.com', 'beto@x.com', { happened: 'completa' })];
+  const yaDada = [{ ...feedback('m1', 'ana@x.com', 'beto@x.com'), partnerWasCloser: false }];
+  assert.deepEqual(getOwedSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), []);
+  assert.equal(isPendingSkillFeedback('ana@x.com', closeouts, yaDada, [cerrada('m1')], AHORA), false);
+});

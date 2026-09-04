@@ -2630,6 +2630,7 @@ export default function App() {
     setSkillFeedbackTarget(pendiente);
     setSkillFeedbackAnswers({
       learned: '',
+      partnerWasCloser: '',
       rapport: { rating: '', comment: '' },
       discovery: { rating: '', comment: '' },
       pitch: { rating: '', comment: '' },
@@ -2647,32 +2648,55 @@ export default function App() {
   const skillFeedbackModalRef = useDialogA11y(!!skillFeedbackTarget, closeSkillFeedbackForm);
 
   // ¿Puede avanzar desde el paso actual? Solo exige lo de ESE paso: el
-  // aprendizaje en el 0, el rating de la etapa en 1..5. El repaso final (6)
-  // no tiene "siguiente", así que no necesita esta función.
+  // aprendizaje y si el compañero fue closer en el 0, el rating de la etapa
+  // en 1..5. El repaso final (6) no tiene "siguiente", así que no necesita
+  // esta función.
   const skillFeedbackStepValid = () => {
     if (!skillFeedbackAnswers) return false;
-    if (skillFeedbackStep === 0) return !!skillFeedbackAnswers.learned;
+    if (skillFeedbackStep === 0) {
+      return !!skillFeedbackAnswers.learned && !!skillFeedbackAnswers.partnerWasCloser;
+    }
     const cat = SKILL_FEEDBACK_CATEGORIES[skillFeedbackStep - 1];
     return cat ? !!skillFeedbackAnswers[cat.key].rating : true;
   };
+  // Sin roles invertidos (uno hizo de closer toda la sesión, el otro de lead)
+  // el que hizo de lead no tiene nada que calificarle a su compañero: las 5
+  // etapas se saltan directo al repaso.
   const skillFeedbackGoNext = () => {
     if (!skillFeedbackStepValid()) return;
-    setSkillFeedbackStep(s => Math.min(s + 1, SKILL_FEEDBACK_CATEGORIES.length + 1));
+    setSkillFeedbackStep(s => {
+      if (s === 0 && skillFeedbackAnswers.partnerWasCloser === 'no') {
+        return SKILL_FEEDBACK_CATEGORIES.length + 1;
+      }
+      return Math.min(s + 1, SKILL_FEEDBACK_CATEGORIES.length + 1);
+    });
   };
-  const skillFeedbackGoBack = () => setSkillFeedbackStep(s => Math.max(s - 1, 0));
+  const skillFeedbackGoBack = () => setSkillFeedbackStep(s => {
+    if (s === SKILL_FEEDBACK_CATEGORIES.length + 1 && skillFeedbackAnswers.partnerWasCloser === 'no') {
+      return 0;
+    }
+    return Math.max(s - 1, 0);
+  });
 
   const submitSkillFeedback = async () => {
     if (!skillFeedbackTarget || !skillFeedbackAnswers) return;
-    const { learned, notes, ...categorias } = skillFeedbackAnswers;
-    if (!learned) {
+    const { learned, notes, partnerWasCloser, ...categorias } = skillFeedbackAnswers;
+    if (!learned || !partnerWasCloser) {
       showNotification('Contanos si te sirvió para aprender antes de seguir.', 'error');
       return;
     }
-    const faltante = SKILL_FEEDBACK_CATEGORIES.find(c => !categorias[c.key].rating);
-    if (faltante) {
-      showNotification(`Te falta calificar "${faltante.label}" para poder enviarlo.`, 'error');
-      return;
+    const huboCloser = partnerWasCloser === 'si';
+    if (huboCloser) {
+      const faltante = SKILL_FEEDBACK_CATEGORIES.find(c => !categorias[c.key].rating);
+      if (faltante) {
+        showNotification(`Te falta calificar "${faltante.label}" para poder enviarlo.`, 'error');
+        return;
+      }
     }
+    // Sin roles invertidos no hay nada que calificar: se manda todo en null en
+    // vez de forzar una nota sobre algo que el compañero nunca hizo.
+    const rating = (key) => huboCloser ? categorias[key].rating : null;
+    const comment = (key) => huboCloser ? (categorias[key].comment.trim().slice(0, 300) || null) : null;
 
     setSkillFeedbackSubmitting(true);
     try {
@@ -2683,16 +2707,17 @@ export default function App() {
           authorEmail: currentUser.email.toLowerCase(),
           subjectEmail: skillFeedbackTarget.partnerEmail.toLowerCase(),
           learned,
-          rapportRating: categorias.rapport.rating,
-          rapportComment: categorias.rapport.comment.trim().slice(0, 300) || null,
-          discoveryRating: categorias.discovery.rating,
-          discoveryComment: categorias.discovery.comment.trim().slice(0, 300) || null,
-          pitchRating: categorias.pitch.rating,
-          pitchComment: categorias.pitch.comment.trim().slice(0, 300) || null,
-          objectionsRating: categorias.objections.rating,
-          objectionsComment: categorias.objections.comment.trim().slice(0, 300) || null,
-          closingRating: categorias.closing.rating,
-          closingComment: categorias.closing.comment.trim().slice(0, 300) || null,
+          partnerWasCloser: huboCloser,
+          rapportRating: rating('rapport'),
+          rapportComment: comment('rapport'),
+          discoveryRating: rating('discovery'),
+          discoveryComment: comment('discovery'),
+          pitchRating: rating('pitch'),
+          pitchComment: comment('pitch'),
+          objectionsRating: rating('objections'),
+          objectionsComment: comment('objections'),
+          closingRating: rating('closing'),
+          closingComment: comment('closing'),
           notes: notes.trim().slice(0, 1000) || null,
           createdAt: new Date().toISOString()
         }]);
@@ -2700,16 +2725,17 @@ export default function App() {
         const { error } = await supabase.rpc('submit_skill_feedback', {
           p_meeting_id: skillFeedbackTarget.meetingId,
           p_learned: learned,
-          p_rapport_rating: categorias.rapport.rating,
-          p_rapport_comment: categorias.rapport.comment.trim() || null,
-          p_discovery_rating: categorias.discovery.rating,
-          p_discovery_comment: categorias.discovery.comment.trim() || null,
-          p_pitch_rating: categorias.pitch.rating,
-          p_pitch_comment: categorias.pitch.comment.trim() || null,
-          p_objections_rating: categorias.objections.rating,
-          p_objections_comment: categorias.objections.comment.trim() || null,
-          p_closing_rating: categorias.closing.rating,
-          p_closing_comment: categorias.closing.comment.trim() || null,
+          p_partner_was_closer: huboCloser,
+          p_rapport_rating: rating('rapport'),
+          p_rapport_comment: comment('rapport'),
+          p_discovery_rating: rating('discovery'),
+          p_discovery_comment: comment('discovery'),
+          p_pitch_rating: rating('pitch'),
+          p_pitch_comment: comment('pitch'),
+          p_objections_rating: rating('objections'),
+          p_objections_comment: comment('objections'),
+          p_closing_rating: rating('closing'),
+          p_closing_comment: comment('closing'),
           p_notes: notes.trim() || null
         });
         if (error) {
@@ -6459,7 +6485,7 @@ export default function App() {
               Devolución para {skillFeedbackTarget.partnerName}
             </h3>
 
-            {skillFeedbackStep >= 1 && (
+            {skillFeedbackStep >= 1 && skillFeedbackAnswers.partnerWasCloser === 'si' && (
               <div className="skill-feedback-progress">
                 <div className="progress-track">
                   <div
@@ -6504,6 +6530,28 @@ export default function App() {
                       className={`closeout-option ${skillFeedbackAnswers.learned === o.v ? 'selected' : ''}`}
                       aria-pressed={skillFeedbackAnswers.learned === o.v}
                       onClick={() => setSkillFeedbackAnswers(a => ({ ...a, learned: o.v }))}
+                    >
+                      {o.t}
+                    </button>
+                  ))}
+                </div>
+                <h4 className="step-title" style={{ marginTop: '18px' }}>
+                  ¿{skillFeedbackTarget.partnerName} llegó a hacer de closer en algún momento de esta sesión?
+                </h4>
+                <p className="step-hint">
+                  Si no intercambiaron roles y hizo de lead toda la llamada, no hay nada tuyo que calificarle.
+                </p>
+                <div className="closeout-options">
+                  {[
+                    { v: 'si', t: 'Sí, hizo de closer' },
+                    { v: 'no', t: 'No, hizo de lead toda la sesión' }
+                  ].map(o => (
+                    <button
+                      type="button"
+                      key={o.v}
+                      className={`closeout-option ${skillFeedbackAnswers.partnerWasCloser === o.v ? 'selected' : ''}`}
+                      aria-pressed={skillFeedbackAnswers.partnerWasCloser === o.v}
+                      onClick={() => setSkillFeedbackAnswers(a => ({ ...a, partnerWasCloser: o.v }))}
                     >
                       {o.t}
                     </button>
@@ -6555,20 +6603,31 @@ export default function App() {
             {skillFeedbackStep === 6 && (
               <div className="step-body">
                 <p className="step-eyebrow">Último paso</p>
-                <h4 className="step-title">Repaso antes de enviar</h4>
-                <div className="summary-list">
-                  {SKILL_FEEDBACK_CATEGORIES.map(cat => {
-                    const rating = skillFeedbackAnswers[cat.key].rating;
-                    return (
-                      <div className="summary-row" key={cat.key}>
-                        <span className="summary-row-label">{cat.label}</span>
-                        <span className={`summary-chip skill-rating-${rating} selected`}>
-                          {SKILL_RATING_LABEL[rating]}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <h4 className="step-title">
+                  {skillFeedbackAnswers.partnerWasCloser === 'no'
+                    ? 'Nada que calificar esta vez'
+                    : 'Repaso antes de enviar'}
+                </h4>
+                {skillFeedbackAnswers.partnerWasCloser === 'no' ? (
+                  <p className="step-hint">
+                    Como {skillFeedbackTarget.partnerName} no hizo de closer en esta sesión, salteamos las 5 etapas.
+                    Igual queda registrado que respondiste, así que ya podés recibir tu próximo Role-Play.
+                  </p>
+                ) : (
+                  <div className="summary-list">
+                    {SKILL_FEEDBACK_CATEGORIES.map(cat => {
+                      const rating = skillFeedbackAnswers[cat.key].rating;
+                      return (
+                        <div className="summary-row" key={cat.key}>
+                          <span className="summary-row-label">{cat.label}</span>
+                          <span className={`summary-chip skill-rating-${rating} selected`}>
+                            {SKILL_RATING_LABEL[rating]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div>
                   <p className="closeout-question-hint" style={{ marginBottom: '6px' }}>
                     Algo más para agregar <span className="closeout-optional">(opcional)</span>
@@ -6598,7 +6657,7 @@ export default function App() {
                     disabled={!skillFeedbackStepValid()}
                     onClick={skillFeedbackGoNext}
                   >
-                    Empezar las 5 etapas
+                    {skillFeedbackAnswers.partnerWasCloser === 'no' ? 'Continuar' : 'Empezar las 5 etapas'}
                   </button>
                 </>
               ) : skillFeedbackStep <= 5 ? (
