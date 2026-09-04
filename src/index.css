@@ -1594,17 +1594,96 @@ html.dark .view-header {
 }
 
 .feedback-card {
-  padding: 18px;
+  padding: 0;
   border-radius: 14px;
+  overflow: hidden;
 }
 
+.feedback-card-heading {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+/* El encabezado ES el botón que despliega: toda la fila es zona de click, no
+   solo un ícono chiquito al costado. */
 .feedback-card-head {
   display: flex;
   align-items: center;
   gap: 11px;
   flex-wrap: wrap;
-  padding-bottom: 13px;
-  border-bottom: 1px solid var(--border-color);
+  width: 100%;
+  padding: 16px 18px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.feedback-card-head:hover {
+  background-color: rgba(127, 127, 127, 0.07);
+}
+
+.feedback-card-head:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+}
+
+/* Chevron en CSS puro: dos bordes rotados. Gira al abrir. */
+.feedback-chevron {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: 2px;
+  margin-top: -3px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-top 0.3s ease;
+}
+
+.feedback-card.open .feedback-chevron {
+  transform: rotate(-135deg);
+  margin-top: 3px;
+}
+
+/* grid-template-rows 0fr → 1fr anima hasta la altura REAL del contenido, sin
+   un max-height adivinado que recorte las devoluciones largas. */
+.feedback-card-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.feedback-card.open .feedback-card-panel {
+  grid-template-rows: 1fr;
+}
+
+.feedback-card-panel-inner {
+  overflow: hidden;
+}
+
+.feedback-card-body {
+  padding: 0 18px 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+/* La etiqueta de "no hubo etapas" ocupa el lugar de los chips en la fila
+   plegada: sin ella, esa tarjeta parecía a medio cargar. */
+.feedback-card-tally-na {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-card-panel,
+  .feedback-chevron {
+    transition: none;
+  }
 }
 
 .feedback-card-avatar {
