@@ -361,6 +361,11 @@ export const getPraiseReceived = (email, closeouts, meetings, attendances = [], 
 // habilidades sobre esa reunión. Sin ventana de vencimiento a propósito: la
 // deuda no prescribe, porque lo que hace que se salde es completarla, no que
 // pase el tiempo.
+//
+// Se salda con solo EXISTIR la fila, sin importar si trae ratings: cuando el
+// compañero no llegó a hacer de closer en la sesión (roles sin invertir), la
+// encuesta se completa igual pero sin las 5 etapas — no hay nada que
+// calificar, pero la deuda es la misma.
 export const getOwedSkillFeedback = (email, closeouts, skillFeedbacks, meetings, now = Date.now()) => {
   const yaDio = new Set(
     skillFeedbacks
