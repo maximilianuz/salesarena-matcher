@@ -98,7 +98,6 @@ import {
   getEngagement,
   getReciprocity,
   getCredibility,
-  getPraiseReceived,
   getOwedCloseouts,
   getVeracity,
   getProvenLies,
@@ -106,6 +105,7 @@ import {
   getMonthlyLies,
   isBlockedForLying,
   getOwedSkillFeedback,
+  summarizeSkillFeedback,
   CLOSEOUT_WINDOW_MS,
   MONTHLY_LIES_LIMIT
 } from './closeouts';
@@ -423,12 +423,11 @@ export default function App() {
 
   // --- CIERRE DE SESIÓN (lo que responden los dos después del role-play) ---
   // openCloseouts: los que me faltan responder. standing: mi compromiso y mi
-  // reciprocidad ya calculados. praise: los elogios que recibí, sin autor y
-  // solo de sobres ya abiertos. Nunca entra acá nada de lo que respondió otra
-  // persona sobre sí misma ni sobre terceros.
+  // reciprocidad ya calculados. Nunca entra acá nada de lo que respondió otra
+  // persona sobre sí misma ni sobre terceros: el cierre sigue sellado, y lo
+  // que sí se comparte viaja por la Encuesta 2 (skillFeedbackReceived).
   const [openCloseouts, setOpenCloseouts] = useState([]);
   const [closeoutStanding, setCloseoutStanding] = useState(null);
-  const [closeoutPraise, setCloseoutPraise] = useState([]);
   const [closeoutFlags, setCloseoutFlags] = useState([]); // solo admin
   const [closeoutTarget, setCloseoutTarget] = useState(null); // el pendiente que se está respondiendo
   const [closeoutAnswers, setCloseoutAnswers] = useState(null);
@@ -441,6 +440,12 @@ export default function App() {
   // skillFeedbackTarget usa la misma forma que closeoutTarget en vez de
   // duplicar la lógica de "cuál es la próxima pendiente".
   const [openSkillFeedback, setOpenSkillFeedback] = useState([]);
+  // El historial: lo que me escribieron y lo que escribí. Es lo que vuelve
+  // útil a la Encuesta 2 — sin esto la devolución se guardaba y no la leía
+  // nadie, aunque el propio formulario prometiera lo contrario.
+  const [skillFeedbackReceived, setSkillFeedbackReceived] = useState([]);
+  const [skillFeedbackGiven, setSkillFeedbackGiven] = useState([]);
+  const [feedbackHistoryTab, setFeedbackHistoryTab] = useState('recibidas');
   const [skillFeedbackTarget, setSkillFeedbackTarget] = useState(null);
   const [skillFeedbackAnswers, setSkillFeedbackAnswers] = useState(null);
   // Un paso a la vez en vez de las 5 etapas juntas en un scroll largo: se
@@ -2384,10 +2389,32 @@ export default function App() {
         patternStrikes: getPatternStrikes(email, all, meetings, attendances, now),
         blockedForLying: isBlockedForLying(email, all, meetings, attendances, now)
       });
-      setCloseoutPraise(
-        getPraiseReceived(email, all, meetings, attendances, now).map(p => p.praise)
-      );
       const skillAll = loadMockSkillFeedback();
+      // El historial en modo demo sale de la misma lista local, con el perfil
+      // del compañero resuelto por email (el nombre no alcanza: dos homónimos
+      // de la sala se pisarían la foto).
+      const conPerfil = (fila, emailOtro) => {
+        const m = meetings.find(x => x.id === fila.meetingId);
+        const perfil = members.find(x => x.email.toLowerCase() === (emailOtro || '').toLowerCase());
+        return {
+          ...fila,
+          // Si la reunión ya no está en la lista local, la devolución conserva
+          // su fecha propia: sin esto la tarjeta queda "sin fecha", que es
+          // justo el dato con el que se busca una sesión en el historial.
+          startsAt: m?.startsAt || fila.createdAt,
+          partnerName: perfil?.name || 'Tu compañero',
+          partnerAvatarUrl: perfil?.avatarUrl || null
+        };
+      };
+      const porFecha = (a, b) => Date.parse(b.startsAt || 0) - Date.parse(a.startsAt || 0);
+      setSkillFeedbackReceived(
+        skillAll.filter(f => (f.subjectEmail || '').toLowerCase() === email)
+          .map(f => conPerfil(f, f.authorEmail)).sort(porFecha)
+      );
+      setSkillFeedbackGiven(
+        skillAll.filter(f => (f.authorEmail || '').toLowerCase() === email)
+          .map(f => conPerfil(f, f.subjectEmail)).sort(porFecha)
+      );
       setOpenSkillFeedback(
         getOwedSkillFeedback(email, all, skillAll, meetings, now).map(o => {
           const m = meetings.find(x => x.id === o.meetingId);
@@ -2406,11 +2433,12 @@ export default function App() {
       return;
     }
 
-    const [pend, standing, praise, pendSkill] = await Promise.all([
+    const [pend, standing, pendSkill, recibidas, dadas] = await Promise.all([
       supabase.rpc('my_open_closeouts'),
       supabase.rpc('my_closeout_standing'),
-      supabase.rpc('my_closeout_praise', { p_limit: 5 }),
-      supabase.rpc('my_open_skill_feedback')
+      supabase.rpc('my_open_skill_feedback'),
+      supabase.rpc('my_skill_feedback_received', { p_limit: 20 }),
+      supabase.rpc('my_skill_feedback_given', { p_limit: 20 })
     ]);
     if (!pend.error && pend.data) {
       setOpenCloseouts(pend.data.map(d => ({
@@ -2437,7 +2465,6 @@ export default function App() {
         blockedForLying: !!row.blocked_for_lying
       } : null);
     }
-    if (!praise.error && praise.data) setCloseoutPraise(praise.data.map(p => p.praise));
     if (!pendSkill.error && pendSkill.data) {
       setOpenSkillFeedback(pendSkill.data.map(d => ({
         meetingId: d.meeting_id,
@@ -2446,6 +2473,32 @@ export default function App() {
         partnerName: d.partner_name || 'Tu compañero',
         partnerAvatarUrl: d.partner_avatar_url
       })));
+    }
+    // Las dos direcciones del historial se normalizan a la MISMA forma: la
+    // tarjeta es idéntica mire quien mire, solo cambia de quién es el nombre.
+    const aHistorial = (d, nombre, avatar) => ({
+      meetingId: d.meeting_id,
+      startsAt: d.starts_at,
+      partnerName: nombre || 'Tu compañero',
+      partnerAvatarUrl: avatar || null,
+      learned: d.learned,
+      partnerWasCloser: d.partner_was_closer,
+      rapportRating: d.rapport_rating, rapportComment: d.rapport_comment,
+      discoveryRating: d.discovery_rating, discoveryComment: d.discovery_comment,
+      pitchRating: d.pitch_rating, pitchComment: d.pitch_comment,
+      objectionsRating: d.objections_rating, objectionsComment: d.objections_comment,
+      closingRating: d.closing_rating, closingComment: d.closing_comment,
+      notes: d.notes
+    });
+    if (!recibidas.error && recibidas.data) {
+      setSkillFeedbackReceived(
+        recibidas.data.map(d => aHistorial(d, d.author_name, d.author_avatar_url))
+      );
+    }
+    if (!dadas.error && dadas.data) {
+      setSkillFeedbackGiven(
+        dadas.data.map(d => aHistorial(d, d.subject_name, d.subject_avatar_url))
+      );
     }
   };
 
@@ -2493,6 +2546,20 @@ export default function App() {
     if (cuando === manana) return `mañana ${hora}`;
     return new Intl.DateTimeFormat('es-AR', {
       timeZone: tz, weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(fecha);
+  };
+
+  // Fecha de una sesión pasada en el historial de devoluciones. Acá NO sirve el
+  // día relativo del plazo ("mañana 14:30"): lo que se busca es justamente
+  // ubicar una sesión puntual entre varias, así que va la fecha completa.
+  const sessionDateLabel = (iso) => {
+    if (!iso) return 'Sesión sin fecha';
+    const fecha = new Date(iso);
+    if (Number.isNaN(fecha.getTime())) return 'Sesión sin fecha';
+    return new Intl.DateTimeFormat('es-AR', {
+      timeZone: currentUser?.tz || 'UTC',
+      weekday: 'long', day: 'numeric', month: 'long',
+      hour: '2-digit', minute: '2-digit', hour12: false
     }).format(fecha);
   };
 
@@ -2620,6 +2687,7 @@ export default function App() {
     }
   ];
   const SKILL_RATING_LABEL = { a_mejorar: 'A mejorar', bien: 'Bien', muy_bien: 'Muy bien' };
+  const LEARNED_LABEL = { si: 'sí, algo concreto', mas_o_menos: 'más o menos', no: 'no' };
   const SKILL_RATING_OPTIONS = [
     { v: 'a_mejorar', t: 'A mejorar' },
     { v: 'bien', t: 'Bien' },
@@ -4067,6 +4135,11 @@ export default function App() {
           <button type="button" title="Cargar Disponibilidad" className={`nav-link ${activeTab === 'wizard' ? 'active' : ''}`} aria-current={activeTab === 'wizard' ? 'page' : undefined} onClick={() => handleTabClick('wizard')}>
             <CalendarClock size={17} aria-hidden="true" /> <span className="nav-link-label">Cargar Disponibilidad</span>
           </button>
+          {/* Mismo ícono que el wizard de la Encuesta 2: quien acaba de enviar
+              una devolución reconoce dónde va a buscarla después. */}
+          <button type="button" title="Mis Devoluciones" className={`nav-link ${activeTab === 'devoluciones' ? 'active' : ''}`} aria-current={activeTab === 'devoluciones' ? 'page' : undefined} onClick={() => handleTabClick('devoluciones')}>
+            <Award size={17} aria-hidden="true" /> <span className="nav-link-label">Mis Devoluciones</span>
+          </button>
           <button type="button" title="Mapa de Calor" className={`nav-link ${activeTab === 'heatmap' ? 'active' : ''}`} aria-current={activeTab === 'heatmap' ? 'page' : undefined} onClick={() => handleTabClick('heatmap')}>
             <Flame size={17} aria-hidden="true" /> <span className="nav-link-label">Mapa de Calor</span>
           </button>
@@ -4191,6 +4264,7 @@ export default function App() {
             <h2 className="view-title">
               {activeTab === 'dashboard' && 'Panel de Control Principal'}
               {activeTab === 'wizard' && 'Cargar Disponibilidad'}
+              {activeTab === 'devoluciones' && 'Mis Devoluciones'}
               {activeTab === 'heatmap' && 'Mapa de Calor Semanal'}
               {activeTab === 'affinity' && 'Afinidad Horaria'}
               {activeTab === 'members' && 'Gestionar Equipo'}
@@ -4200,6 +4274,7 @@ export default function App() {
             <p className="view-subtitle">
               {activeTab === 'dashboard' && 'Revisa el estado de la sala, coincidencias activas y links de Meet.'}
               {activeTab === 'wizard' && 'Configura tu participación en los Role-Plays de esta semana en pocos clics.'}
+              {activeTab === 'devoluciones' && 'El historial de las devoluciones de habilidades: lo que te escribieron después de cada Role-Play y lo que escribiste vos.'}
               {activeTab === 'heatmap' && 'Visualiza de forma horaria colectiva en qué momento hay más personas disponibles.'}
               {activeTab === 'affinity' && 'Con quiénes del equipo compartís más horas libres, de mayor a menor.'}
               {activeTab === 'members' && 'Administra quiénes participan del grupo y configura sus correos y países.'}
@@ -4775,8 +4850,9 @@ export default function App() {
               {/* MI CREDIBILIDAD.
                   Cada quien ve la suya y nada más: nunca la de otro, y nunca
                   quién dijo qué. El compromiso llega ya promediado desde el
-                  servidor y los elogios vienen sin autor. */}
-              {closeoutStanding && (closeoutStanding.engagement !== null || closeoutPraise.length > 0
+                  servidor. Lo que sí lleva autor y nombre es la Encuesta 2, y
+                  esa vive en su propia pestaña, no acá. */}
+              {closeoutStanding && (closeoutStanding.engagement !== null
                 || (closeoutStanding.veracity ?? 1) < 1) && (
                 <div className="section-card glass credibility-card">
                   <h4 className="section-title">
@@ -4841,16 +4917,45 @@ export default function App() {
                       </span>
                     </p>
                   )}
-                  {closeoutPraise.length > 0 && (
-                    <div className="credibility-praise">
-                      <div className="credibility-praise-title"><ThumbsUp size={13} /> Lo que rescataron de vos</div>
-                      {closeoutPraise.map((p, i) => (
-                        <blockquote className="credibility-praise-item" key={i}>{p}</blockquote>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
+
+              {/* LA ÚLTIMA DEVOLUCIÓN RECIBIDA.
+                  Entrada al historial desde donde la persona ya mira todos los
+                  días. Va acá y no en la tarjeta de credibilidad a propósito:
+                  esto SÍ tiene autor y nombre, y mezclarlo con el puntaje
+                  sellado confundía las dos cosas. */}
+              {skillFeedbackReceived.length > 0 && (() => {
+                const ultima = skillFeedbackReceived[0];
+                const resumen = summarizeSkillFeedback(ultima);
+                return (
+                  <div className="section-card glass">
+                    <h4 className="section-title">
+                      <Award size={15} className="section-title-icon" /> Tu última devolución
+                    </h4>
+                    <div className="last-feedback">
+                      <div className="last-feedback-head">
+                        <span className="last-feedback-who">
+                          <strong>{ultima.partnerName}</strong> · {sessionDateLabel(ultima.startsAt)}
+                        </span>
+                        {resumen.aplica && (
+                          <div className="feedback-card-tally">
+                            {resumen.muy_bien > 0 && <span className="summary-chip skill-rating-muy_bien selected">{resumen.muy_bien} muy bien</span>}
+                            {resumen.bien > 0 && <span className="summary-chip skill-rating-bien selected">{resumen.bien} bien</span>}
+                            {resumen.a_mejorar > 0 && <span className="summary-chip skill-rating-a_mejorar selected">{resumen.a_mejorar} a mejorar</span>}
+                          </div>
+                        )}
+                      </div>
+                      {!resumen.aplica && (
+                        <p className="last-feedback-na">En esa sesión no hiciste de closer, así que no hubo etapas para calificar.</p>
+                      )}
+                      <button type="button" className="btn btn-secondary last-feedback-cta" onClick={() => handleTabClick('devoluciones')}>
+                        Ver todas mis devoluciones <ChevronRight size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* KPIs */}
               <div className="metrics-grid">
@@ -5237,6 +5342,129 @@ export default function App() {
 
             </div>
           )}
+
+          {/* VIEW: MIS DEVOLUCIONES
+              El historial de la Encuesta 2. Hasta que existió esta pantalla, la
+              devolución se guardaba y no la leía nadie — el propio formulario
+              prometía "va a ver esto apenas lo envíes" y eso no pasaba. Las dos
+              solapas usan la MISMA tarjeta: lo único que cambia es de quién es
+              el nombre, porque es el mismo objeto mirado desde los dos lados. */}
+          {activeTab === 'devoluciones' && (() => {
+            const lista = feedbackHistoryTab === 'recibidas' ? skillFeedbackReceived : skillFeedbackGiven;
+            const recibidas = feedbackHistoryTab === 'recibidas';
+            return (
+              <div className="feedback-history">
+                <div className="feedback-history-tabs" role="tablist" aria-label="Devoluciones">
+                  {[
+                    { k: 'recibidas', t: 'Recibidas', n: skillFeedbackReceived.length },
+                    { k: 'dadas', t: 'Dadas', n: skillFeedbackGiven.length }
+                  ].map(o => (
+                    <button
+                      type="button"
+                      key={o.k}
+                      role="tab"
+                      aria-selected={feedbackHistoryTab === o.k}
+                      className={`feedback-history-tab ${feedbackHistoryTab === o.k ? 'active' : ''}`}
+                      onClick={() => setFeedbackHistoryTab(o.k)}
+                    >
+                      {o.t} <span className="feedback-history-count">{o.n}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {lista.length === 0 ? (
+                  <div className="glass feedback-empty">
+                    <Award size={26} aria-hidden="true" />
+                    <p className="feedback-empty-title">
+                      {recibidas ? 'Todavía no recibiste devoluciones' : 'Todavía no diste devoluciones'}
+                    </p>
+                    <p className="feedback-empty-hint">
+                      {recibidas
+                        ? 'Cuando tu compañero complete la devolución de habilidades después de un Role-Play, va a aparecer acá con la fecha de esa sesión.'
+                        : 'Después de cerrar un Role-Play te vamos a pedir la devolución de habilidades de tu compañero. Lo que escribas queda acá para volver a leerlo.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="feedback-card-list">
+                    {lista.map(f => {
+                      const resumen = summarizeSkillFeedback(f);
+                      return (
+                        <article className="glass feedback-card" key={`${f.meetingId}-${f.partnerName}`}>
+                          <header className="feedback-card-head">
+                            {f.partnerAvatarUrl ? (
+                              <img className="feedback-card-avatar" src={f.partnerAvatarUrl} alt="" width="36" height="36" referrerPolicy="no-referrer" />
+                            ) : (
+                              <span className="feedback-card-avatar feedback-card-avatar-fallback" aria-hidden="true">
+                                {(f.partnerName || '?').trim().charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                            <div className="feedback-card-who">
+                              <span className="feedback-card-name">
+                                {recibidas ? `${f.partnerName} sobre vos` : `Tu devolución para ${f.partnerName}`}
+                              </span>
+                              <span className="feedback-card-date">{sessionDateLabel(f.startsAt)}</span>
+                            </div>
+                            {resumen.aplica && (
+                              <div className="feedback-card-tally">
+                                {resumen.muy_bien > 0 && <span className="summary-chip skill-rating-muy_bien selected">{resumen.muy_bien} muy bien</span>}
+                                {resumen.bien > 0 && <span className="summary-chip skill-rating-bien selected">{resumen.bien} bien</span>}
+                                {resumen.a_mejorar > 0 && <span className="summary-chip skill-rating-a_mejorar selected">{resumen.a_mejorar} a mejorar</span>}
+                              </div>
+                            )}
+                          </header>
+
+                          {resumen.aplica ? (
+                            <div className="summary-list feedback-card-stages">
+                              {SKILL_FEEDBACK_CATEGORIES.map(cat => {
+                                const rating = f[`${cat.key}Rating`];
+                                const comment = f[`${cat.key}Comment`];
+                                if (!rating) return null;
+                                return (
+                                  <div className="feedback-stage" key={cat.key}>
+                                    <div className="summary-row">
+                                      <span className="summary-row-label">{cat.label}</span>
+                                      <span className={`summary-chip skill-rating-${rating} selected`}>
+                                        {SKILL_RATING_LABEL[rating]}
+                                      </span>
+                                    </div>
+                                    {comment && <p className="feedback-stage-comment">{comment}</p>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <p className="feedback-card-na">
+                              {recibidas
+                                ? 'En esta sesión no hiciste de closer, así que no hubo etapas para calificar.'
+                                : `En esta sesión ${f.partnerName} no hizo de closer, así que no hubo etapas para calificar.`}
+                            </p>
+                          )}
+
+                          {f.notes && (
+                            <div className="feedback-card-notes">
+                              <span className="feedback-card-notes-title">Algo más</span>
+                              <p>{f.notes}</p>
+                            </div>
+                          )}
+
+                          {/* Sin el nombre a propósito: cuando el perfil no
+                              está, el respaldo es "Tu compañero" y "A Tu
+                              compañero la sesión le sirvió" queda mal. */}
+                          {f.learned && (
+                            <p className="feedback-card-learned">
+                              {recibidas
+                                ? `La sesión le sirvió: ${LEARNED_LABEL[f.learned] || f.learned}`
+                                : `A vos la sesión te sirvió: ${LEARNED_LABEL[f.learned] || f.learned}`}
+                            </p>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* VIEW: HEATMAP */}
           {activeTab === 'heatmap' && (() => {

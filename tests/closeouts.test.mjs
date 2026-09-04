@@ -17,7 +17,7 @@ import {
   getMonthlyLies,
   isBlockedForLying,
   isCountable,
-  getPraiseReceived,
+  summarizeSkillFeedback,
   getOwedSkillFeedback,
   isPendingSkillFeedback,
   CLOSEOUT_WINDOW_MS,
@@ -350,40 +350,59 @@ test('sobre: no se abre por más que contesten los dos, solo por reloj', () => {
   assert.equal(isCountable(finViejo, AHORA), true);
 });
 
-test('elogio: no se ve mientras el plazo sigue corriendo', () => {
-  const meetings = [reciente('m1')];
-  const closeouts = [
-    cierre('m1', 'a@x.com', 'b@x.com', { praise: 'Muy buenas preguntas' }),
-    cierre('m1', 'b@x.com', 'a@x.com', { praise: 'Gran escucha' })
-  ];
-  // Ni siquiera con las dos respuestas cargadas: si apareciera ahí, el momento
-  // en que aparece ya diría que el otro contestó.
-  assert.deepEqual(getPraiseReceived('b@x.com', closeouts, meetings, [], AHORA), []);
+// --- RESUMEN DE UNA DEVOLUCIÓN (encabezado de su tarjeta en el historial) ---
+
+const devolucion = (extra = {}) => ({
+  meetingId: 'm1',
+  partnerWasCloser: true,
+  rapportRating: 'bien',
+  discoveryRating: 'bien',
+  pitchRating: 'muy_bien',
+  objectionsRating: 'a_mejorar',
+  closingRating: 'muy_bien',
+  ...extra
 });
 
-test('elogio: se ve al vencer el plazo, y solo al destinatario', () => {
-  const meetings = [cerrada('m1')];
-  const closeouts = [
-    cierre('m1', 'a@x.com', 'b@x.com', { praise: 'Muy buenas preguntas' }),
-    cierre('m1', 'b@x.com', 'a@x.com', { praise: '' })
-  ];
-  const paraB = getPraiseReceived('b@x.com', closeouts, meetings, [], AHORA);
-  assert.equal(paraB.length, 1);
-  assert.equal(paraB[0].praise, 'Muy buenas preguntas');
-  assert.deepEqual(getPraiseReceived('a@x.com', closeouts, meetings, [], AHORA), []);
+test('resumen: cuenta cuántas etapas cayeron en cada nivel', () => {
+  const r = summarizeSkillFeedback(devolucion());
+  assert.equal(r.aplica, true);
+  assert.equal(r.total, 5);
+  assert.equal(r.muy_bien, 2);
+  assert.equal(r.bien, 2);
+  assert.equal(r.a_mejorar, 1);
 });
 
-test('elogio: el de quien mintió no se entrega', () => {
-  const meetings = [cerrada('m1')];
-  const closeouts = [
-    cierre('m1', 'a@x.com', 'b@x.com', { happened: 'completa', praise: 'Muy claro' }),
-    cierre('m1', 'b@x.com', 'a@x.com', { happened: 'no_se_hizo', praise: 'Buenísimo' })
-  ];
-  const att = entraronLosDos('m1', 'a@x.com', 'b@x.com');
-  // Su cierre entero queda descartado, elogio incluido.
-  assert.deepEqual(getPraiseReceived('a@x.com', closeouts, meetings, att, AHORA), []);
-  // El del compañero honesto sí llega.
-  assert.equal(getPraiseReceived('b@x.com', closeouts, meetings, att, AHORA).length, 1);
+test('resumen: sin closer que evaluar no hay etapas, y se dice explícito', () => {
+  // Roles sin invertir: el compañero hizo de lead toda la sesión.
+  const r = summarizeSkillFeedback(devolucion({
+    partnerWasCloser: false,
+    rapportRating: null, discoveryRating: null, pitchRating: null,
+    objectionsRating: null, closingRating: null
+  }));
+  assert.equal(r.aplica, false);
+  assert.equal(r.total, 0);
+});
+
+test('resumen: una fila sin ninguna etapa cargada no se muestra como calificada', () => {
+  // partnerWasCloser dice que sí, pero no hay ratings (dato viejo o a medias):
+  // igual tiene que caer en el mismo camino que "nada que calificar".
+  const r = summarizeSkillFeedback(devolucion({
+    rapportRating: null, discoveryRating: null, pitchRating: null,
+    objectionsRating: null, closingRating: null
+  }));
+  assert.equal(r.aplica, false);
+  assert.equal(r.total, 0);
+});
+
+test('resumen: ignora valores que no son de la escala', () => {
+  const r = summarizeSkillFeedback(devolucion({ rapportRating: 'excelente' }));
+  assert.equal(r.total, 4);
+  assert.equal(r.aplica, true);
+});
+
+test('resumen: sin devolución devuelve el caso vacío en vez de romper', () => {
+  assert.equal(summarizeSkillFeedback(null).aplica, false);
+  assert.equal(summarizeSkillFeedback(undefined).total, 0);
 });
 
 // --- REINCIDENCIA SIN EVIDENCIA ---
