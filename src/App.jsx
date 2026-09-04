@@ -106,6 +106,7 @@ import {
   isBlockedForLying,
   getOwedSkillFeedback,
   summarizeSkillFeedback,
+  sortSkillFeedbackByDate,
   CLOSEOUT_WINDOW_MS,
   MONTHLY_LIES_LIMIT
 } from './closeouts';
@@ -446,6 +447,18 @@ export default function App() {
   const [skillFeedbackReceived, setSkillFeedbackReceived] = useState([]);
   const [skillFeedbackGiven, setSkillFeedbackGiven] = useState([]);
   const [feedbackHistoryTab, setFeedbackHistoryTab] = useState('recibidas');
+  // Qué tarjetas del historial están abiertas. Se guardan las ABIERTAS y no las
+  // cerradas para que el estado por defecto (lista compacta, todo plegado) no
+  // dependa de haber visto antes la lista: una devolución nueva entra cerrada
+  // sola. Se pueden abrir varias a la vez a propósito — el uso real es comparar
+  // dos sesiones, y un acordeón de uno solo cerraría justo la que se está
+  // leyendo.
+  const [expandedFeedback, setExpandedFeedback] = useState(() => new Set());
+  const toggleFeedbackCard = (key) => setExpandedFeedback(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
   const [skillFeedbackTarget, setSkillFeedbackTarget] = useState(null);
   const [skillFeedbackAnswers, setSkillFeedbackAnswers] = useState(null);
   // Un paso a la vez en vez de las 5 etapas juntas en un scroll largo: se
@@ -5350,8 +5363,12 @@ export default function App() {
               solapas usan la MISMA tarjeta: lo único que cambia es de quién es
               el nombre, porque es el mismo objeto mirado desde los dos lados. */}
           {activeTab === 'devoluciones' && (() => {
-            const lista = feedbackHistoryTab === 'recibidas' ? skillFeedbackReceived : skillFeedbackGiven;
             const recibidas = feedbackHistoryTab === 'recibidas';
+            // El orden se reafirma acá y no se delega a la base: el modo demo
+            // no pasa por el servidor, y así las dos rutas ordenan igual.
+            const lista = sortSkillFeedbackByDate(
+              recibidas ? skillFeedbackReceived : skillFeedbackGiven
+            );
             return (
               <div className="feedback-history">
                 <div className="feedback-history-tabs" role="tablist" aria-label="Devoluciones">
@@ -5388,30 +5405,59 @@ export default function App() {
                   <div className="feedback-card-list">
                     {lista.map(f => {
                       const resumen = summarizeSkillFeedback(f);
+                      // La clave lleva la solapa porque la MISMA reunión puede
+                      // estar en las dos (le escribí y me escribió), y sin eso
+                      // abrir una abriría también la otra al cambiar de solapa.
+                      const key = `${feedbackHistoryTab}:${f.meetingId}`;
+                      const abierta = expandedFeedback.has(key);
                       return (
-                        <article className="glass feedback-card" key={`${f.meetingId}-${f.partnerName}`}>
-                          <header className="feedback-card-head">
-                            {f.partnerAvatarUrl ? (
-                              <img className="feedback-card-avatar" src={f.partnerAvatarUrl} alt="" width="36" height="36" referrerPolicy="no-referrer" />
-                            ) : (
-                              <span className="feedback-card-avatar feedback-card-avatar-fallback" aria-hidden="true">
-                                {(f.partnerName || '?').trim().charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                            <div className="feedback-card-who">
-                              <span className="feedback-card-name">
-                                {recibidas ? `${f.partnerName} sobre vos` : `Tu devolución para ${f.partnerName}`}
-                              </span>
-                              <span className="feedback-card-date">{sessionDateLabel(f.startsAt)}</span>
-                            </div>
-                            {resumen.aplica && (
-                              <div className="feedback-card-tally">
-                                {resumen.muy_bien > 0 && <span className="summary-chip skill-rating-muy_bien selected">{resumen.muy_bien} muy bien</span>}
-                                {resumen.bien > 0 && <span className="summary-chip skill-rating-bien selected">{resumen.bien} bien</span>}
-                                {resumen.a_mejorar > 0 && <span className="summary-chip skill-rating-a_mejorar selected">{resumen.a_mejorar} a mejorar</span>}
+                        <article className={`glass feedback-card ${abierta ? 'open' : ''}`} key={key}>
+                          <h3 className="feedback-card-heading">
+                            <button
+                              type="button"
+                              className="feedback-card-head"
+                              aria-expanded={abierta}
+                              aria-controls={`fb-panel-${key}`}
+                              id={`fb-head-${key}`}
+                              onClick={() => toggleFeedbackCard(key)}
+                            >
+                              {f.partnerAvatarUrl ? (
+                                <img className="feedback-card-avatar" src={f.partnerAvatarUrl} alt="" width="36" height="36" referrerPolicy="no-referrer" />
+                              ) : (
+                                <span className="feedback-card-avatar feedback-card-avatar-fallback" aria-hidden="true">
+                                  {(f.partnerName || '?').trim().charAt(0).toUpperCase()}
+                                </span>
+                              )}
+                              <div className="feedback-card-who">
+                                <span className="feedback-card-name">
+                                  {recibidas ? `${f.partnerName} sobre vos` : `Tu devolución para ${f.partnerName}`}
+                                </span>
+                                <span className="feedback-card-date">{sessionDateLabel(f.startsAt)}</span>
                               </div>
-                            )}
-                          </header>
+                              {/* El resumen queda VISIBLE con la tarjeta plegada:
+                                  es lo que permite decidir cuál abrir sin tener
+                                  que abrirlas todas. */}
+                              {resumen.aplica ? (
+                                <div className="feedback-card-tally">
+                                  {resumen.muy_bien > 0 && <span className="summary-chip skill-rating-muy_bien selected">{resumen.muy_bien} muy bien</span>}
+                                  {resumen.bien > 0 && <span className="summary-chip skill-rating-bien selected">{resumen.bien} bien</span>}
+                                  {resumen.a_mejorar > 0 && <span className="summary-chip skill-rating-a_mejorar selected">{resumen.a_mejorar} a mejorar</span>}
+                                </div>
+                              ) : (
+                                <span className="feedback-card-tally-na">Sin etapas</span>
+                              )}
+                              <span className="feedback-chevron" aria-hidden="true"></span>
+                            </button>
+                          </h3>
+
+                          <div className="feedback-card-panel">
+                            <div className="feedback-card-panel-inner">
+                              <div
+                                id={`fb-panel-${key}`}
+                                role="region"
+                                aria-labelledby={`fb-head-${key}`}
+                                className="feedback-card-body"
+                              >
 
                           {resumen.aplica ? (
                             <div className="summary-list feedback-card-stages">
@@ -5457,6 +5503,9 @@ export default function App() {
                                 : `A vos la sesión te sirvió: ${LEARNED_LABEL[f.learned] || f.learned}`}
                             </p>
                           )}
+                              </div>
+                            </div>
+                          </div>
                         </article>
                       );
                     })}

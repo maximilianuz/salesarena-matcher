@@ -18,6 +18,7 @@ import {
   isBlockedForLying,
   isCountable,
   summarizeSkillFeedback,
+  sortSkillFeedbackByDate,
   getOwedSkillFeedback,
   isPendingSkillFeedback,
   CLOSEOUT_WINDOW_MS,
@@ -403,6 +404,57 @@ test('resumen: ignora valores que no son de la escala', () => {
 test('resumen: sin devolución devuelve el caso vacío en vez de romper', () => {
   assert.equal(summarizeSkillFeedback(null).aplica, false);
   assert.equal(summarizeSkillFeedback(undefined).total, 0);
+});
+
+// --- ORDEN DEL HISTORIAL ---
+
+test('historial: la sesión más reciente va primero', () => {
+  const lista = [
+    { meetingId: 'vieja', startsAt: '2026-08-01T10:00:00Z' },
+    { meetingId: 'nueva', startsAt: '2026-09-03T10:00:00Z' },
+    { meetingId: 'media', startsAt: '2026-08-20T10:00:00Z' }
+  ];
+  assert.deepEqual(
+    sortSkillFeedbackByDate(lista).map(f => f.meetingId),
+    ['nueva', 'media', 'vieja']
+  );
+});
+
+test('historial: ordena por hora, no solo por día', () => {
+  const lista = [
+    { meetingId: 'manana', startsAt: '2026-09-03T09:00:00Z' },
+    { meetingId: 'tarde', startsAt: '2026-09-03T18:00:00Z' }
+  ];
+  assert.deepEqual(
+    sortSkillFeedbackByDate(lista).map(f => f.meetingId),
+    ['tarde', 'manana']
+  );
+});
+
+test('historial: las que no tienen reunión con fecha quedan al final', () => {
+  const lista = [
+    { meetingId: 'sin-fecha' },
+    { meetingId: 'con-fecha', startsAt: '2026-08-01T10:00:00Z' },
+    { meetingId: 'fecha-rota', startsAt: 'cualquier cosa' }
+  ];
+  const orden = sortSkillFeedbackByDate(lista).map(f => f.meetingId);
+  assert.equal(orden[0], 'con-fecha');
+  // Las dos sin fecha usable quedan detrás, sin importar en qué orden entre sí.
+  assert.deepEqual(orden.slice(1).sort(), ['fecha-rota', 'sin-fecha']);
+});
+
+test('historial: no muta la lista original', () => {
+  const lista = [
+    { meetingId: 'vieja', startsAt: '2026-08-01T10:00:00Z' },
+    { meetingId: 'nueva', startsAt: '2026-09-03T10:00:00Z' }
+  ];
+  sortSkillFeedbackByDate(lista);
+  assert.deepEqual(lista.map(f => f.meetingId), ['vieja', 'nueva']);
+});
+
+test('historial: una lista vacía o ausente no rompe', () => {
+  assert.deepEqual(sortSkillFeedbackByDate([]), []);
+  assert.deepEqual(sortSkillFeedbackByDate(), []);
 });
 
 // --- REINCIDENCIA SIN EVIDENCIA ---

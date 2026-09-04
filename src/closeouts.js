@@ -354,6 +354,29 @@ export const summarizeSkillFeedback = (feedback) => {
   return { aplica: total > 0, ...conteo, total };
 };
 
+// Orden del historial: la sesión más reciente primero, que es la que se busca
+// al entrar. El criterio es la fecha y hora de la REUNIÓN, no cuándo se
+// escribió la devolución: alguien puede responder tarde una sesión vieja, y
+// ahí el orden por fecha de escritura mentiría sobre cuándo pasó.
+//
+// Las devoluciones sin fecha de reunión —la reunión nunca se generó, o se
+// borró— van al final: sin fecha no hay dónde ubicarlas en la línea de tiempo,
+// pero tampoco hay motivo para esconderlas.
+export const sortSkillFeedbackByDate = (list = []) => {
+  const cuando = (f) => {
+    const ms = Date.parse(f?.startsAt ?? '');
+    return Number.isNaN(ms) ? null : ms;
+  };
+  return [...list].sort((a, b) => {
+    const ta = cuando(a);
+    const tb = cuando(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return tb - ta;
+  });
+};
+
 // Encuesta 2 que le TOCA responder: cerró la sesión (Encuesta 1) diciendo que
 // hubo sesión real (no 'no_se_hizo'), y todavía no completó la devolución de
 // habilidades sobre esa reunión. Sin ventana de vencimiento a propósito: la
