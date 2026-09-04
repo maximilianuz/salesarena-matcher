@@ -1154,6 +1154,17 @@
             margin: 0 auto;
         }
 
+        .faq-showcase {
+            display: block;
+            width: 100%;
+            max-width: 960px;
+            height: auto;
+            margin: 0 auto 2.5rem;
+            border-radius: 1.25rem;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-md);
+        }
+
         .faq-eyebrow {
             display: flex;
             align-items: center;
@@ -1268,6 +1279,11 @@
         @media (max-width: 640px) {
             .faq-section {
                 padding: 0 1.25rem 4rem;
+            }
+
+            .faq-showcase {
+                border-radius: 1rem;
+                margin-bottom: 1.75rem;
             }
 
             .faq-question {
@@ -2095,6 +2111,13 @@
 
     <!-- FAQ Section -->
     <section class="faq-section" id="faq">
+        <img
+            class="faq-showcase"
+            src="/images/faq-showcase.jpg"
+            width="1400" height="781"
+            loading="lazy"
+            alt="Pantalla de Sales Arena Matcher mostrando un match confirmado entre dos closers para una sesión de role-play, con el enlace de Google Meet ya generado."
+        >
         <div class="faq-container">
             <p class="faq-eyebrow">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
